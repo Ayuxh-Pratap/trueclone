@@ -9,7 +9,12 @@
 //
 // usage: node scripts/score.mjs <name> [--quick] [--url <clone url>] [--refresh-ref] [--step-minutes 20] [--serial]
 import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from './lib.mjs';
+
+// steps are the sibling scripts of this file, wherever the package is installed; sites/ is in the current folder
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -35,7 +40,8 @@ const steps = [
 
 const runStep = (step) => new Promise((resolve) => {
   const started = Date.now();
-  const child = spawn(process.execPath, step.args, { cwd: process.cwd() });
+  const [file, ...args] = step.args;
+  const child = spawn(process.execPath, [path.join(HERE, path.basename(file)), ...args], { cwd: process.cwd() });
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
@@ -71,3 +77,6 @@ for (const group of groups) {
 summary.sort((x, y) => steps.findIndex((st) => st.label === x.step) - steps.findIndex((st) => st.label === y.step));
 console.log(`\n${flags.quick ? 'quick' : 'full'} score for ${name}${url ? ` (${url})` : ''} in ${((Date.now() - t0) / 60000).toFixed(1)} min`);
 console.table(summary.map((s) => ({ step: s.step, status: s.status, 's': s.seconds, result: Object.entries(s).find(([k]) => k.endsWith('%'))?.[1] })));
+// REPORT.md: every score against its target, what to fix first, and what was not copied
+const report = await runStep({ args: ['report.mjs', name] });
+console.log(report.out.trim());

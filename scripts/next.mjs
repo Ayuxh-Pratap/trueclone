@@ -16,6 +16,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 import { parse } from 'parse5';
+import { fileURLToPath as toPath } from 'node:url';
 import { parseArgs } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
@@ -307,7 +308,7 @@ if (flags.verify) {
   const score = (args) => run('node', args, { cwd: lab });
   try {
     // same scoring entry point as the HTML clone: time limit per step, summary at the end
-    await score(['scripts/score.mjs', name, '--url', url, ...(flags.quick ? ['--quick'] : [])]);
+    await score([path.join(path.dirname(toPath(import.meta.url)), 'score.mjs'), name, '--url', url, ...(flags.quick ? ['--quick'] : [])]);
   } finally {
     if (process.platform === 'win32') spawn('taskkill', ['/pid', String(server.pid), '/T', '/F']);
     else server.kill();

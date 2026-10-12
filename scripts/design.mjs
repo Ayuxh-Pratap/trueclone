@@ -9,6 +9,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
@@ -485,6 +486,6 @@ await fs.mkdir(path.join(root, 'clone'), { recursive: true });
 await fs.writeFile(path.join(root, 'clone', 'tokens.css'), tokensCss(tokens));
 console.log(`wrote DESIGN.md, globals.css, clone/tokens.css for ${name}`);
 
-const lint = spawnSync(process.execPath, [path.resolve('node_modules/@google/design.md/dist/index.js'), 'lint', path.join(root, 'DESIGN.md')], { encoding: 'utf8' });
+const lint = spawnSync(process.execPath, [fileURLToPath(import.meta.resolve('@google/design.md')), 'lint', path.join(root, 'DESIGN.md')], { encoding: 'utf8' });
 console.log('--- @google/design.md lint ---');
 console.log((lint.stdout || '') + (lint.stderr || ''));
