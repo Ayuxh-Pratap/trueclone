@@ -64,7 +64,7 @@ const stateOf = (page, selector) => page.evaluate((sel) => {
   const r = el.getBoundingClientRect();
   // Besides geometry and visibility: text, state attributes and canvas pixels, so a button that changes its label,
   // a tab that flips aria-pressed or a game that redraws its canvas counts as a change too.
-  const attrs = ['class', 'aria-pressed', 'aria-current', 'aria-expanded', 'open', 'hidden', 'disabled']
+  const attrs = ['class', 'aria-pressed', 'aria-current', 'aria-expanded', 'aria-selected', 'data-state', 'open', 'hidden', 'disabled']
     .map((a) => (el.hasAttribute(a) ? `${a}=${el.getAttribute(a)}` : '')).join(',') // boolean attributes are "" + (el.value !== undefined ? `,${el.value}` : '');
   const text = el.textContent.replace(/\s+/g, ' ').trim().slice(0, 200);
   let pixels = '';
@@ -88,7 +88,7 @@ async function runSide(url, side, list) {
       await warmUp(page);
       const atSel = sc.at?.[side];
       if (atSel && atSel !== 'body') {
-        const y = await page.evaluate((s) => { const el = document.querySelector(s); return el ? el.getBoundingClientRect().top + scrollY : 0; }, atSel);
+        const y = await page.evaluate((sel) => { const [s, idx] = sel.split('@'); const el = document.querySelectorAll(s)[Number(idx || 0)]; return el ? el.getBoundingClientRect().top + scrollY : 0; }, atSel);
         await wheelTo(page, Math.max(0, Math.round(y + (sc.at.offset || 0))), vp);
       } else {
         await wheelTo(page, sc.at?.offset || 0, vp);
@@ -121,7 +121,11 @@ async function runSide(url, side, list) {
         else if (st.click) {
           const target = Array.isArray(st.click) ? st.click : st.click[side];
           if (Array.isArray(target)) await page.mouse.click(...px(target));
-          else await page.click(target, { timeout: 5000 }).catch((e) => results.push({ name: sc.name, error: `click ${target}: ${e.message.split('\n')[0]}` }));
+          else {
+            // selector@n: the n-th match, as everywhere else in the scenario file
+            const [s, idx] = target.split('@');
+            await page.locator(s).nth(Number(idx || 0)).click({ timeout: 5000 }).catch((e) => results.push({ name: sc.name, error: `click ${target}: ${e.message.split('\n')[0]}` }));
+          }
         } else if (st.key) await page.keyboard.press(st.key);
         else if (st.wait) await page.waitForTimeout(st.wait);
         else if (st.shot) await shot(st.shot);

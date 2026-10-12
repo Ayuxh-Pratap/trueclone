@@ -189,9 +189,18 @@ if (!exact) {
 const recording = JSON.parse(await fs.readFile(path.join(ref, 'reveals.desktop.json'), 'utf8').catch(() => 'null'));
 const recorded = recording?.reveals || [];
 const classChanges = recording?.classes || [];
-let marked = 0, classMarked = 0;
-if (!exact || recorded.length || classChanges.length) ({ html, marked, classMarked } = await browserPass(!exact, recorded, classChanges));
+// Widget states recorded on the reference (trueclone widgets): tabs, menus. Template mode only for now: the snapshots
+// are placeholdered like the page; exact-mode snapshots would still point at the site's media.
+const widgetRec = exact ? null : JSON.parse(await fs.readFile(path.join(ref, 'widgets.desktop.json'), 'utf8').catch(() => 'null'));
+const widgetGroups = widgetRec?.groups || [];
+let marked = 0, classMarked = 0, widgets = null;
+if (!exact || recorded.length || classChanges.length) ({ html, marked, classMarked, widgets } = await browserPass(!exact, recorded, classChanges, widgetGroups));
 if (!exact) html = html.split(REF_ASSETS).join('__tc_ref__').replace(/__tc_ref__[^"')\s]+/g, PLACEHOLDER);
+if (widgets?.groups.length) {
+  // a plain script (not fetched JSON), so the clone also works opened from disk
+  await fs.writeFile(path.join(clone, 'trueclone-widgets.js'), `// trueclone widget player: recorded states of the reference's tabs and menus (trueclone widgets), placeholdered.\nwindow.__tcWidgetData = ${JSON.stringify(widgets)};\n(${widgetPlayer.toString()})();\n`);
+  html = html.replace(/<\/body>/i, '<script src="trueclone-widgets.js" defer></script>\n</body>');
+}
 if (marked || classMarked) {
   await fs.writeFile(path.join(clone, 'trueclone-reveals.js'), PLAYER);
   const data = JSON.stringify({
@@ -210,10 +219,11 @@ if (!(await fs.stat(scriptFile).then(() => true, () => false))) {
 }
 console.log(`seeded ${path.relative(process.cwd(), clone)} from the mirror (${exact ? 'exact: the site\'s own content' : 'template: placeholder text and media'}): index.html, ${(await fs.readdir(path.join(clone, 'css'))).length} stylesheet(s), ${copied.size} asset(s)${exact ? '' : ' (fonts only)'}`);
 if (recorded.length || classChanges.length) console.log(`replayed by trueclone-reveals.js: ${marked}/${recorded.length} scroll reveals, ${classMarked}/${classChanges.length} scroll class changes${marked < recorded.length || classMarked < classChanges.length ? ' (the rest did not resolve to an element in the mirror)' : ''}`);
+if (widgetGroups.length) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------
-async function browserPass(template, reveals, classes) {
+async function browserPass(template, reveals, classes, groups = []) {
   // served from sites/<name>/ so the pass can reach reference/assets (see `forPass`)
   const server = await serve(root);
   const browser = await openBrowser(flags.cdp);
@@ -222,9 +232,35 @@ async function browserPass(template, reveals, classes) {
     await page.goto(`${server.url}clone/index.html`, { waitUntil: 'load', timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
     const counts = reveals.length || classes.length ? await page.evaluate(markRevealsInPage, [reveals, classes]) : [0, 0];
-    if (template) await page.evaluate(placeholdersInPage, LOREM);
+    // widgets: mark regions and triggers, then give every recorded state the same placeholders as the page by
+    // placing it into its region (so it is laid out and measured for real) and reading it back
+    let widgets = null;
+    if (groups.length) {
+      const ok = await page.evaluate(markWidgetsInPage, groups);
+      await page.evaluate(`window.__tcPlaceholders = ${placeholdersInPage.toString()}`);
+      widgets = { groups: [], states: 0 };
+      for (const g of groups) {
+        if (!ok[g.i]) continue;
+        const shape = (stateHtml) => (stateHtml == null ? null : page.evaluate(([i, h, lorem, t]) => {
+          const scope = document.querySelector(`[data-tc-scope~="${i}"]`);
+          if (!scope) return null;
+          const before = scope.innerHTML;
+          scope.innerHTML = h;
+          const out = t ? window.__tcPlaceholders([lorem, `[data-tc-scope~="${i}"]`]) : scope.innerHTML;
+          scope.innerHTML = before;
+          return out;
+        }, [g.i, stateHtml, LOREM, template]));
+        const states = [];
+        for (const st of g.states) states.push(await shape(st));
+        const closed = g.kind === 'expand' ? await shape(g.closed) : undefined;
+        widgets.states += states.filter(Boolean).length;
+        widgets.groups[g.i] = { kind: g.kind, states, closed };
+      }
+      widgets.groups = Array.from(widgets.groups, (x) => x || null);
+    }
+    if (template) await page.evaluate(placeholdersInPage, [LOREM, null]);
     const out = await page.evaluate(() => document.documentElement.outerHTML);
-    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1] };
+    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1], widgets };
   } finally {
     if (!flags.cdp) await browser.close();
     server.close();
@@ -234,6 +270,68 @@ async function browserPass(template, reveals, classes) {
 // The path of element children recorded by reveals.mjs (script/style/meta-like tags skipped) resolves to the same
 // element in the script-free mirror. Each reveal gets data-tc-reveal and its recorded starting state inline; each
 // scroll class change gets data-tc-class and its starting classes (the page as it is before any scroll).
+// Widget regions and triggers, resolved by the recorded paths in the mirror (which shows each widget's initial
+// state). A region can serve several widgets (every menu of a nav): data-tc-scope holds a space-separated list.
+function markWidgetsInPage(groups) {
+  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  const resolve = (p) => {
+    let el = document.body;
+    for (const part of p.split('>')) {
+      const [tag, n] = part.split(':');
+      el = [...el.children].filter((c) => !SKIP.has(c.tagName))[Number(n) - 1];
+      if (!el || el.tagName.toLowerCase() !== tag) return null;
+    }
+    return el;
+  };
+  const ok = {};
+  for (const g of groups) {
+    const scope = resolve(g.scopePath);
+    const triggers = g.triggers.map((t) => resolve(t.path));
+    if (!scope || triggers.some((t) => !t)) continue;
+    const ids = (scope.getAttribute('data-tc-scope') || '').split(' ').filter(Boolean);
+    ids.push(String(g.i));
+    scope.setAttribute('data-tc-scope', ids.join(' '));
+    triggers.forEach((t, j) => t.setAttribute('data-tc-trigger', `${g.i}:${j}`));
+    ok[g.i] = true;
+  }
+  return ok;
+}
+
+// Widget player shipped with the clone (trueclone's own code, serialised into clone/trueclone-widgets.js): a click on
+// a trigger swaps its region to the recorded state; an expandable trigger toggles between its open and closed state;
+// menus in a header or nav also open on hover and close when the pointer leaves their region, like the reference.
+function widgetPlayer() {
+  const data = window.__tcWidgetData || { groups: [] };
+  const regionOf = (i) => document.querySelector(`[data-tc-scope~="${i}"]`);
+  const show = (i, html) => { const r = regionOf(i); if (r && html != null && r.innerHTML !== html) r.innerHTML = html; };
+  const parse = (t) => t.dataset.tcTrigger.split(':').map(Number);
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-tc-trigger]');
+    if (!t) return;
+    const [i, j] = parse(t);
+    const g = data.groups[i];
+    if (!g) return;
+    e.preventDefault();
+    if (g.kind === 'tabs') show(i, g.states[j]);
+    else show(i, t.getAttribute('aria-expanded') === 'true' ? g.closed : g.states[j]);
+  });
+  const hoverMenu = (t) => t.closest('header, nav') && data.groups[parse(t)[0]]?.kind === 'expand';
+  document.addEventListener('pointerover', (e) => {
+    const t = e.target.closest('[data-tc-trigger]');
+    if (!t || !hoverMenu(t) || t.getAttribute('aria-expanded') === 'true') return;
+    const [i, j] = parse(t);
+    show(i, data.groups[i].states[j]);
+  });
+  document.addEventListener('pointerout', (e) => {
+    for (const [i, g] of data.groups.entries()) {
+      if (!g || g.kind !== 'expand') continue;
+      const r = regionOf(i);
+      if (!r || !r.contains(e.target) || r.contains(e.relatedTarget)) continue;
+      if (r.querySelector(`[data-tc-trigger^="${i}:"][aria-expanded="true"]`)) show(i, g.closed);
+    }
+  });
+}
+
 function markRevealsInPage([reveals, classes]) {
   const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
   const resolve = (p) => {
@@ -268,7 +366,10 @@ function markRevealsInPage([reveals, classes]) {
 }
 
 
-function placeholdersInPage(lorem) {
+function placeholdersInPage([lorem, rootSel]) {
+  // the whole page, or one region (a widget's recorded state placed into the page to be measured)
+  const root = rootSel ? document.querySelector(rootSel) : document.body;
+  if (!root) return null;
   // Each letter run becomes a lorem word of (nearly) the same laid-out width in the element's own font, keeping its
   // capitalisation; the running width is tracked across an element's text so line breaks land where the reference's
   // do (a 2px drift is enough to move a break on a full line). Digits keep their count (years stay), punctuation and
@@ -339,7 +440,7 @@ function placeholdersInPage(lorem) {
 
   // text nodes: measure every original letter run first (reads only)
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const plan = [];
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     if (!/[\p{L}\p{N}]/u.test(n.textContent) || SKIP.has(n.parentElement?.tagName) || n.parentElement === meter) continue;
@@ -370,28 +471,28 @@ function placeholdersInPage(lorem) {
   for (const item of plan) item.n.textContent = item.text;
   meter.remove();
   // text in attributes people read or hear
-  for (const el of document.querySelectorAll('[alt], [title], [aria-label], [placeholder], input[value], [data-text]')) {
+  for (const el of root.querySelectorAll('[alt], [title], [aria-label], [placeholder], input[value], [data-text]')) {
     for (const a of ['alt', 'title', 'aria-label', 'placeholder', 'data-text']) if (el.hasAttribute(a) && el.getAttribute(a).trim()) el.setAttribute(a, shaper(el)(el.getAttribute(a)));
     if (el.tagName === 'INPUT' && ['text', 'email', 'search', 'url', 'tel', ''].includes(el.type) && el.value) el.setAttribute('value', shaper(el)(el.value));
   }
 
   // media: same box, placeholder content
   const box = (w, h) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w) || 16}" height="${Math.round(h) || 16}" viewBox="0 0 16 16" preserveAspectRatio="none"><rect width="16" height="16" fill="#8884"/></svg>`)}`;
-  for (const img of document.querySelectorAll('img')) {
+  for (const img of root.querySelectorAll('img')) {
     const r = img.getBoundingClientRect();
     img.setAttribute('src', box(img.naturalWidth || r.width, img.naturalHeight || r.height));
     for (const a of ['srcset', 'sizes', 'data-src', 'data-srcset']) img.removeAttribute(a);
   }
-  document.querySelectorAll('picture source, video source, audio source, track').forEach((s) => s.remove());
-  for (const v of document.querySelectorAll('video')) {
+  root.querySelectorAll('picture source, video source, audio source, track').forEach((s) => s.remove());
+  for (const v of root.querySelectorAll('video')) {
     const r = v.getBoundingClientRect();
     v.removeAttribute('src');
     v.setAttribute('poster', box(v.videoWidth || r.width, v.videoHeight || r.height));
     v.setAttribute('preload', 'none');
   }
-  for (const f of document.querySelectorAll('iframe, embed, object')) f.setAttribute(f.tagName === 'OBJECT' ? 'data' : 'src', 'about:blank');
+  for (const f of root.querySelectorAll('iframe, embed, object')) f.setAttribute(f.tagName === 'OBJECT' ? 'data' : 'src', 'about:blank');
   // inline SVG: small ones are interface icons and stay; large ones (logos, illustrations) become a same-size box
-  for (const svg of document.querySelectorAll('svg')) {
+  for (const svg of root.querySelectorAll('svg')) {
     if (svg.parentElement?.closest('svg')) continue;
     const r = svg.getBoundingClientRect();
     if (r.width <= 48 && r.height <= 48) continue;
@@ -400,11 +501,12 @@ function placeholdersInPage(lorem) {
     const [, , w, h] = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
     svg.innerHTML = `<rect width="${w || 16}" height="${h || 16}" fill="#8884"/>`;
   }
-  for (const el of document.querySelectorAll('[style*="url("]')) el.setAttribute('style', el.getAttribute('style').replace(/url\((['"]?)(?!data:)[^)'"]+\1\)/g, 'url("assets/placeholder.svg")'));
+  for (const el of root.querySelectorAll('[style*="url("]')) el.setAttribute('style', el.getAttribute('style').replace(/url\((['"]?)(?!data:)[^)'"]+\1\)/g, 'url("assets/placeholder.svg")'));
 
   // links, forms and brand metadata
-  document.querySelectorAll('a[href]').forEach((a) => { if (!a.getAttribute('href').startsWith('#')) a.setAttribute('href', '#'); });
-  document.querySelectorAll('form').forEach((f) => f.setAttribute('action', '#'));
+  root.querySelectorAll('a[href]').forEach((a) => { if (!a.getAttribute('href').startsWith('#')) a.setAttribute('href', '#'); });
+  root.querySelectorAll('form').forEach((f) => f.setAttribute('action', '#'));
+  if (root !== document.body) return root.innerHTML;
   document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"], meta[name="description"], meta[name="keywords"], meta[name="author"], meta[name="application-name"], meta[name="generator"], meta[name="apple-mobile-web-app-title"], link[rel="author"], link[rel="preconnect"], link[rel="dns-prefetch"], link[rel="preload"][as="image"], link[rel="prefetch"], link[rel~="icon"], link[rel="apple-touch-icon"], link[rel="manifest"], link[rel="canonical"], link[rel="alternate"], script[type="application/ld+json"]').forEach((m) => m.remove());
   document.title = shaper(null)(document.title);
   return document.documentElement.outerHTML;

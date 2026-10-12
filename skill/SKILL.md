@@ -70,12 +70,14 @@ Review the draft: role names, the `notes` prose (overview, do's and don'ts), any
 
 ```powershell
 npx trueclone reveals <name>   # records scroll reveals frame by frame + class changes caused by scrolling (any library)
-npx trueclone seed <name>      # clone/ from the script-free mirror; replays what reveals recorded
+npx trueclone widgets <name>   # clicks every tab and menu and records each state (they often aren't in the page until clicked)
+npx trueclone seed <name>      # clone/ from the script-free mirror; replays what reveals and widgets recorded
 ```
 
 - **Exact mode:** the site's own markup, text, stylesheets and media at local paths.
 - **Template mode:** the same markup and stylesheets, but every text becomes lorem words of the same laid-out width (lines break where the reference's break), every image, video, large SVG and iframe a same-size placeholder, CSS backgrounds a transparent one, every link `#`, brand metadata and tracking hints dropped. No text or media of the site ends up in `clone/`; fonts stay for local study (swap licensed fonts before reusing the result).
 - **Recorded behaviour comes with it:** one-shot scroll reveals replay their measured curve (delay, duration, easing, spring overshoot) with the Web Animations API, and scroll class changes (a header that gets its backdrop past 12px) toggle the same classes at the same point. Both live in `clone/trueclone-reveals.js`; don't rewrite them by hand.
+- **Recorded widgets come with it too** (template mode): every tab set and expandable menu, with each state the original showed after a click, placeholdered like the page. `clone/trueclone-widgets.js` swaps the region on click (menus in a header or nav also on hover). Popovers rendered in a portal (comboboxes, tooltips) are listed as not replayed: build those in `script.js`. In interaction scenarios, `selector@n` picks the n-th match in `at`, `click` and `expectChange`; mind hidden duplicates (a mobile menu button is often the first match).
 
 Then write `clone/script.js`: every remaining interaction in your own code, using the parameters you read from the reference (timings, physics constants, offsets, breakpoints). Never copy the site's scripts. JS-set initial states, such as a `<details>` closed on phones, are part of the layout, so check every viewport. Data the page fetches live (a star count, a feed) stays as captured; no requests to third parties.
 

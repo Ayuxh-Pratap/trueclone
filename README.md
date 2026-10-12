@@ -70,7 +70,7 @@ URL ─► capture ─► understand ─► design system ─► build ─► sc
 1. **Capture** (`trueclone capture`): full-page screenshots at 390, 768 and 1440px, sections, rendered HTML, assets, every network request.
 2. **Understand** (`trueclone motion`, REA): reads the live animation runtime (GSAP timelines, ScrollTriggers, Lenis and Swiper settings, CSS animations, cursor-driven tweens) and, through REA, bundles, source maps, event listeners and API endpoints.
 3. **Design system** (`trueclone design`): one canonical `design-tokens.json`, rendered to DESIGN.md, globals.css and the clone's tokens.
-4. **Build**: `trueclone reveals` records the original's scroll reveals frame by frame and its scroll-driven class changes; `trueclone seed` turns the script-free mirror into the clone (template mode: layout-measured lorem text and same-size media placeholders) and replays what was recorded. Layout is at 99%+ before anyone writes CSS; your agent writes the remaining behaviour, guided by the skill. `trueclone rules` shows the original's CSS for any element (like DevTools).
+4. **Build**: `trueclone reveals` records the original's scroll reveals frame by frame and its scroll-driven class changes; `trueclone widgets` clicks every tab and menu and records each state; `trueclone seed` turns the script-free mirror into the clone (template mode: layout-measured lorem text and same-size media placeholders) and replays what was recorded. Layout is at 99%+ before anyone writes CSS; your agent writes the remaining behaviour, guided by the skill. `trueclone rules` shows the original's CSS for any element (like DevTools).
 5. **Score** (`trueclone score`): layout pixel diff per section, scroll states replayed, motion curves sampled, interaction scenarios with change assertions, every hover, computed styles at matching points. Reference measurements are cached, so only the clone is re-measured.
 6. **Report**: `REPORT.md` with the verdict, what to fix first, and what was not copied.
 
@@ -109,6 +109,7 @@ npx trueclone capture <url> [name] [--mode exact --permission "<owner>"]
 npx trueclone motion <name>             # motion inventory
 npx trueclone design <name>             # DESIGN.md + globals.css
 npx trueclone reveals <name>            # record scroll reveals and scroll class changes
+npx trueclone widgets <name>            # record every tab and menu state
 npx trueclone seed <name>               # clone/ from the mirror (template: placeholder text and media)
 npx trueclone rules <name> "<selector>" # the original's CSS rules for an element
 npx trueclone textshape <name> --write  # template mode: placeholder text with the original's line breaks
