@@ -5,7 +5,7 @@
 Give your coding agent a URL. trueclone captures the site, extracts its design system, guides the rebuild and measures the result against the original until it matches: layout, scroll states, motion curves, interactions, hover effects and computed styles, at phone, tablet and desktop widths. You get the clone as HTML and as a Next.js app, plus the design system as `DESIGN.md` and a shadcn `globals.css`.
 
 ```bash
-npx trueclone init                 # once per project: skill for your agent + REA as an MCP server
+npx @trueclone/cli init            # once per project: installs trueclone, the skill for your agent, REA as an MCP server
 # then tell Claude Code, Codex or Cursor:
 #   "clone https://example.com with trueclone"
 ```
@@ -93,7 +93,7 @@ REA answers *how does this work?* trueclone answers *is my copy identical, and w
 ## Commands
 
 ```bash
-npx trueclone init                      # set up a project for your agent
+npx @trueclone/cli init                 # set up a project for your agent (then `npx trueclone ...`)
 npx trueclone doctor                    # check Node, Chrome and REA
 npx trueclone <url> [name]              # capture + design-system draft
 npx trueclone capture <url> [name] [--mode exact --permission "<owner>"]

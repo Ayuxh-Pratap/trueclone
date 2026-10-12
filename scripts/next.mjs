@@ -283,8 +283,13 @@ await fs.writeFile(path.join(out, '.gitignore'), 'node_modules/\n.next/\nnext-en
 console.log(`generated ${path.relative(process.cwd(), out)}: ${components.length} section components + SiteChrome + SiteMotion`);
 
 // ---------------- Install / build / verify ----------------
+// npm/npx are .cmd files on Windows and need a shell; Node warns (DEP0190) when a shell gets separate arguments, so
+// build one quoted command line there instead
+const spawnCmd = (cmd, args, opts = {}) => (process.platform === 'win32'
+  ? spawn([cmd, ...args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' '), { ...opts, shell: true })
+  : spawn(cmd, args, opts));
 const run = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
-  const p = spawn(cmd, args, { cwd: out, stdio: 'inherit', shell: process.platform === 'win32', ...opts });
+  const p = spawnCmd(cmd, args, { cwd: out, stdio: 'inherit', ...opts });
   p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} ${args.join(' ')} exited ${code}`))));
 });
 if (flags.install || flags.build || flags.verify) await run('npm', ['install', '--no-audit', '--no-fund']);
@@ -301,7 +306,7 @@ const freePort = async (start) => {
 if (flags.verify) {
   const verifyPort = await freePort(port);
   if (verifyPort !== port) console.warn(`port ${port} is busy (another server?) - verifying on ${verifyPort}`);
-  const server = spawn('npx', ['next', 'start', '-p', String(verifyPort)], { cwd: out, shell: process.platform === 'win32', stdio: 'ignore' });
+  const server = spawnCmd('npx', ['next', 'start', '-p', String(verifyPort)], { cwd: out, stdio: 'ignore' });
   const url = `http://127.0.0.1:${verifyPort}/`;
   for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 1000)); }
   const lab = path.resolve('.');

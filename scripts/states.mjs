@@ -40,6 +40,9 @@ try {
     await page.goto(target, { waitUntil: 'load', timeout: 60000 });
     await page.mouse.move(5, vp.height - 5);
     const intro = await waitStill(page, { timeout: 15000, interval: 200 }); // let intros/loaders finish first
+    // Before the first scroll: one-shot reveals (Framer Motion whileInView once, IntersectionObserver classes) are
+    // still in their starting state here. The warm-up below fires them for good, so they must be read now.
+    const initial = cloneMode ? null : await page.evaluate(statesInPage);
     await warmUp(page);
     await wheelTo(page, 0, vp);
 
@@ -87,7 +90,7 @@ try {
       const avg = +(scored.reduce((n, s) => n + s.match, 0) / scored.length).toFixed(2);
       return { viewport: vp.name, match: avg, worst: [...scored].sort((a, b) => a.match - b.match).slice(0, 5), steps: scored };
     } else {
-      const summary = summarize(steps, samples, vp);
+      const summary = summarize(steps, samples, vp, initial);
       await fs.writeFile(path.join(outRoot, `${vp.name}.json`), JSON.stringify({ viewport: vp, steps, samples }));
       await fs.writeFile(path.join(outRoot, `${vp.name}.summary.json`), JSON.stringify(summary, null, 2));
       return { viewport: vp.name, introMs: intro.ms, steps: steps.length, unsettled: steps.filter((s) => !s.settled).length, ...summary.counts };
@@ -109,10 +112,22 @@ console.log(`States: ${path.relative(process.cwd(), outRoot)}`);
 
 // ---------- Motion inventory ----------
 // Classifies what changes between scroll steps, per element (keyed by DOM path).
-function summarize(steps, samples, vp) {
+function summarize(steps, samples, vp, initial = {}) {
   const inView = (st) => st.box[1] < vp.height && st.box[1] + st.box[3] > 0;
   const paths = new Set(samples.flatMap((s) => Object.keys(s)));
-  const reveals = [], animated = [], parallax = [], pinned = [], fixed = [];
+  const reveals = [], animated = [], parallax = [], pinned = [], fixed = [], revealsOnce = [];
+
+  // One-shot reveals: below the fold at load in a hidden or offset starting state (opacity ~0, a translate, a blur),
+  // and seen visible in view later. The starting state is the recipe the clone has to animate from.
+  const offset = (t) => { const m = /matrix\(([^)]+)\)/.exec(t || ''); if (!m) return 0; const v = m[1].split(',').map(Number); return Math.hypot(v[4], v[5]); };
+  for (const [p, s0] of Object.entries(initial || {})) {
+    if (s0.box[1] < vp.height) continue; // above the fold: part of the intro, not a scroll reveal
+    const hidden = s0.o <= 0.05 || !s0.v || offset(s0.t) >= 8 || /blur/.test(s0.f);
+    if (!hidden) continue;
+    const later = samples.map((s) => s[p]).find((s) => s && inView(s) && s.o > 0.5 && s.v);
+    if (!later || (later.o === s0.o && later.t === s0.t && later.f === s0.f)) continue;
+    revealsOnce.push({ path: p, cls: s0.cls, from: { opacity: s0.o, transform: s0.t || 'none', filter: s0.f || 'none' }, to: { opacity: later.o, transform: later.t || 'none', filter: later.f || 'none' }, box: later.box });
+  }
   for (const p of paths) {
     const seq = samples.map((s, i) => (s[p] ? { ...s[p], i, y: steps[i].y } : null));
     const present = seq.filter(Boolean);
@@ -152,6 +167,6 @@ function summarize(steps, samples, vp) {
     for (const item of list) if (!kept.some((k) => item.path.startsWith(k.path + '>'))) kept.push(item);
     return kept;
   };
-  const result = { reveals: prune(reveals), animated: prune(animated), parallax: prune(parallax), pinned: prune(pinned), fixed: prune(fixed) };
+  const result = { reveals: prune(reveals), revealsOnce: prune(revealsOnce), animated: prune(animated), parallax: prune(parallax), pinned: prune(pinned), fixed: prune(fixed) };
   return { counts: Object.fromEntries(Object.entries(result).map(([k, v]) => [k, v.length])), ...result };
 }

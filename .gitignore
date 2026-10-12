@@ -16,3 +16,4 @@ sites/
 *.log
 playwright-report/
 test-results/
+*.tgz

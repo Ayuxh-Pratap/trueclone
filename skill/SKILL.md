@@ -48,7 +48,7 @@ If the page is blank or blocked, capture through your own Chrome over CDP (`chro
 
 ## 2. Understand it with REA
 
-trueclone bundles REA (Reverse Engineer Anything). `npx trueclone init` registers it as an MCP server; without MCP, run `npx trueclone rea <command>`. With the page open in your CDP Chrome:
+trueclone bundles REA (Reverse Engineer Anything). `npx @trueclone/cli init` registers it as an MCP server; without MCP, run `npx trueclone rea <command>`. With the page open in your CDP Chrome:
 - `inspect_web_page`: DOM, scripts, resources.
 - `analyze_web_bundle` with source maps: framework, vendors (GSAP, ScrollTrigger, Lenis, Swiper, Webflow IX2, three.js), routes and API endpoints.
 - `inspect_web_event_listeners`: hover, drag, wheel and click logic.

@@ -1,6 +1,6 @@
 # trueclone (repo guide for coding agents)
 
-trueclone builds a working twin of a website from its URL (HTML/CSS/JS clone, Next.js + Tailwind + shadcn app, DESIGN.md, shadcn globals.css) and proves the match with scores. It bundles [REA](https://github.com/morluto/rea) (Reverse Engineer Anything) for the parts a capture can't explain. Users install it with `npx trueclone init` in their own project; this repo is the tool itself.
+trueclone builds a working twin of a website from its URL (HTML/CSS/JS clone, Next.js + Tailwind + shadcn app, DESIGN.md, shadcn globals.css) and proves the match with scores. It bundles [REA](https://github.com/morluto/rea) (Reverse Engineer Anything) for the parts a capture can't explain. Users install it with `npx @trueclone/cli init` in their own project (published as `@trueclone/cli`; the command is `trueclone`); this repo is the tool itself.
 
 ## Layout
 

@@ -2,7 +2,8 @@
 // trueclone CLI: one entry point for every step. Steps run in the current folder: everything about a site lives
 // in ./sites/<name>/ (reference capture, clone, Next.js app, design system, scores).
 //
-//   trueclone init                  set up this folder for a coding agent (skill, AGENTS.md, REA MCP, .gitignore)
+//   npx @trueclone/cli init         set up this folder for a coding agent (skill, AGENTS.md, REA MCP, .gitignore) and
+//                                   install trueclone as a dev dependency, so `npx trueclone <step>` works from then on
 //   trueclone <url> [name]          capture a site (template mode) and draft its design system: the agent's first step
 //   trueclone <step> <name> [...]   run one step (see `trueclone help`)
 //   trueclone rea <args>            REA (Reverse Engineer Anything), bundled: `trueclone rea mcp`, `trueclone rea doctor`
@@ -15,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPTS = path.join(PKG, 'scripts');
 const require = createRequire(import.meta.url);
-const { version } = JSON.parse(await fs.readFile(path.join(PKG, 'package.json'), 'utf8'));
+const { name, version } = JSON.parse(await fs.readFile(path.join(PKG, 'package.json'), 'utf8'));
 
 const STEPS = {
   capture: ['capture.mjs', 'capture a live page: screenshots at 390/768/1440, sections, tokens, rendered HTML, assets'],
@@ -37,6 +38,11 @@ const STEPS = {
   report: ['report.mjs', 'REPORT.md from the latest scores: every number, every gap, what cannot be copied'],
 };
 
+// npm/npx are .cmd files on Windows and need a shell; Node warns (DEP0190) when a shell gets separate arguments, so
+// build one quoted command line there instead
+const spawnCmd = (cmd, args, opts = {}) => (process.platform === 'win32'
+  ? spawn([cmd, ...args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' '), { ...opts, shell: true })
+  : spawn(cmd, args, opts));
 const run = (file, args) => new Promise((resolve) => {
   const child = spawn(process.execPath, [file, ...args], { stdio: 'inherit' });
   child.on('close', (code) => resolve(code ?? 1));
@@ -46,7 +52,7 @@ function help() {
   console.log(`trueclone ${version}: a working twin of a website, proven by scores
 
 usage
-  trueclone init                     set up this folder for your coding agent
+  npx @trueclone/cli init            set up this folder for your coding agent (installs trueclone)
   trueclone <url> [name]             capture + design-system draft (template mode)
   trueclone <step> <name> [options]  run one step
   trueclone rea <args>               bundled REA (Reverse Engineer Anything)
@@ -75,18 +81,29 @@ async function init() {
   // 3. REA as an MCP server for agents that speak MCP (Claude Code reads .mcp.json)
   const mcpFile = path.join(cwd, '.mcp.json');
   const mcp = (await exists(mcpFile)) ? JSON.parse(await fs.readFile(mcpFile, 'utf8')) : {};
-  mcp.mcpServers = { ...(mcp.mcpServers || {}), rea: { command: 'npx', args: ['-y', `trueclone@${version}`, 'rea', 'mcp'] } };
+  mcp.mcpServers = { ...(mcp.mcpServers || {}), rea: { command: 'npx', args: ['-y', `${name}@${version}`, 'rea', 'mcp'] } };
   await fs.writeFile(mcpFile, `${JSON.stringify(mcp, null, 2)}\n`);
   // 4. captures, clones and browser profiles stay local
   const ignoreFile = path.join(cwd, '.gitignore');
   let ignore = (await exists(ignoreFile)) ? await fs.readFile(ignoreFile, 'utf8') : '';
   const want = ['sites/', '.chrome-profile/', '*.har'].filter((line) => !ignore.split(/\r?\n/).includes(line));
   if (want.length) await fs.writeFile(ignoreFile, `${ignore}${ignore && !ignore.endsWith('\n') ? '\n' : ''}${want.join('\n')}\n`);
+  // 5. the package itself as a dev dependency, pinned: afterwards `npx trueclone <step>` runs this version, offline
+  let installed = 'skipped (--no-install)';
+  if (!process.argv.includes('--no-install')) {
+    if (!(await exists(path.join(cwd, 'package.json')))) await fs.writeFile(path.join(cwd, 'package.json'), `${JSON.stringify({ name: path.basename(cwd).toLowerCase().replace(/[^a-z0-9-]+/g, '-'), private: true }, null, 2)}\n`);
+    const code = await new Promise((resolve) => {
+      const child = spawnCmd('npm', ['install', '--save-dev', '--save-exact', `${name}@${version}`], { stdio: 'inherit' });
+      child.on('close', (c) => resolve(c ?? 1));
+    });
+    installed = code === 0 ? `${name}@${version} (dev dependency: npx trueclone <step> now runs it)` : `failed: run npm install -D ${name}@${version} yourself`;
+  }
   console.log(`trueclone set up in ${cwd}
   .claude/skills/trueclone/SKILL.md   the workflow your agent follows
   AGENTS.md                           points Codex, Cursor and others at the skill
   .mcp.json                           REA as an MCP server
   .gitignore                          sites/ stays local
+  package.json                        ${installed}
 next: npx trueclone doctor, then ask your agent "clone <url> with trueclone"`);
 }
 
