@@ -7,7 +7,7 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, matchPct, PNG } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, PNG } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -69,6 +69,7 @@ try {
       const actual = await wheelTo(page, y, vp);
       const still = await waitStill(page);
       const file = `${String(i).padStart(2, '0')}`;
+      await freezeLoops(page); // loops that started on entering view too, so every step is compared at the same phase
       await page.screenshot({ path: path.join(dir, `${file}.png`) });
       await maskToggle(page, true);
       await page.screenshot({ path: path.join(dir, `${file}.mask.png`) });

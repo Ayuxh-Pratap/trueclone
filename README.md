@@ -23,30 +23,39 @@ npx @trueclone/cli init            # once per project: installs trueclone, the s
 
 ## Proof
 
-Two benchmarks with very different stacks, scored by the tool itself:
+Three benchmarks with very different stacks, scored by the tool itself:
 
 **[rea.tools](https://rea.tools/)**: static docs with a canvas game and interactive demos, exact mode (copied with the owner's permission).
 
 | Check | Desktop | Tablet | Mobile |
 |---|---|---|---|
 | Layout, real pixels | 100% | 100% | 100% |
-| Scroll states | 100% | 100% | 99.99% |
+| Scroll states | 100% | 100% | 100% |
 | Computed styles (≈280 points per width) | 100% | 100% | 100% |
 | Hover effects | 100% | | |
 | Interactions (copy, tabs, calculator, dinosaur game, language menu) | 5/5 | | |
 
-**A Webflow motorsport portfolio** built with GSAP, ScrollTrigger, SplitText, Lenis, Swiper and three.js (97 scroll triggers), template mode (own placeholder content):
+**A Next.js + React + Framer Motion developer landing page** (12,000px, 11 scroll reveals with spring easing, a scroll-state header, marquees, view-mounted components), template mode, **seeded automatically**: no hand-written layout code, no original text or media in the clone.
+
+| Check | Desktop | Tablet | Mobile |
+|---|---|---|---|
+| Layout, structure | 99.99% | 99.93% | 99.94% |
+| Scroll states | 99.96% | 99.92% | 99.94% |
+| Computed styles | 99.5% | 98.7% | 99.2% |
+| Hover effects | 100% | | |
+
+**A Webflow motorsport portfolio** built with GSAP, ScrollTrigger, SplitText, Lenis, Swiper and three.js (97 scroll triggers), template mode, built by hand before seeding existed:
 
 | Check | Desktop | Tablet | Mobile |
 |---|---|---|---|
 | Layout, structure | 99.6% | 99.7% | 96.8% |
-| Scroll states | 97.1% | 96.7% | 96.5% |
-| Motion curves | 96.1% | 98.2% | 100% |
-| Computed styles | 94% | 88.9% | 81.8% |
+| Scroll states | 98.0% | 96.6% | 96.5% |
+| Motion curves | 96.9% | 98.2% | 99.6% |
+| Computed styles | 94% | 88.9% | 85.4% |
 | Hover effects | 100% | | |
 | Interactions (drag sliders, drag gallery, cursor follow, menu, skip) | 5/5 | | |
 
-Not perfect yet, and the report says so: the computed-style check is below its 95% target (placeholder text in highlighted phrases, a scroll-linked colour fade, mobile spacing), and so is mobile layout. The generated Next.js app scores within half a point of the HTML clone on every check. A full scoring run takes 1 to 9 minutes.
+The hand-built portfolio isn't perfect yet, and its report says so: computed styles and mobile layout are below target (placeholder text in highlighted phrases, a scroll-linked colour fade, mobile spacing). The generated Next.js app scores within half a point of the HTML clone on every check. A full scoring run takes 1.5 to 9 minutes.
 
 ## How it works
 
@@ -61,7 +70,7 @@ URL ─► capture ─► understand ─► design system ─► build ─► sc
 1. **Capture** (`trueclone capture`): full-page screenshots at 390, 768 and 1440px, sections, rendered HTML, assets, every network request.
 2. **Understand** (`trueclone motion`, REA): reads the live animation runtime (GSAP timelines, ScrollTriggers, Lenis and Swiper settings, CSS animations, cursor-driven tweens) and, through REA, bundles, source maps, event listeners and API endpoints.
 3. **Design system** (`trueclone design`): one canonical `design-tokens.json`, rendered to DESIGN.md, globals.css and the clone's tokens.
-4. **Build**: your agent writes the clone, guided by the skill. `trueclone rules` shows the original's CSS for any element (like DevTools), `trueclone textshape` gives placeholder text the original's line breaks, `trueclone seed` starts an exact clone from a script-free mirror.
+4. **Build**: `trueclone reveals` records the original's scroll reveals frame by frame and its scroll-driven class changes; `trueclone seed` turns the script-free mirror into the clone (template mode: layout-measured lorem text and same-size media placeholders) and replays what was recorded. Layout is at 99%+ before anyone writes CSS; your agent writes the remaining behaviour, guided by the skill. `trueclone rules` shows the original's CSS for any element (like DevTools).
 5. **Score** (`trueclone score`): layout pixel diff per section, scroll states replayed, motion curves sampled, interaction scenarios with change assertions, every hover, computed styles at matching points. Reference measurements are cached, so only the clone is re-measured.
 6. **Report**: `REPORT.md` with the verdict, what to fix first, and what was not copied.
 
@@ -99,7 +108,8 @@ npx trueclone <url> [name]              # capture + design-system draft
 npx trueclone capture <url> [name] [--mode exact --permission "<owner>"]
 npx trueclone motion <name>             # motion inventory
 npx trueclone design <name>             # DESIGN.md + globals.css
-npx trueclone seed <name>               # exact mode: start clone/ from the mirror
+npx trueclone reveals <name>            # record scroll reveals and scroll class changes
+npx trueclone seed <name>               # clone/ from the mirror (template: placeholder text and media)
 npx trueclone rules <name> "<selector>" # the original's CSS rules for an element
 npx trueclone textshape <name> --write  # template mode: placeholder text with the original's line breaks
 npx trueclone score <name> [--quick]    # every check, then REPORT.md

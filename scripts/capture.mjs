@@ -1,6 +1,7 @@
 // Capture a live page as the clone's reference: full-page screenshots, sections, design tokens,
 // rendered HTML, CSS/image/font files and a HAR.
-// usage: node scripts/capture.mjs <url> [name] [--hide ".cookie-banner,#popup"] [--cdp [endpoint]]
+// usage: node scripts/capture.mjs <url> [name] [--hide ".cookie-banner,#popup"] [--cdp [endpoint]] [--mode exact --permission "<owner>"]
+//        node scripts/capture.mjs <url> <name> --mirror-only   (rebuild reference/mirror from the saved capture)
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -31,6 +32,14 @@ const SAVED_TYPES = new Set(['stylesheet', 'image', 'font', 'media']);
 // Exact mode also keeps runtime-fetched media: 3D models, textures, video streams, animation files. Never scripts.
 const EXTRA_MEDIA = /\.(glb|gltf|bin|hdr|exr|ktx2|basis|mp4|webm|mov|m3u8|ts|m4s|lottie|riv|json)(\?|$)/i;
 const keepResponse = (type, url) => SAVED_TYPES.has(type) || (mode === 'exact' && ['fetch', 'xhr', 'other'].includes(type) && EXTRA_MEDIA.test(url));
+
+// --mirror-only: rebuild reference/mirror from an existing capture (no new screenshots, caches stay valid)
+if (flags['mirror-only']) {
+  const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
+  const saved = JSON.parse(await fs.readFile(path.join(ref, 'assets', 'manifest.json'), 'utf8'));
+  await buildMirror(saved, meta.url, meta.mode === 'exact' ? `Exact mode, authorised by: ${meta.permission}.` : "Template mode: the site's own content, kept as a reference only.");
+  process.exit(0);
+}
 
 // Only clear what capture owns; states/, motion.*, *.spec.json come from other scripts and stay.
 await fs.rm(path.join(ref, 'assets'), { recursive: true, force: true });
@@ -106,16 +115,64 @@ try {
       });
     }
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    // Components that mount only while in view (a lazy wordmark, an embed) are often unmounted again by the time
+    // the DOM is saved. Watch from load: an element that was empty, got content while scrolled into view and is empty
+    // again at snapshot time is saved with the fullest content it had. Things that start full and empty out (a
+    // loader) are left alone.
+    if (desktop) await page.evaluate(() => {
+      const count = (el) => el.getElementsByTagName('*').length;
+      const initial = new WeakMap();
+      for (const el of document.body.getElementsByTagName('*')) initial.set(el, count(el));
+      window.__tcRich = new Map();
+      new MutationObserver((records) => {
+        for (const r of records) {
+          for (let el = r.target, up = 0; el instanceof Element && el !== document.body && up < 8; el = el.parentElement, up++) {
+            const start = initial.has(el) ? initial.get(el) : 0;
+            const n = count(el);
+            if (start > 0 || n === 0) continue;
+            const best = window.__tcRich.get(el);
+            if (!best || n > best.n) window.__tcRich.set(el, { n, html: el.innerHTML });
+          }
+        }
+      }).observe(document.body, { subtree: true, childList: true });
+    });
     await settle(page, hide);
-    await page.screenshot({ path: path.join(ref, `${vp.name}.png`), fullPage: true });
+    // A full-page screenshot brings the whole page into view at once, which mounts view-mounted components and starts
+    // their reveals: shoot until two shots agree, so the reference shows a settled page, not a fade caught at 0%.
+    let shot = await page.screenshot({ fullPage: true });
+    for (let tries = 0; tries < 3; tries++) {
+      await page.waitForTimeout(2000);
+      const again = await page.screenshot({ fullPage: true });
+      const same = again.equals(shot);
+      shot = again;
+      if (same) break;
+    }
+    await fs.writeFile(path.join(ref, `${vp.name}.png`), shot);
     const sections = await sectionsOf(page);
     await fs.writeFile(path.join(ref, `${vp.name}.sections.json`), JSON.stringify(sections, null, 2));
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     rootFontSize[vp.name] = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
     if (desktop) {
       const html = await page.evaluate(() => {
+        // restore view-mounted content (see above): only elements that are empty again now
+        const restore = [];
+        let i = 0;
+        for (const [el, best] of window.__tcRich || []) {
+          if (!el.isConnected || el.getElementsByTagName('*').length > 0) continue;
+          el.setAttribute('data-tc-rich', String(i));
+          restore[i++] = best.html;
+        }
         const doc = document.documentElement.cloneNode(true);
+        for (const el of document.querySelectorAll('[data-tc-rich]')) el.removeAttribute('data-tc-rich');
+        for (const el of doc.querySelectorAll('[data-tc-rich]')) {
+          el.innerHTML = restore[Number(el.getAttribute('data-tc-rich'))];
+          el.removeAttribute('data-tc-rich');
+          // marked for the layout diff: a full-page still can't show view-mounted content on either side, so its box
+          // is excluded there (the scroll-state check, with a real viewport, scores it)
+          el.setAttribute('data-tc-viewmount', '');
+        }
         doc.querySelector('style[data-lab-freeze]')?.remove();
+        console.log(`tc-rich: restored ${restore.length} view-mounted element(s)`);
         return '<!DOCTYPE html>\n' + doc.outerHTML;
       });
       await fs.writeFile(path.join(ref, 'rendered.html'), html);
@@ -132,15 +189,16 @@ try {
 
 await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
 await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
-if (mode === 'exact') await buildMirror();
+await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 console.table(summary);
-console.log(`${manifest.length} assets saved. Reference: ${path.relative(process.cwd(), ref)}${mode === 'exact' ? ` (exact mode; mirror in reference/mirror, authorised by: ${permission})` : ''}`);
+console.log(`${manifest.length} assets saved. Reference: ${path.relative(process.cwd(), ref)}, mirror in reference/mirror${mode === 'exact' ? ` (exact mode, authorised by: ${permission})` : ''}`);
 
-// ---------- Exact mode: static local mirror of the rendered page ----------
+// ---------- Static local mirror of the rendered page ----------
 // Same DOM as rendered.html, asset URLs rewritten to the saved copies, every script and inline handler
 // removed (we never reuse the site's code), forms disabled, noindex. Static by design: motion is rebuilt
-// from the states/motion inventory, not replayed.
-async function buildMirror() {
+// from the states/motion inventory, not replayed. Exact mode seeds the clone from it as is; template mode
+// seeds it with every text and medium swapped for placeholders (seed.mjs).
+async function buildMirror(manifest, url, note) {
   const mirror = path.join(ref, 'mirror');
   await fs.rm(mirror, { recursive: true, force: true });
   await fs.mkdir(path.join(mirror, 'css'), { recursive: true });
@@ -155,7 +213,8 @@ async function buildMirror() {
     return path.relative(fromDir, path.join(ref, m.file)).replaceAll('\\', '/');
   };
   const rewriteCssUrls = (css, base, fromDir) => css
-    .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (all, q, u) => (u.startsWith('data:') ? all : `url("${local(abs(u, base), fromDir) || abs(u, base) || u}")`))
+    // url(#id) points inside the document (SVG gradients, filters, masks): never resolve it against the stylesheet
+    .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (all, q, u) => (u.startsWith('data:') || u.trim().startsWith('#') ? all : `url("${local(abs(u, base), fromDir) || abs(u, base) || u}")`))
     .replace(/@import\s+(['"])([^'"]+)\1/g, (all, q, u) => `@import "${local(abs(u, base), fromDir) || u}"`);
 
   // stylesheets: rewritten copies under mirror/css
@@ -182,7 +241,7 @@ async function buildMirror() {
     }).join(', ')}${q}`)
     .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (all, attrs, css) => `<style${attrs}>${rewriteCssUrls(css, url, mirror)}</style>`)
     .replace(/\sstyle=("|')([^"']*url\([^"']*)\1/gi, (all, q, css) => ` style=${q}${rewriteCssUrls(css, url, mirror)}${q}`)
-    .replace(/<head([^>]*)>/i, `<head$1>\n<!-- rea-lab local mirror of ${url}. Authorised by: ${permission.replace(/--/g, '-')}. Local reference only: do not deploy. -->\n<meta name="robots" content="noindex,nofollow">`);
+    .replace(/<head([^>]*)>/i, `<head$1>\n<!-- trueclone local mirror of ${url}. ${note.replace(/--/g, '-')} Local reference only: do not deploy. -->\n<meta name="robots" content="noindex,nofollow">`);
   await fs.writeFile(path.join(mirror, 'index.html'), html);
   const missing = [...html.matchAll(/\s(?:src|href)=["'](https?:[^"']+)["']/gi)].map((m) => m[1]).filter((u) => !/^https?:\/\/[^/]+\/?$/.test(u));
   console.log(`mirror: reference/mirror/index.html (${manifest.length} local assets, ${missing.length} remote URLs left, e.g. links)`);

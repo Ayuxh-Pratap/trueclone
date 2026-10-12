@@ -9,8 +9,9 @@ trueclone builds a working twin of a website from its URL (HTML/CSS/JS clone, Ne
 | `bin/trueclone.mjs` | The CLI: `init`, `doctor`, `<url>` shortcut, `rea` passthrough, and one command per step script |
 | `skill/SKILL.md` | The agent workflow `init` installs (Claude Code skill; `AGENTS.md` points other agents at it). **The product's brain: keep it in step with the scripts** |
 | `scripts/lib.mjs` | Shared: viewports, browser/page setup with timeouts, settle/freeze, scroll (`wheelTo` learns the page's wheel gain), masks, pixel match, reference cache |
-| `scripts/capture.mjs` | Playwright: full-page screenshots at 390/768/1440, sections, tokens, rendered HTML, assets, HAR; `--mode exact --permission` adds a script-free mirror |
-| `scripts/seed.mjs` | Exact mode: `clone/` from the mirror |
+| `scripts/capture.mjs` | Playwright: full-page screenshots (shot until stable) at 390/768/1440, sections, tokens, rendered HTML (view-mounted content kept, marked `data-tc-viewmount`), assets, HAR, script-free mirror; `--mirror-only` rebuilds the mirror; `--mode exact --permission` keeps runtime media |
+| `scripts/seed.mjs` | `clone/` from the mirror: exact mode as is, template mode with layout-measured lorem text and same-size media placeholders; marks recorded reveals/class changes and ships `trueclone-reveals.js` |
+| `scripts/reveals.mjs` | Records one-shot scroll reveals frame by frame and scroll-caused class changes (with thresholds), library-agnostic |
 | `scripts/design.mjs` | `design-tokens.json` → `DESIGN.md` (linted with `@google/design.md`), shadcn `globals.css`, `clone/tokens.css` |
 | `scripts/motion.mjs` | Motion inventory from the live runtime (GSAP/ScrollTrigger, Lenis, Swiper, CSS animations, cursor probe). Parameters only, never the site's code |
 | `scripts/states.mjs` | Live scroll states + inventory; `--clone` scores each step |

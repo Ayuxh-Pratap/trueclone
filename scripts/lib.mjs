@@ -124,7 +124,26 @@ const MASK_CSS = `*,*::before,*::after{color:transparent!important;text-shadow:n
 ::placeholder{color:transparent!important}
 img,video{object-position:-99999px -99999px!important;background:#888!important}
 svg{background:#888!important} svg *{visibility:hidden!important} iframe{visibility:hidden!important}
-canvas{background:#888!important;filter:contrast(0) brightness(1.066)!important}`; // canvas = media (WebGL heroes, 3D models): flat grey box like images
+canvas{background:#888!important;filter:contrast(0) brightness(1.066)!important}
+[data-lab-cliptext]{background:none!important;-webkit-text-fill-color:transparent!important}
+[data-lab-bgb]::before,[data-lab-bga]::after{background-image:none!important;background-color:#888!important}`; // canvas = media (WebGL heroes, 3D models): flat grey box like images
+
+// What CSS alone can't select: gradient text (background-clip: text paints the glyphs with its background, so a
+// transparent colour still shows the letters) and photo backgrounds on ::before/::after. Marked with attributes
+// the mask CSS targets; `off` removes them.
+function maskExtrasInPage(enable) {
+  const marks = ['data-lab-cliptext', 'data-lab-bgb', 'data-lab-bga'];
+  if (!enable) {
+    for (const m of marks) for (const el of document.querySelectorAll(`[${m}]`)) el.removeAttribute(m);
+    return;
+  }
+  for (const el of document.querySelectorAll('*')) {
+    const s = getComputedStyle(el);
+    if (s.backgroundClip === 'text' || s.webkitBackgroundClip === 'text') el.setAttribute('data-lab-cliptext', '');
+    if (getComputedStyle(el, '::before').backgroundImage.includes('url(')) el.setAttribute('data-lab-bgb', '');
+    if (getComputedStyle(el, '::after').backgroundImage.includes('url(')) el.setAttribute('data-lab-bga', '');
+  }
+}
 
 export async function mask(page) {
   const tag = await page.addStyleTag({ content: MASK_CSS });
@@ -137,7 +156,21 @@ export async function mask(page) {
       }
     }
   });
+  await page.evaluate(maskExtrasInPage, true);
   await page.waitForTimeout(200);
+}
+
+// Endless animations (marquees, rotating borders, pulsing glows) sit at whatever phase the page's clock happens to
+// be at, so two screenshots of the same page differ. Before a still comparison, every infinite animation is put on
+// its first frame and paused, on both sides. Continuous motion is scored by the motion checks, not by stills.
+export async function freezeLoops(page) {
+  await page.evaluate(() => {
+    for (const a of document.getAnimations()) {
+      if (a.effect?.getTiming().iterations !== Infinity) continue;
+      a.currentTime = 0;
+      a.pause();
+    }
+  }).catch(() => {});
 }
 
 // Reversible version of mask() for live pages: on() masks, off() restores every inline style it touched.
@@ -164,6 +197,7 @@ export async function maskToggle(page, on) {
       }
     }
   }, [MASK_CSS, on]);
+  await page.evaluate(maskExtrasInPage, on);
   await page.waitForTimeout(on ? 150 : 50);
 }
 

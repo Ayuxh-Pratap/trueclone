@@ -32,12 +32,27 @@ try {
     if (structure) await mask(page);
     const clonePath = path.join(out, `${vp.name}${suffix}.clone.png`);
     await page.screenshot({ path: clonePath, fullPage: true });
+    // View-mounted content (marked by capture): a full-page still can't show it on either side, so its boxes are
+    // painted the same flat colour in both images; the scroll-state check scores it with a real viewport.
+    const excluded = await page.evaluate(() => [...document.querySelectorAll('[data-tc-viewmount]')]
+      .map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.top + scrollY, r.width, r.height].map(Math.round); })
+      .filter((r) => r[2] > 0 && r[3] > 0));
     await context.close();
 
     const a0 = PNG.sync.read(await fs.readFile(path.join(ref, `${vp.name}${suffix}.png`)));
     const b0 = PNG.sync.read(await fs.readFile(clonePath));
     const w = Math.max(a0.width, b0.width), h = Math.max(a0.height, b0.height);
     const a = pad(a0, w, h), b = pad(b0, w, h);
+    for (const [x, y, rw, rh] of excluded) {
+      for (const img of [a, b]) {
+        for (let yy = Math.max(0, y); yy < Math.min(h, y + rh); yy++) {
+          for (let xx = Math.max(0, x); xx < Math.min(w, x + rw); xx++) {
+            const i = (yy * w + xx) * 4;
+            img.data[i] = 64; img.data[i + 1] = 64; img.data[i + 2] = 64; img.data[i + 3] = 255;
+          }
+        }
+      }
+    }
     const diff = new PNG({ width: w, height: h });
     const bad = match(a, b, diff);
     await fs.writeFile(path.join(out, `${vp.name}${suffix}.diff.png`), PNG.sync.write(diff));
@@ -57,6 +72,7 @@ try {
       match: +(100 - (bad / (w * h)) * 100).toFixed(2),
       heightRef: a0.height,
       heightClone: b0.height,
+      excludedViewMounted: excluded.length,
       worstSections: [...perSection].sort((x, y) => x.match - y.match).slice(0, 5),
       sections: perSection,
     });

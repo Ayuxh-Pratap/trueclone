@@ -66,13 +66,26 @@ Review the draft: role names, the `notes` prose (overview, do's and don'ts), any
 
 ## 4. Build (`clone/`)
 
-**Exact mode starts from the mirror:** `npx trueclone seed <name>` copies the script-free mirror into `clone/`, with the site's markup, text, stylesheets and media at local paths. Then write `clone/script.js`: every interaction in your own code, using the parameters you read from the reference (timings, physics constants, offsets, breakpoints). Never copy the site's scripts. JS-set initial states, such as a `<details>` closed on phones, are part of the layout, so check every viewport. Data the page fetches live (a star count, a feed) stays as captured; no requests to third parties.
+**Start every clone from the mirror** (both modes):
 
-**Template mode builds from scratch:**
+```powershell
+npx trueclone reveals <name>   # records scroll reveals frame by frame + class changes caused by scrolling (any library)
+npx trueclone seed <name>      # clone/ from the script-free mirror; replays what reveals recorded
+```
+
+- **Exact mode:** the site's own markup, text, stylesheets and media at local paths.
+- **Template mode:** the same markup and stylesheets, but every text becomes lorem words of the same laid-out width (lines break where the reference's break), every image, video, large SVG and iframe a same-size placeholder, CSS backgrounds a transparent one, every link `#`, brand metadata and tracking hints dropped. No text or media of the site ends up in `clone/`; fonts stay for local study (swap licensed fonts before reusing the result).
+- **Recorded behaviour comes with it:** one-shot scroll reveals replay their measured curve (delay, duration, easing, spring overshoot) with the Web Animations API, and scroll class changes (a header that gets its backdrop past 12px) toggle the same classes at the same point. Both live in `clone/trueclone-reveals.js`; don't rewrite them by hand.
+
+Then write `clone/script.js`: every remaining interaction in your own code, using the parameters you read from the reference (timings, physics constants, offsets, breakpoints). Never copy the site's scripts. JS-set initial states, such as a `<details>` closed on phones, are part of the layout, so check every viewport. Data the page fetches live (a star count, a feed) stays as captured; no requests to third parties.
+
+A seed is where layout ends up at 99%+ with zero hand-written CSS; your work is behaviour. Build by hand (below) only what the mirror can't carry.
+
+**Building parts by hand:**
 
 - `styles.css` starts with `@import url("tokens.css");` and uses its variables. Never hard-code a token value.
 - Use the site's breakpoints and root font-size behaviour (in `design-tokens.json`, under `layout`).
-- Build top to bottom, one section at a time, matching `sections.json` heights. Take structure from `rendered.html`. Write your own placeholder words, then run `npx trueclone textshape <name> --write` (desktop, then `--viewport tablet` and `mobile`): it swaps each placeholder word for a lorem word of the reference word's rendered width, so lines break where the reference's break. Use `--list "<ref row>" "<clone row>"` for repeated lists (calendar rows, cards), and give every data row its own placeholder text.
+- Match `sections.json` heights. In template mode write your own placeholder words, then run `npx trueclone textshape <name> --write` (desktop, then `--viewport tablet` and `mobile`) so lines break where the reference's break. Use `--list "<ref row>" "<clone row>"` for repeated lists (calendar rows, cards), and give every data row its own placeholder text.
 
 **Both modes:**
 
@@ -116,6 +129,11 @@ How detail measures, so you can trust it:
 - both sides measured the same way: a hit test at the same point and scroll position, so sticky and pinned content is compared in place and an identical page scores 100%;
 - through `pointer-events: none` overlays, and never on content the browser doesn't paint (closed `<details>`);
 - colours written by scroll-scrubbed JS show up as in-between values: that is a motion difference, so check the motion inventory.
+
+How layout and states measure:
+- the structure mask hides text everywhere, gradient text (`background-clip: text`) and `::before/::after` photo backgrounds included;
+- content that a component mounts only while in view (marked `data-tc-viewmount` by capture) can't appear in a full-page still on either side: layout paints its box the same on both and reports the count; the scroll-state check, with a real viewport, scores it;
+- endless animations (marquees, rotating borders) are frozen on their first frame on both sides before every state screenshot: their phase depends on load time, not on the clone.
 
 The live site can change after capture (a redeploy changes its CSS bundle name). When live-site tools (detail, rules) and screenshot scores (layout, states) disagree about a section, re-capture (`capture`, then `states <name>`); that also resets the cached reference measurements.
 

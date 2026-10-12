@@ -23,6 +23,7 @@ const STEPS = {
   seed: ['seed.mjs', 'exact mode: start clone/ from the script-free mirror (markup, text, styles, media)'],
   design: ['design.mjs', 'design-tokens.json -> DESIGN.md (linted), shadcn globals.css, clone/tokens.css'],
   motion: ['motion.mjs', 'motion inventory from the live runtime (GSAP/ScrollTrigger, Lenis, Swiper, CSS animations)'],
+  reveals: ['reveals.mjs', 'record one-shot scroll reveals frame by frame, so seed can replay them (any library)'],
   states: ['states.mjs', 'live scroll states; --clone scores the rebuild step by step'],
   curves: ['curves.mjs', 'motion score: sampled property curves, reference vs clone (motion-map.json)'],
   interact: ['interact.mjs', 'interaction tests: click/hover/drag/key scenarios on both sides (interactions.json)'],
