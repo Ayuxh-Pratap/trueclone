@@ -48,12 +48,19 @@ const PKG = {
 // ---------------- HTML -> JSX ----------------
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 const RENAME = {
-  class: 'className', for: 'htmlFor', tabindex: 'tabIndex', readonly: 'readOnly', maxlength: 'maxLength', minlength: 'minLength',
+  class: 'className', for: 'htmlFor', tabindex: 'tabIndex', readonly: 'readOnly', nomodule: 'noModule', formnovalidate: 'formNoValidate', itemscope: 'itemScope', maxlength: 'maxLength', minlength: 'minLength',
   crossorigin: 'crossOrigin', autoplay: 'autoPlay', playsinline: 'playsInline', srcset: 'srcSet', autocomplete: 'autoComplete',
   enctype: 'encType', colspan: 'colSpan', rowspan: 'rowSpan', contenteditable: 'contentEditable', spellcheck: 'spellCheck',
   novalidate: 'noValidate', allowfullscreen: 'allowFullScreen', frameborder: 'frameBorder', inputmode: 'inputMode', datetime: 'dateTime',
+  cellpadding: 'cellPadding', cellspacing: 'cellSpacing', charset: 'charSet', accesskey: 'accessKey', usemap: 'useMap',
+  formaction: 'formAction', marginwidth: 'marginWidth', marginheight: 'marginHeight', hreflang: 'hrefLang', srclang: 'srcLang',
+  srcdoc: 'srcDoc', referrerpolicy: 'referrerPolicy', fetchpriority: 'fetchPriority', enterkeyhint: 'enterKeyHint',
+  itemprop: 'itemProp', itemscope: 'itemScope', itemtype: 'itemType', 'accept-charset': 'acceptCharset', 'http-equiv': 'httpEquiv',
 };
-const BOOL = new Set(['muted', 'loop', 'playsinline', 'autoplay', 'controls', 'disabled', 'checked', 'required', 'hidden', 'novalidate', 'readonly', 'multiple', 'selected', 'allowfullscreen']);
+// Legacy presentational attributes (email-style tables) that React has no typed prop for: passed through a spread,
+// which React renders as-is and TypeScript doesn't reject.
+const LEGACY = new Set(['valign', 'bgcolor', 'background', 'nowrap', 'hspace', 'vspace', 'clear', 'char', 'charoff', 'compact', 'frame', 'rules', 'axis']);
+const BOOL = new Set(['muted', 'loop', 'playsinline', 'autoplay', 'controls', 'disabled', 'checked', 'required', 'hidden', 'novalidate', 'readonly', 'multiple', 'selected', 'allowfullscreen', 'open', 'default', 'reversed', 'async', 'defer', 'nomodule', 'formnovalidate', 'inert', 'itemscope']);
 const camel = (s) => s.replace(/[-:]([a-z])/g, (m, c) => c.toUpperCase());
 const styleObject = (css) => {
   const o = {};
@@ -73,30 +80,53 @@ function jsxAttrs(node, inSvg) {
   const parts = [];
   for (const a of node.attrs || []) {
     if (/^on[a-z]+$/.test(a.name)) continue; // inline handlers are strings; the motion script owns behaviour
+    // an input's value/checked are its starting state here; as plain props React would make the field read-only
+    if (node.tagName === 'input' && a.name === 'value') { parts.push(attrString('defaultValue', a.value)); continue; }
+    if (node.tagName === 'input' && a.name === 'checked') { parts.push('defaultChecked'); continue; }
+    if (LEGACY.has(a.name) && !inSvg) { parts.push(`{...{ ${JSON.stringify(a.name)}: ${JSON.stringify(a.value)} }}`); continue; }
     if (a.name === 'style') { usesStyle = true; parts.push(`style={${JSON.stringify(styleObject(a.value))} as CSSProperties}`); continue; }
-    if (BOOL.has(a.name) && (a.value === '' || a.value === a.name)) { parts.push(RENAME[a.name] || a.name); continue; }
+    // SVG elements have no typed boolean props (hidden), so they go through the spread too
+    if (BOOL.has(a.name) && (a.value === '' || a.value === a.name)) { parts.push(inSvg ? `{...{ ${JSON.stringify(a.name)}: true }}` : RENAME[a.name] || a.name); continue; }
     let n = RENAME[a.name] || a.name;
     if (!RENAME[a.name] && inSvg && !n.startsWith('data-') && !n.startsWith('aria-')) n = camel(n);
     if (n === 'xmlns:xlink') continue;
     const v = ['src', 'href', 'poster', 'srcSet'].includes(n) ? fixUrl(a.value) : a.value;
+    // React types these as numbers: tabIndex="0" fails type-checking, tabIndex={0} is the same attribute
+    if (['tabIndex', 'colSpan', 'rowSpan', 'maxLength', 'minLength', 'span', 'size', 'cols', 'rows'].includes(n) && /^-?\d+$/.test(v)) { parts.push(`${n}={${v}}`); continue; }
     parts.push(attrString(n, v));
   }
   return parts.length ? ' ' + parts.join(' ') : '';
 }
 
-function toJsx(node, depth, inSvg = false) {
+// JSX trims and collapses whitespace that HTML renders, so text is written to keep exactly what the browser showed:
+// verbatim where white-space is preserved (code samples), elsewhere with its edge spaces as {" "}
+const BLOCK = new Set(['address', 'article', 'aside', 'blockquote', 'body', 'dd', 'details', 'dialog', 'div', 'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hr', 'html', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'summary', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul']);
+const SPACE = '{" "}';
+const keepsWhitespace = (node) => ['pre', 'textarea', 'listing', 'xmp'].includes(node.tagName)
+  || (node.attrs || []).some((a) => (a.name === 'class' && /(^|\s)whitespace-(pre|break-spaces)/.test(a.value)) || (a.name === 'style' && /white-space:\s*(pre|break-spaces)/.test(a.value)));
+const textJsx = (s) => (/[{}<>&"']/.test(s) ? `{${JSON.stringify(s)}}` : s);
+
+function toJsx(node, depth, inSvg = false, inPre = false) {
   const pad = '  '.repeat(depth);
   if (node.nodeName === '#comment') return '';
   if (node.nodeName === '#text') {
-    if (!node.value.trim()) return node.value.includes('\n') ? '' : ' ';
+    if (inPre) return `{${JSON.stringify(node.value)}}`;
+    if (!node.value.trim()) {
+      // whitespace between two inline things renders as one space; next to a block, or at an edge, it renders nothing
+      const sibs = node.parentNode?.childNodes || [];
+      const i = sibs.indexOf(node);
+      const prev = sibs[i - 1], next = sibs[i + 1];
+      return prev && next && !BLOCK.has(prev.tagName) && !BLOCK.has(next.tagName) ? SPACE : '';
+    }
     const text = node.value.replace(/\s+/g, ' ');
-    return /[{}<>&"']/.test(text) ? `{${JSON.stringify(text)}}` : text;
+    return `${/^\s/.test(text) ? SPACE : ''}${textJsx(text.trim())}${/\s$/.test(text) ? SPACE : ''}`;
   }
   if (['script', 'noscript', 'style'].includes(node.nodeName)) return '';
   const tag = node.tagName;
   const svg = inSvg || tag === 'svg';
+  const pre = inPre || keepsWhitespace(node);
   const attrs = jsxAttrs(node, svg);
-  const kids = (node.childNodes || []).map((c) => toJsx(c, depth + 1, svg)).filter((s) => s !== '');
+  const kids = (node.childNodes || []).map((c) => toJsx(c, depth + 1, svg, pre)).filter((s) => s !== '');
   if (VOID.has(tag) || !kids.length) return `${pad}<${tag}${attrs} />`;
   const inline = kids.every((k) => !k.startsWith('  ')) && kids.join('').length < 120;
   if (inline) return `${pad}<${tag}${attrs}>${kids.map((k) => k.trim() || ' ').join('')}</${tag}>`;
@@ -121,12 +151,18 @@ await fs.rm(path.join(out, 'app'), { recursive: true, force: true });
 await fs.rm(path.join(out, 'components', 'site'), { recursive: true, force: true });
 for (const d of ['app', 'components/site', 'lib', 'styles', 'public']) await fs.mkdir(path.join(out, d), { recursive: true });
 
+// Two kinds of clone. A hand-built one (styles.css + one script.js using GSAP/Lenis/Swiper/three) is converted
+// section by section below; a seeded one (trueclone seed: the original's own stylesheets, trueclone's players and
+// a script.js) goes through seededApp(), further down.
+const seeded = await fs.stat(path.join(cloneDir, 'css')).then(() => true, () => false);
+let components = [];
+if (seeded) components = await seededApp();
+else {
 // Sections: everything before <main> is "chrome" (nav, menu, intro, cursor); each child of <main> is a section.
 const mainEl = find(body, 'main');
 const chrome = els(body).filter((e) => e !== mainEl && e.tagName !== 'script');
 const sections = mainEl ? els(mainEl) : [];
 const used = new Set();
-const components = [];
 const writeComponent = async (compName, nodes, depth = 2) => {
   usesStyle = false;
   const jsx = nodes.map((n) => toJsx(n, depth)).filter(Boolean).join('\n');
@@ -249,6 +285,7 @@ ${components.map((c) => `        <${c} />`).join('\n')}
   );
 }
 `);
+}
 
 // Assets, design system docs, config
 await fs.rm(path.join(out, 'public', 'assets'), { recursive: true, force: true });
@@ -280,7 +317,181 @@ await fs.writeFile(path.join(out, 'components.json'), JSON.stringify({
 }, null, 2) + '\n');
 await fs.writeFile(path.join(out, 'lib', 'utils.ts'), "import { clsx, type ClassValue } from 'clsx';\nimport { twMerge } from 'tailwind-merge';\n\nexport function cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs));\n}\n");
 await fs.writeFile(path.join(out, '.gitignore'), 'node_modules/\n.next/\nnext-env.d.ts\n*.tsbuildinfo\n');
-console.log(`generated ${path.relative(process.cwd(), out)}: ${components.length} section components + SiteChrome + SiteMotion`);
+console.log(`generated ${path.relative(process.cwd(), out)} (${seeded ? 'seeded clone' : 'hand-built clone'}): ${components.length} components + ${seeded ? 'SiteScripts' : 'SiteChrome + SiteMotion'}`);
+
+// ---------------- Seeded clones ----------------
+// The page is the original's markup and stylesheets (trueclone seed), so the app keeps them as they are:
+// - the stylesheets and inline <style> blocks of <head>, in their order, after the shadcn theme; Tailwind's own class
+//   scanning is limited to components/ui, because the original's compiled CSS already defines every class in the
+//   markup and a second build from a different theme would compete with it;
+// - <html> and <body> attributes (font-variable classes, dark mode, color-scheme);
+// - the largest body child is split at its first element with 3+ children: each of those becomes a component, the
+//   wrappers around them stay in the page with their classes; other body children are components of their own;
+// - trueclone's players and script.js are served from public/ and run in order after hydration, with the data
+//   blocks they read (script type="application/json") rendered in the page.
+async function seededApp() {
+  const attrsOf = (n) => Object.fromEntries((n.attrs || []).map((a) => [a.name, a.value]));
+  // styles
+  await fs.mkdir(path.join(out, 'styles', 'site'), { recursive: true });
+  const imports = [];
+  let inline = 0, usesTailwind = false;
+  for (const e of els(head)) {
+    const a = attrsOf(e);
+    let css = null, file = null;
+    if (e.tagName === 'link' && a.rel === 'stylesheet' && a.href && !/^(https?:)?\/\//.test(a.href)) {
+      css = await fs.readFile(path.join(cloneDir, a.href), 'utf8').catch(() => null);
+      file = path.basename(a.href);
+    } else if (e.tagName === 'style') {
+      css = (e.childNodes || []).map((c) => c.value || '').join('');
+      file = `inline-${++inline}.css`;
+    }
+    if (css === null) continue;
+    // stylesheets lived in clone/css/ (assets at ../assets/), inline blocks in the page (assets at assets/)
+    css = css.replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`);
+    usesTailwind ||= /--tw-|tailwindcss v\d/.test(css);
+    await fs.writeFile(path.join(out, 'styles', 'site', file), css);
+    imports.push(`import '../styles/site/${file}';`);
+  }
+  // globals.css = the shadcn theme only; the original's stylesheets are imported by layout.tsx AFTER it, so they come
+  // later in the cascade and win every tie (same layer names, same variable names: the original is often Tailwind too)
+  const theme = await fs.readFile(path.join(root, 'globals.css'), 'utf8').catch(() => '@import "tailwindcss";\n');
+  // Tailwind's preflight resets what the browser draws by default (form controls, headings, lists); an original built
+  // without Tailwind relies on those defaults, so its clone gets Tailwind's theme and utilities but not the reset
+  const tailwind = usesTailwind ? '@import "tailwindcss" source(none);'
+    : '/* no preflight: the original was not built with Tailwind and relies on browser defaults */\n@layer theme, base, components, utilities;\n@import "tailwindcss/theme.css" layer(theme);\n@import "tailwindcss/utilities.css" layer(utilities) source(none);';
+  const scoped = theme.replace('@import "tailwindcss";', `${tailwind}\n@source "../components/ui";`);
+  await fs.writeFile(path.join(out, 'app', 'globals.css'), scoped);
+  const siteCssImports = imports;
+
+  // markup
+  const SKIP_BODY = new Set(['script', 'noscript', 'next-route-announcer', 'template']);
+  const kids = els(body).filter((e) => !SKIP_BODY.has(e.tagName));
+  const size = (n) => (n.childNodes || []).reduce((s, c) => s + 1 + size(c), 0);
+  const content = kids.reduce((x, y) => (size(y) > size(x) ? y : x), kids[0]);
+  let container = content;
+  while (els(container).length < 3) {
+    const inner = els(container);
+    if (!inner.length) break;
+    container = inner.reduce((x, y) => (size(y) > size(x) ? y : x));
+  }
+  const used = new Set();
+  const names = [];
+  // names: the element's id when it has one, otherwise its tag and position (utility classes such as "mx-auto" and
+  // placeholder headings say nothing about what a section is)
+  let counter = 0;
+  const nameFor = (node, fallback) => {
+    counter++;
+    const id = attrsOf(node).id;
+    let n = id ? pascal(id) : `${pascal(node.tagName) || fallback}${String(counter).padStart(2, '0')}`;
+    if (/^\d/.test(n)) n = 'S' + n;
+    n = n.slice(0, 40) || fallback;
+    let k = n, i = 2;
+    while (used.has(k)) k = `${n}${i++}`;
+    used.add(k);
+    return k;
+  };
+  const writeComp = async (compName, node) => {
+    usesStyle = false;
+    const jsx = toJsx(node, 3);
+    const typeImport = usesStyle ? "import type { CSSProperties } from 'react';\n\n" : '';
+    await fs.writeFile(path.join(out, 'components', 'site', `${compName}.tsx`), `// Generated from clone/index.html by scripts/next.mjs. Edit the HTML clone and regenerate.\n${typeImport}export default function ${compName}() {\n  return (\n    <>\n${jsx}\n    </>\n  );\n}\n`);
+    names.push(compName);
+  };
+  // the page: wrappers kept inline down to the container, the container's children as components
+  let pageUsesStyle = false;
+  const wrap = async (node, depth) => {
+    const pad = '  '.repeat(depth);
+    if (node.nodeName === '#text' || node.nodeName === '#comment') return toJsx(node, depth);
+    usesStyle = false;
+    const attrs = jsxAttrs(node, false);
+    pageUsesStyle ||= usesStyle;
+    const children = [];
+    for (const c of node.childNodes || []) {
+      if (node === container && c.tagName) { const n = nameFor(c, 'Section'); await writeComp(n, c); children.push(`${pad}  <${n} />`); }
+      else if (c.tagName && c !== container && !c.childNodes?.some(() => false) && !(contains(c, container))) { usesStyle = false; children.push(toJsx(c, depth + 1)); pageUsesStyle ||= usesStyle; }
+      else if (c.tagName) children.push(await wrap(c, depth + 1));
+    }
+    const body = children.filter((s) => s && s.trim()).join('\n');
+    return body ? `${pad}<${node.tagName}${attrs}>\n${body}\n${pad}</${node.tagName}>` : `${pad}<${node.tagName}${attrs} />`;
+  };
+  const contains = (a, b) => { for (let n = b; n; n = n.parentNode) if (n === a) return true; return false; };
+  const pageParts = [];
+  for (const k of kids) {
+    if (k === content) pageParts.push(await wrap(k, 3));
+    else { const n = nameFor(k, 'Part'); await writeComp(n, k); pageParts.push(`      <${n} />`); }
+  }
+  // data blocks the players read, and the scripts themselves (copied to public/, run in order after hydration)
+  const scripts = els(body).filter((e) => e.tagName === 'script');
+  const dataBlocks = scripts.filter((s) => /json/.test(attrsOf(s).type || '') && attrsOf(s).id)
+    .map((s) => `      <script type="${attrsOf(s).type}" id="${attrsOf(s).id}" dangerouslySetInnerHTML={{ __html: ${JSON.stringify((s.childNodes || []).map((c) => c.value || '').join(''))} }} />`);
+  const srcs = scripts.map((s) => attrsOf(s).src).filter((s) => s && !/^(https?:)?\/\//.test(s));
+  for (const s of srcs) await fs.copyFile(path.join(cloneDir, s), path.join(out, 'public', path.basename(s)));
+  await fs.writeFile(path.join(out, 'components', 'site', 'SiteScripts.tsx'), `'use client';
+// Generated by scripts/next.mjs: runs the clone's scripts (trueclone's reveal and widget players, script.js) in
+// order, once, after hydration, exactly as the static clone does after parsing.
+import { useEffect } from 'react';
+
+const SCRIPTS = ${JSON.stringify(srcs.map((s) => '/' + path.basename(s)))};
+
+export default function SiteScripts() {
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>;
+    if (w.__siteScripts) return; // React strict mode runs effects twice in dev
+    w.__siteScripts = true;
+    (async () => {
+      for (const src of SCRIPTS) {
+        await new Promise((resolve) => {
+          const s = document.createElement('script');
+          s.src = src;
+          s.onload = s.onerror = () => resolve(null);
+          document.body.appendChild(s);
+        });
+      }
+    })();
+  }, []);
+  return null;
+}
+`);
+  // layout: the original's <html> and <body> attributes
+  usesStyle = false;
+  const htmlAttrs = jsxAttrs(htmlEl, false);
+  const bodyAttrs = jsxAttrs(body, false);
+  const layoutStyle = usesStyle;
+  await fs.writeFile(path.join(out, 'app', 'layout.tsx'), `// Generated by scripts/next.mjs
+import type { Metadata } from 'next';
+${layoutStyle ? "import type { CSSProperties } from 'react';\n" : ''}import './globals.css';
+// the original's stylesheets, in its <head> order, after the theme
+${siteCssImports.join('\n')}
+
+export const metadata: Metadata = {
+  title: ${JSON.stringify(title)},
+  robots: { index: false, follow: false },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html${htmlAttrs} suppressHydrationWarning>
+      <body${bodyAttrs} suppressHydrationWarning>{children}</body>
+    </html>
+  );
+}
+`);
+  await fs.writeFile(path.join(out, 'app', 'page.tsx'), `// Generated by scripts/next.mjs from a seeded clone: the original's structure, one component per section.
+${pageUsesStyle ? "import type { CSSProperties } from 'react';\n" : ''}${names.map((c) => `import ${c} from '@/components/site/${c}';`).join('\n')}
+import SiteScripts from '@/components/site/SiteScripts';
+
+export default function Page() {
+  return (
+    <>
+${pageParts.join('\n')}
+${dataBlocks.join('\n')}
+      <SiteScripts />
+    </>
+  );
+}
+`);
+  return names;
+}
 
 // ---------------- Install / build / verify ----------------
 // npm/npx are .cmd files on Windows and need a shell; Node warns (DEP0190) when a shell gets separate arguments, so

@@ -22,7 +22,7 @@ trueclone builds a working twin of a website from its URL (HTML/CSS/JS clone, Ne
 | `scripts/hovers.mjs` | Hover every interactive element on both sides |
 | `scripts/rules.mjs` | Every CSS rule matching an element (+ pseudo-elements, `@media`), cross-origin sheets included |
 | `scripts/textshape.mjs` | Template mode: placeholder words with the reference's rendered word widths (`--list` for repeated rows) |
-| `scripts/next.mjs` | Next.js mode: HTML → JSX per section, motion as a client component, shadcn globals + preflight parity; `--verify` scores it |
+| `scripts/next.mjs` | Next.js mode: HTML → JSX per section (whitespace kept as rendered, verbatim inside `pre`), motion as a client component, shadcn globals; seeded clones import the original's stylesheets after the theme, without Tailwind's preflight unless the original used Tailwind; `--verify` scores it |
 | `scripts/score.mjs`, `scripts/report.mjs` | All scores in parallel groups with time limits, then `REPORT.md` |
 | `scripts/diff.mjs`, `spec.mjs`, `tiles.mjs` | Layout pixel diff per viewport/section; measured boxes; screenshot tiles |
 | `scripts/chrome-debug.ps1` | Windows helper: Chrome with CDP on 9222 and a separate profile, for REA's browser tools |
