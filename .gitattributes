@@ -1,0 +1,4 @@
+# LF everywhere: the CLI shebang must stay "#!/usr/bin/env node" (a CRLF breaks it on macOS/Linux)
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary

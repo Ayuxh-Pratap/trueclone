@@ -49,5 +49,13 @@
     "rea"
   ],
   "author": "Ayush Pratap Singh",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ayuxh-Pratap/trueclone.git"
+  },
+  "homepage": "https://github.com/Ayuxh-Pratap/trueclone#readme",
+  "bugs": {
+    "url": "https://github.com/Ayuxh-Pratap/trueclone/issues"
+  }
 }
