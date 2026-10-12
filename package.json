@@ -1,0 +1,37 @@
+{
+  "name": "rea-lab",
+  "version": "1.0.0",
+  "description": "Experiments with REA: website frontend clones verified by pixel diff",
+  "scripts": {
+    "capture": "node scripts/capture.mjs",
+    "diff": "node scripts/diff.mjs",
+    "rea": "node node_modules/rea-agents/scripts/rea.mjs",
+    "chrome": "powershell -ExecutionPolicy Bypass -File scripts/chrome-debug.ps1",
+    "doctor": "node node_modules/rea-agents/scripts/rea.mjs doctor",
+    "tiles": "node scripts/tiles.mjs",
+    "spec": "node scripts/spec.mjs",
+    "setup": "node -e \"require('fs').cpSync('node_modules/rea-agents/skills/reverse-engineer-anything','.claude/skills/reverse-engineer-anything',{recursive:true})\" && npx playwright install chromium",
+    "states": "node scripts/states.mjs",
+    "design": "node scripts/design.mjs",
+    "motion": "node scripts/motion.mjs",
+    "curves": "node scripts/curves.mjs",
+    "interact": "node scripts/interact.mjs",
+    "next": "node scripts/next.mjs",
+    "detail": "node scripts/detail.mjs",
+    "hovers": "node scripts/hovers.mjs",
+    "score": "node scripts/score.mjs",
+    "rules": "node scripts/rules.mjs",
+    "textshape": "node scripts/textshape.mjs",
+    "seed": "node scripts/seed.mjs"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@google/design.md": "^0.4.0",
+    "parse5": "^8.0.1",
+    "pixelmatch": "^7.2.0",
+    "playwright": "^1.64.0",
+    "pngjs": "^7.0.0",
+    "rea-agents": "^6.4.0"
+  },
+  "private": true
+}

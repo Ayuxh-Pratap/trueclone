@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rea": {
+      "command": "node",
+      "args": ["node_modules/rea-agents/scripts/rea.mjs", "mcp"]
+    }
+  }
+}
