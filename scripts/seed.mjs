@@ -56,15 +56,23 @@ verbum vereor vero verto verus vester veto vetus via video vinco vinum vir virgo
 voluntas vos votum vox vulnus vultus`;
 const LOREM = LOREM_TEXT.split(/\s+/).filter(Boolean);
 
+// The player's width classes (see PLAYER) as media queries: the same three widths the reference was captured at.
+const WIDTH_MEDIA = { desktop: '(min-width: 1100px)', tablet: '(min-width: 600px) and (max-width: 1099px)', mobile: '(max-width: 599px)' };
+
 // Reveal player shipped with the clone (trueclone's own code): replays each recorded curve with the Web Animations
 // API once the element's top crosses the recorded trigger line; with reduced motion it shows the end state.
 const PLAYER = `// trueclone reveal player: replays what was recorded on the reference while scrolling (trueclone reveals): one-shot
-// reveals frame by frame, and class changes (a header that gets its backdrop past 12px, an "is-visible" toggle).
+// reveals frame by frame, scroll-linked curves (parallax, scrubbed fades) by scroll position, and class changes (a
+// header that gets its backdrop past 12px, an "is-visible" toggle). Records exist per width; the one for the
+// visitor's width is used (desktop from 1100px, tablet from 600px, otherwise mobile).
 (() => {
   const raw = JSON.parse(document.getElementById('tc-reveals')?.textContent || '{}');
   const data = Array.isArray(raw) ? raw : raw.reveals || [];
   const classData = Array.isArray(raw) ? [] : raw.classes || [];
+  const scrubData = Array.isArray(raw) ? [] : raw.scrubs || [];
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const vpName = innerWidth >= 1100 ? 'desktop' : innerWidth >= 600 ? 'tablet' : 'mobile';
+  const pick = (entry) => (entry && (entry.desktop || entry.tablet || entry.mobile) ? entry[vpName] || entry.desktop || entry.tablet || entry.mobile : entry);
 
   // class changes are state, not motion: they apply with reduced motion too
   let scrolled = false;
@@ -74,10 +82,12 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
     if (!c) continue;
     if (c.sticky) { pinned.push([el, c]); continue; }
     const line = Math.max(0, Math.min(1, c.trigger ?? 1));
+    // an element without a box (display: contents) never intersects: watch its first descendant that has one
+    const watched = el.getBoundingClientRect().height ? el : [...el.querySelectorAll('*')].find((d) => d.getBoundingClientRect().height) || el;
     new IntersectionObserver(([e], io) => {
       if (e.isIntersecting) { el.setAttribute('class', c.to); if (!c.reverts) io.disconnect(); }
       else if (c.reverts && el.getAttribute('class') === c.to) el.setAttribute('class', c.back ?? c.from);
-    }, { rootMargin: \`0px 0px -\${((1 - line) * 100).toFixed(1)}% 0px\` }).observe(el);
+    }, { rootMargin: \`0px 0px -\${((1 - line) * 100).toFixed(1)}% 0px\` }).observe(watched);
   }
   const applyPinned = () => {
     if (scrollY > 0) scrolled = true;
@@ -93,15 +103,55 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
     applyPinned();
   }
   const style = (f) => ({ opacity: f.o, transform: \`translate(\${f.tx}px, \${f.ty}px) scale(\${f.s})\`, filter: f.blur ? \`blur(\${f.blur}px)\` : 'none' });
-  const settle = (el, r) => Object.assign(el.style, style(r.to));
+  // scroll-linked curves: the recorded state at the two nearest scroll positions, interpolated. An element that also
+  // plays a one-shot reveal follows its curve once the reveal has finished.
+  // A curve is keyed by the element's own position in the viewport (key "v": its layout box top, translate taken
+  // out, the way a ScrollTrigger on the element sees it, so any viewport height gives the same curve) or, for an
+  // element inside a pinned stage, by the scroll position (key "y").
+  const scrubs = [];
+  for (const el of document.querySelectorAll('[data-tc-scrub]')) {
+    const rec = pick(scrubData[Number(el.dataset.tcScrub)]);
+    const s = Array.isArray(rec) ? rec : rec && rec.samples;
+    if (!s || s.length < 2) continue;
+    const key = !Array.isArray(rec) && rec.key === 'v' && s[0].v !== undefined ? 'v' : 'y';
+    scrubs.push({ el, key, s: key === 'v' ? [...s].sort((p, q) => p.v - q.v) : s, ty: 0, ready: !el.hasAttribute('data-tc-reveal') });
+  }
+  const at = (s, key, pos) => {
+    if (pos <= s[0][key]) return s[0];
+    for (let i = 1; i < s.length; i++) {
+      if (pos > s[i][key]) continue;
+      const a = s[i - 1], b = s[i], k = (pos - a[key]) / ((b[key] - a[key]) || 1);
+      const L = (p) => a[p] + (b[p] - a[p]) * k;
+      return { o: L('o'), tx: L('tx'), ty: L('ty'), s: L('s'), blur: L('blur') };
+    }
+    return s[s.length - 1];
+  };
+  // script.js takes an element over by removing its data-tc-scrub / data-tc-reveal mark: the player then leaves it alone
+  const applyScrubs = () => {
+    for (const x of scrubs) {
+      if (!x.ready || !x.el.hasAttribute('data-tc-scrub')) continue;
+      const pos = x.key === 'v' ? x.el.getBoundingClientRect().top - x.ty : scrollY;
+      const f = at(x.s, x.key, pos);
+      x.ty = f.ty;
+      Object.assign(x.el.style, style(f));
+    }
+  };
+  if (scrubs.length) {
+    let queued = false;
+    addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; applyScrubs(); }); } }, { passive: true });
+    applyScrubs();
+  }
+  const release = (el) => { const x = scrubs.find((q) => q.el === el); if (x) { x.ready = true; applyScrubs(); } };
+  const settle = (el, r) => { Object.assign(el.style, style(r.to)); release(el); };
   const play = (el, r) => {
     const frames = r.frames.map((f) => ({ ...style(f), offset: r.duration ? Math.min(1, f.t / r.duration) : 1 }));
     const anim = el.animate(frames, { duration: r.duration, fill: 'forwards', easing: 'linear' });
     anim.onfinish = () => { settle(el, r); anim.cancel(); };
   };
   for (const el of document.querySelectorAll('[data-tc-reveal]')) {
-    const r = data[Number(el.dataset.tcReveal)];
-    if (!r) continue;
+    const r = pick(data[Number(el.dataset.tcReveal)]);
+    if (!r) { release(el); continue; }
+    if (r.from) Object.assign(el.style, style(r.from)); // this width's starting state (the seed inlined the desktop one)
     if (reduce) { settle(el, r); continue; }
     // the recorded trigger is where the element's top was (as a share of the window height) when it started
     const line = Math.max(0, Math.min(1, r.trigger ?? 1));
@@ -109,7 +159,7 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
       for (const e of entries) {
         if (!e.isIntersecting) continue;
         io.disconnect();
-        play(el, r);
+        if (el.hasAttribute('data-tc-reveal')) play(el, r);
       }
     }, { rootMargin: \`0px 0px -\${((1 - line) * 100).toFixed(1)}% 0px\` });
     io.observe(el);
@@ -160,7 +210,8 @@ const pull = async (rel) => {
 // placeholders and a final sweep guarantees no reference path survives.
 const REF_ASSETS = '../reference/assets/';
 const rewrite = async (text, prefix, replacement, forPass = false) => {
-  const re = new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 'assets/([^"\')\\s]+)', 'g');
+  // saved asset names are [a-z0-9._-]; `&` ends a path inside a style attribute (url(&quot;../assets/x.webp&quot;))
+  const re = new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 'assets/([^"\')\\s&]+)', 'g');
   for (const m of text.matchAll(re)) if (exact || isFont(m[1])) await pull(m[1]);
   return text.replace(re, (all, rel) => (exact || isFont(rel) ? `${replacement}assets/${rel}` : forPass ? `${REF_ASSETS}${rel}` : `${replacement}${PLACEHOLDER}`));
 };
@@ -186,25 +237,43 @@ if (!exact) {
 }
 // Scroll reveals recorded on the reference (trueclone reveals): mark the elements, start them in their recorded
 // starting state, and replay the recorded curves with a small player when they scroll into view.
-const recording = JSON.parse(await fs.readFile(path.join(ref, 'reveals.desktop.json'), 'utf8').catch(() => 'null'));
-const recorded = recording?.reveals || [];
-const classChanges = recording?.classes || [];
+// One file per width when `reveals` ran at every width: elements are matched by path (the same DOM at every width)
+// and the player uses the record for the visitor's width, so phone offsets are phone offsets, not desktop pixels.
+const recs = {};
+for (const v of ['desktop', 'tablet', 'mobile']) {
+  const r = JSON.parse(await fs.readFile(path.join(ref, `reveals.${v}.json`), 'utf8').catch(() => 'null'));
+  if (r) recs[v] = r;
+}
+const primary = recs.desktop || recs.tablet || recs.mobile || null;
+const byPath = (key) => {
+  const m = new Map();
+  for (const [v, r] of Object.entries(recs)) for (const x of r[key] || []) {
+    if (!m.has(x.path)) m.set(x.path, { path: x.path, cls: x.cls });
+    m.get(x.path)[v] = x;
+  }
+  return [...m.values()];
+};
+const recorded = byPath('reveals');
+const scrubbed = byPath('scrubs');
+const classChanges = primary?.classes || [];
 // Widget states recorded on the reference (trueclone widgets): tabs, menus. Template mode only for now: the snapshots
 // are placeholdered like the page; exact-mode snapshots would still point at the site's media.
 const widgetRec = exact ? null : JSON.parse(await fs.readFile(path.join(ref, 'widgets.desktop.json'), 'utf8').catch(() => 'null'));
 const widgetGroups = widgetRec?.groups || [];
-let marked = 0, classMarked = 0, widgets = null;
-if (!exact || recorded.length || classChanges.length) ({ html, marked, classMarked, widgets } = await browserPass(!exact, recorded, classChanges, widgetGroups));
+let marked = 0, classMarked = 0, scrubMarked = 0, widgets = null, runtime = null;
+({ html, marked, classMarked, scrubMarked, widgets, runtime } = await browserPass(!exact, recorded, classChanges, widgetGroups, scrubbed));
 if (!exact) html = html.split(REF_ASSETS).join('__tc_ref__').replace(/__tc_ref__[^"')\s]+/g, PLACEHOLDER);
 if (widgets?.groups.length) {
   // a plain script (not fetched JSON), so the clone also works opened from disk
   await fs.writeFile(path.join(clone, 'trueclone-widgets.js'), `// trueclone widget player: recorded states of the reference's tabs and menus (trueclone widgets), placeholdered.\nwindow.__tcWidgetData = ${JSON.stringify(widgets)};\n(${widgetPlayer.toString()})();\n`);
   html = html.replace(/<\/body>/i, '<script src="trueclone-widgets.js" defer></script>\n</body>');
 }
-if (marked || classMarked) {
+if (marked || classMarked || scrubMarked) {
   await fs.writeFile(path.join(clone, 'trueclone-reveals.js'), PLAYER);
+  const perWidth = (r, shape) => Object.fromEntries(['desktop', 'tablet', 'mobile'].filter((v) => r[v]).map((v) => [v, shape(r[v])]));
   const data = JSON.stringify({
-    reveals: recorded.map(({ trigger, duration, frames, to }) => ({ trigger, duration, frames, to })),
+    reveals: recorded.map((r) => perWidth(r, ({ trigger, duration, frames, to, from }) => ({ trigger, duration, frames, to, from }))),
+    scrubs: scrubbed.map((r) => perWidth(r, (x) => ({ key: x.key, samples: x.samples }))),
     classes: classChanges.map(({ from, to, back, sticky, reverts, threshold, trigger }) => ({ from, to, back, sticky, reverts, threshold, trigger })),
   });
   html = html.replace(/<\/body>/i, `<script type="application/json" id="tc-reveals">${data}</script>\n<script src="trueclone-reveals.js" defer></script>\n</body>`);
@@ -218,12 +287,17 @@ if (!(await fs.stat(scriptFile).then(() => true, () => false))) {
   await fs.writeFile(scriptFile, `// ${meta.url} - clone behaviour (your own code). Markup and styles come from the mirror${exact ? '' : ' (placeholder content)'}.\n// Rebuild every interaction and reveal from the reference's parameters; verify with npx trueclone score ${name}.\n`);
 }
 console.log(`seeded ${path.relative(process.cwd(), clone)} from the mirror (${exact ? 'exact: the site\'s own content' : 'template: placeholder text and media'}): index.html, ${(await fs.readdir(path.join(clone, 'css'))).length} stylesheet(s), ${copied.size} asset(s)${exact ? '' : ' (fonts only)'}`);
-if (recorded.length || classChanges.length) console.log(`replayed by trueclone-reveals.js: ${marked}/${recorded.length} scroll reveals, ${classMarked}/${classChanges.length} scroll class changes${marked < recorded.length || classMarked < classChanges.length ? ' (the rest did not resolve to an element in the mirror)' : ''}`);
+if (recorded.length || classChanges.length || scrubbed.length) console.log(`replayed by trueclone-reveals.js: ${marked}/${recorded.length} scroll reveals, ${scrubMarked}/${scrubbed.length} scroll-linked curves, ${classMarked}/${classChanges.length} scroll class changes (${Object.keys(recs).join(', ') || 'no'} widths recorded)${marked < recorded.length || classMarked < classChanges.length || scrubMarked < scrubbed.length ? ' (the rest did not resolve to an element in the mirror)' : ''}`);
+if (runtime) {
+  const pins = runtime.pins.map((p) => `${p.el} pinned for ${p.distance}px`).join(', ');
+  console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"`);
+  if (runtime.widthStyled) console.log(`per-width inline styles: ${runtime.widthStyled} element(s) sized or placed differently by the site's scripts at tablet/mobile, now media-query rules (data-tc-w)`);
+}
 if (widgetGroups.length) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------
-async function browserPass(template, reveals, classes, groups = []) {
+async function browserPass(template, reveals, classes, groups = [], scrubs = []) {
   // served from sites/<name>/ so the pass can reach reference/assets (see `forPass`)
   const server = await serve(root);
   const browser = await openBrowser(flags.cdp);
@@ -231,7 +305,7 @@ async function browserPass(template, reveals, classes, groups = []) {
     const { page } = await newPage(browser, VIEWPORTS.find((v) => v.name === 'desktop'), {});
     await page.goto(`${server.url}clone/index.html`, { waitUntil: 'load', timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
-    const counts = reveals.length || classes.length ? await page.evaluate(markRevealsInPage, [reveals, classes]) : [0, 0];
+    const counts = reveals.length || classes.length || scrubs.length ? await page.evaluate(markRevealsInPage, [reveals, classes, scrubs]) : [0, 0, 0];
     // widgets: mark regions and triggers, then give every recorded state the same placeholders as the page by
     // placing it into its region (so it is laid out and measured for real) and reading it back
     let widgets = null;
@@ -259,8 +333,20 @@ async function browserPass(template, reveals, classes, groups = []) {
       widgets.groups = Array.from(widgets.groups, (x) => x || null);
     }
     if (template) await page.evaluate(placeholdersInPage, [LOREM, null]);
-    const out = await page.evaluate(() => document.documentElement.outerHTML);
-    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1], widgets };
+    // last, because the recorded paths above were taken on the live page, pin-spacers included
+    const runtime = await page.evaluate(cleanRuntimeInPage);
+    // inline styles that differ between widths (script-computed sizes and offsets) become media-query rules
+    const inlineStyles = JSON.parse(await fs.readFile(path.join(ref, 'inline-styles.json'), 'utf8').catch(() => 'null'));
+    runtime.widthStyled = inlineStyles ? await page.evaluate(widthStylesInPage, [inlineStyles, WIDTH_MEDIA]) : 0;
+    // getHTML keeps the declarative shadow roots the capture serialised (outerHTML would drop them); it is the inner
+    // HTML, so the <html> tag and its attributes (font classes, dark mode, lang) are written back around it
+    const out = await page.evaluate(() => {
+      const el = document.documentElement;
+      const inner = el.getHTML ? el.getHTML({ serializableShadowRoots: true }) : el.innerHTML;
+      const attrs = [...el.attributes].map((a) => ` ${a.name}="${a.value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`).join('');
+      return `<html${attrs}>${inner}</html>`;
+    });
+    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1], scrubMarked: counts[2], widgets, runtime };
   } finally {
     if (!flags.cdp) await browser.close();
     server.close();
@@ -332,7 +418,7 @@ function widgetPlayer() {
   });
 }
 
-function markRevealsInPage([reveals, classes]) {
+function markRevealsInPage([reveals, classes, scrubs = []]) {
   const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
   const resolve = (p) => {
     let el = document.body;
@@ -344,16 +430,25 @@ function markRevealsInPage([reveals, classes]) {
     }
     return el;
   };
+  // each reveal's starting state is a rule on its mark (no flash before the player runs; the player then applies the
+  // visitor's width); script.js hands an element over by removing the mark, which releases the state with it
+  const rules = [];
   let count = 0;
   reveals.forEach((r, i) => {
     const el = resolve(r.path);
     if (!el) return;
+    const rec = r.desktop || r.tablet || r.mobile || r;
     el.setAttribute('data-tc-reveal', String(i));
-    el.style.opacity = String(r.from.o);
-    el.style.transform = `translate(${r.from.tx}px, ${r.from.ty}px) scale(${r.from.s})`;
-    if (r.from.blur) el.style.filter = `blur(${r.from.blur}px)`;
+    rules.push(`[data-tc-reveal="${i}"]{opacity:${rec.from.o};transform:translate(${rec.from.tx}px, ${rec.from.ty}px) scale(${rec.from.s})${rec.from.blur ? `;filter:blur(${rec.from.blur}px)` : ''}}`);
     count++;
   });
+  if (rules.length) {
+    document.getElementById('tc-reveal-styles')?.remove();
+    const style = document.createElement('style');
+    style.id = 'tc-reveal-styles';
+    style.textContent = `/* trueclone seed: starting states of recorded scroll reveals (desktop); trueclone-reveals.js plays them */\n${rules.join('\n')}\n`;
+    document.head.appendChild(style);
+  }
   let classCount = 0;
   classes.forEach((c, i) => {
     const el = resolve(c.path);
@@ -362,7 +457,134 @@ function markRevealsInPage([reveals, classes]) {
     if (c.from !== null && c.from !== undefined) el.setAttribute('class', c.from);
     classCount++;
   });
-  return [count, classCount];
+  let scrubCount = 0;
+  scrubs.forEach((s, i) => {
+    const el = resolve(s.path);
+    if (!el) return;
+    el.setAttribute('data-tc-scrub', String(i));
+    scrubCount++;
+  });
+  return [count, classCount, scrubCount];
+}
+
+// Inline styles the capture read at every width, by element path. A declaration with the same value at every width
+// stays inline; one that differs (a height a script computed from the container, an offset, a custom property)
+// moves into a media-query rule per width, so each width gets exactly what the site showed there. The rule's
+// selector is stacked to the precedence an inline style had over the stylesheets, without !important, so a value
+// script.js writes inline later still wins. Motion properties of elements the reveal player drives, and the pin
+// geometry the seed removed, are left out.
+function widthStylesInPage([styles, media]) {
+  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  const resolve = (p) => {
+    let el = document.body;
+    for (const part of p.split('>')) {
+      const [tag, n] = part.split(':');
+      const kids = [...el.children].filter((c) => !SKIP.has(c.tagName));
+      el = kids[Number(n) - 1];
+      if (!el || el.tagName.toLowerCase() !== tag) return null;
+    }
+    return el;
+  };
+  const decls = (text) => {
+    const map = new Map();
+    for (const d of String(text || '').split(/;(?![^(]*\))/)) {
+      const i = d.indexOf(':');
+      if (i < 0) continue;
+      const k = d.slice(0, i).trim(), v = d.slice(i + 1).trim().replace(/\s*!important$/i, '');
+      if (k) map.set(k, v);
+    }
+    return map;
+  };
+  const MOTION = new Set(['transform', 'translate', 'rotate', 'scale', 'opacity', 'filter']);
+  const PIN = new Set(['translate', 'rotate', 'scale', 'inset', 'top', 'left', 'right', 'bottom', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'max-width', 'width', 'max-height', 'height', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'box-sizing', 'position', 'transform', 'flex-basis']);
+  const widths = Object.keys(styles).filter((w) => media[w]);
+  const paths = new Set(widths.flatMap((w) => Object.keys(styles[w])));
+  const rules = [];
+  const sel = (i) => `[data-tc-w="${i}"]`.repeat(8); // (0,8,0): above any ordinary author rule, below inline
+  let count = 0;
+  for (const p of paths) {
+    const per = Object.fromEntries(widths.map((w) => [w, decls(styles[w][p])]));
+    const all = new Set(widths.flatMap((w) => [...per[w].keys()]));
+    const differs = [...all].filter((k) => widths.some((w) => per[w].get(k) !== per[widths[0]].get(k)));
+    if (!differs.length) continue;
+    const el = resolve(p);
+    if (!el) continue;
+    // a pin spacer keeps only its pin distance per width (the site computes it from the viewport height); GSAP writes
+    // it as the padding shorthand (padding: 0px 0px 5600px)
+    const spacer = el.hasAttribute('data-tc-pin-spacer');
+    if (spacer) {
+      const horizontal = /^padding-right|^padding:\s*0(px)?\s+[1-9]/.test(styles[widths[0]][p] || '');
+      const distance = (m) => { if (m.has(horizontal ? 'padding-right' : 'padding-bottom')) return parseFloat(m.get(horizontal ? 'padding-right' : 'padding-bottom')); const v = (m.get('padding') || '').trim().split(/\s+/); return parseFloat(horizontal ? v[1] ?? v[0] : v[2] ?? v[0]) || 0; };
+      const d = Object.fromEntries(widths.map((w) => [w, Math.round(distance(per[w]))]));
+      if (widths.every((w) => d[w] === d[widths[0]])) continue;
+      const i = count++;
+      el.setAttribute('data-tc-w', String(i));
+      for (const w of widths) {
+        el.firstElementChild?.setAttribute(`data-tc-pin-${w}`, String(d[w]));
+        rules.push(`@media ${media[w]} { ${sel(i)} { ${horizontal ? 'padding-right' : 'padding-bottom'}: ${d[w]}px } }`);
+      }
+      continue;
+    }
+    const skip = (k) => (el.hasAttribute('data-tc-runtime') && (PIN.has(k) || k === 'width' || k === 'height')) || ((el.hasAttribute('data-tc-reveal') || el.hasAttribute('data-tc-scrub')) && MOTION.has(k));
+    const moved = differs.filter((k) => !skip(k));
+    if (!moved.length) continue;
+    const i = count++;
+    el.setAttribute('data-tc-w', String(i));
+    // the inline attribute keeps what is the same everywhere (as the desktop mirror had it)
+    const current = decls(el.getAttribute('style'));
+    for (const k of moved) current.delete(k);
+    const inline = [...current].map(([k, v]) => `${k}: ${v}`).join('; ');
+    if (inline) el.setAttribute('style', inline); else el.removeAttribute('style');
+    for (const w of widths) {
+      const body = moved.filter((k) => per[w].has(k)).map((k) => `${k}: ${per[w].get(k)}`).join('; ');
+      if (body) rules.push(`@media ${media[w]} { ${sel(i)} { ${body} } }`);
+    }
+  }
+  if (rules.length) {
+    const style = document.createElement('style');
+    style.id = 'tc-width-styles';
+    style.textContent = `/* trueclone seed: inline styles the site's scripts set per width (captured at desktop, tablet and mobile) */\n${rules.join('\n')}\n`;
+    document.head.appendChild(style);
+  }
+  return count;
+}
+
+// The mirror is a snapshot taken after the site's scripts ran, so it carries what they left in the DOM: GSAP's
+// pin-spacer wrappers and the pin's inline geometry (fixed desktop pixels that break every other width), and canvas
+// buffer sizes set for one viewport. A pin is a sticky element inside a spacer, which CSS does natively: the seed
+// keeps the spacer as a plain block with the pin distance as padding (`data-tc-pin-spacer`), makes the element
+// sticky, and records the distance on it (`data-tc-pin`), so layout and scroll states hold without a script. The
+// clone's script may take the pin over (unwrap the spacer, drop the sticky style) and draws the marked canvases.
+function cleanRuntimeInPage() {
+  const log = { pins: [], canvases: 0 };
+  const label = (el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.classList.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''}`;
+  // what ScrollTrigger writes on the pinned element while pinning (its own values live in the stylesheet)
+  const PIN_PROPS = ['translate', 'rotate', 'scale', 'inset', 'top', 'left', 'right', 'bottom', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'max-width', 'width', 'max-height', 'height', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'box-sizing', 'position', 'transform', 'flex-basis'];
+  // what the spacer copied from the element so the parent's flex/grid layout holds: kept; its geometry: dropped
+  const SPACER_KEEP = new Set(['order', 'place-self', 'grid-area', 'grid-column', 'grid-row', 'float', 'flex-shrink', 'flex-grow', 'flex-basis', 'display', 'align-self', 'justify-self']);
+  for (const spacer of document.querySelectorAll('.pin-spacer')) {
+    const pinned = spacer.firstElementChild;
+    const horizontal = !spacer.style.paddingBottom && !!spacer.style.paddingRight;
+    const distance = Math.round(parseFloat(horizontal ? spacer.style.paddingRight : spacer.style.paddingBottom) || 0);
+    if (!pinned) { spacer.replaceWith(...spacer.childNodes); continue; }
+    for (const p of PIN_PROPS) pinned.style.removeProperty(p);
+    pinned.style.position = 'sticky';
+    pinned.style.top = '0px';
+    pinned.setAttribute('data-tc-runtime', 'pin');
+    pinned.setAttribute('data-tc-pin', String(distance));
+    const keep = [...spacer.style].filter((p) => SPACER_KEEP.has(p)).map((p) => `${p}: ${spacer.style.getPropertyValue(p)}`);
+    spacer.removeAttribute('class');
+    spacer.setAttribute('style', `${keep.join('; ')}${keep.length ? '; ' : ''}${horizontal ? 'padding-right' : 'padding-bottom'}: ${distance}px`);
+    spacer.setAttribute('data-tc-pin-spacer', String(distance));
+    log.pins.push({ el: label(pinned), distance });
+  }
+  // a canvas keeps its buffer size: with only a CSS width, the height follows the buffer's aspect ratio, and the
+  // clone's own scene sets the buffer it needs; the mark says a script draws here
+  for (const c of document.querySelectorAll('canvas')) {
+    c.setAttribute('data-tc-runtime', 'canvas');
+    log.canvases++;
+  }
+  return log;
 }
 
 

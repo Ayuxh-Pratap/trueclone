@@ -15,7 +15,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
-import { parse } from 'parse5';
+import { parse, serialize } from 'parse5';
 import { fileURLToPath as toPath } from 'node:url';
 import { parseArgs } from './lib.mjs';
 
@@ -30,13 +30,17 @@ const cloneDir = path.join(root, 'clone');
 const out = path.join(root, 'next');
 const port = Number(flags.port || 3100);
 
-// Versions: motion libraries pinned to what the verified HTML clone loads, so behaviour is identical.
+// Two kinds of clone. A hand-built one (styles.css + one script.js using GSAP/Lenis/Swiper/three from npm) is
+// converted section by section; a seeded one (trueclone seed: the original's own stylesheets, trueclone's players, a
+// script.js and the libraries it vendored) goes through seededApp() and needs no motion library from npm.
+const seeded = await fs.stat(path.join(cloneDir, 'css')).then(() => true, () => false);
+// Versions: motion libraries pinned to what the verified hand-built HTML clone loads, so behaviour is identical.
 const PKG = {
   name: `${name}-next`, private: true, version: '0.1.0',
   scripts: { dev: 'next dev', build: 'next build', start: `next start -p ${port}` },
   dependencies: {
     next: '16.4.0', react: '19.3.0', 'react-dom': '19.3.0',
-    gsap: '3.13.0', lenis: '1.1.18', swiper: '11.2.6', three: '0.128.0',
+    ...(seeded ? {} : { gsap: '3.13.0', lenis: '1.1.18', swiper: '11.2.6', three: '0.128.0' }),
     clsx: '2.1.1', 'tailwind-merge': '3.7.0',
   },
   devDependencies: {
@@ -84,12 +88,17 @@ function jsxAttrs(node, inSvg) {
     if (node.tagName === 'input' && a.name === 'value') { parts.push(attrString('defaultValue', a.value)); continue; }
     if (node.tagName === 'input' && a.name === 'checked') { parts.push('defaultChecked'); continue; }
     if (LEGACY.has(a.name) && !inSvg) { parts.push(`{...{ ${JSON.stringify(a.name)}: ${JSON.stringify(a.value)} }}`); continue; }
-    if (a.name === 'style') { usesStyle = true; parts.push(`style={${JSON.stringify(styleObject(a.value))} as CSSProperties}`); continue; }
+    // url(assets/…) in an inline style resolves against the page in the clone; the app serves assets at /assets
+    if (a.name === 'style') { usesStyle = true; parts.push(`style={${JSON.stringify(styleObject(a.value.replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`)))} as CSSProperties}`); continue; }
     // SVG elements have no typed boolean props (hidden), so they go through the spread too
     if (BOOL.has(a.name) && (a.value === '' || a.value === a.name)) { parts.push(inSvg ? `{...{ ${JSON.stringify(a.name)}: true }}` : RENAME[a.name] || a.name); continue; }
     let n = RENAME[a.name] || a.name;
     if (!RENAME[a.name] && inSvg && !n.startsWith('data-') && !n.startsWith('aria-')) n = camel(n);
     if (n === 'xmlns:xlink') continue;
+    // an empty src/srcset/poster makes the browser request the page itself (React logs an error for each); an
+    // empty href means "this page", which # also does without the request
+    if (['src', 'srcSet', 'poster'].includes(n) && a.value === '') continue;
+    if (n === 'href' && a.value === '') { parts.push('href="#"'); continue; }
     const v = ['src', 'href', 'poster', 'srcSet'].includes(n) ? fixUrl(a.value) : a.value;
     // React types these as numbers: tabIndex="0" fails type-checking, tabIndex={0} is the same attribute
     if (['tabIndex', 'colSpan', 'rowSpan', 'maxLength', 'minLength', 'span', 'size', 'cols', 'rows'].includes(n) && /^-?\d+$/.test(v)) { parts.push(`${n}={${v}}`); continue; }
@@ -126,6 +135,12 @@ function toJsx(node, depth, inSvg = false, inPre = false) {
   const svg = inSvg || tag === 'svg';
   const pre = inPre || keepsWhitespace(node);
   const attrs = jsxAttrs(node, svg);
+  // a host with a declarative shadow root (<template shadowrootmode>): the browser's HTML parser builds the shadow
+  // root from the streamed markup, React must not touch the inside, so the host's content is emitted as raw HTML
+  if ((node.childNodes || []).some((c) => c.tagName === 'template' && (c.attrs || []).some((a) => a.name === 'shadowrootmode'))) {
+    const inner = serialize(node).replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`).replace(/(src|href|poster)="assets\//g, '$1="/assets/');
+    return `${pad}<${tag}${attrs} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: ${JSON.stringify(inner)} }} />`;
+  }
   const kids = (node.childNodes || []).map((c) => toJsx(c, depth + 1, svg, pre)).filter((s) => s !== '');
   if (VOID.has(tag) || !kids.length) return `${pad}<${tag}${attrs} />`;
   const inline = kids.every((k) => !k.startsWith('  ')) && kids.join('').length < 120;
@@ -151,10 +166,6 @@ await fs.rm(path.join(out, 'app'), { recursive: true, force: true });
 await fs.rm(path.join(out, 'components', 'site'), { recursive: true, force: true });
 for (const d of ['app', 'components/site', 'lib', 'styles', 'public']) await fs.mkdir(path.join(out, d), { recursive: true });
 
-// Two kinds of clone. A hand-built one (styles.css + one script.js using GSAP/Lenis/Swiper/three) is converted
-// section by section below; a seeded one (trueclone seed: the original's own stylesheets, trueclone's players and
-// a script.js) goes through seededApp(), further down.
-const seeded = await fs.stat(path.join(cloneDir, 'css')).then(() => true, () => false);
 let components = [];
 if (seeded) components = await seededApp();
 else {
@@ -292,6 +303,22 @@ await fs.rm(path.join(out, 'public', 'assets'), { recursive: true, force: true }
 await fs.cp(path.join(cloneDir, 'assets'), path.join(out, 'public', 'assets'), { recursive: true });
 for (const f of ['DESIGN.md', 'design-tokens.json']) await fs.copyFile(path.join(root, f), path.join(out, f)).catch(() => {});
 await fs.writeFile(path.join(out, 'package.json'), JSON.stringify(PKG, null, 2) + '\n');
+// custom elements (<code-island>, <swiper-container>) have no JSX type: declared here, or `next build` fails
+const custom = new Set();
+(function walk(n) { if (n.tagName && n.tagName.includes('-')) custom.add(n.tagName); for (const c of n.childNodes || []) walk(c); })(body);
+if (custom.size) {
+  await fs.writeFile(path.join(out, 'custom-elements.d.ts'), `// Generated by scripts/next.mjs: the page's custom elements, typed for JSX.
+import type { DetailedHTMLProps, HTMLAttributes } from 'react';
+
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
+${[...custom].map((t) => `      ${JSON.stringify(t)}: DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement> & Record<string, unknown>;`).join('\n')}
+    }
+  }
+}
+`);
+} else await fs.rm(path.join(out, 'custom-elements.d.ts'), { force: true });
 await fs.writeFile(path.join(out, 'postcss.config.mjs'), "export default { plugins: { '@tailwindcss/postcss': {} } };\n");
 await fs.writeFile(path.join(out, 'next.config.mjs'), `import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -335,7 +362,11 @@ async function seededApp() {
   await fs.mkdir(path.join(out, 'styles', 'site'), { recursive: true });
   const imports = [];
   let inline = 0, usesTailwind = false;
-  for (const e of els(head)) {
+  // <style> blocks (and stylesheet links) can sit inside <body> too, anywhere in the tree: same cascade, so they
+  // follow the head's in document order
+  const bodyStyles = [];
+  (function walk(n) { for (const c of n.childNodes || []) { if (c.tagName === 'style' || c.tagName === 'link') bodyStyles.push(c); else walk(c); } })(body);
+  for (const e of [...els(head), ...bodyStyles]) {
     const a = attrsOf(e);
     let css = null, file = null;
     if (e.tagName === 'link' && a.rel === 'stylesheet' && a.href && !/^(https?:)?\/\//.test(a.href)) {
@@ -424,14 +455,39 @@ async function seededApp() {
   const scripts = els(body).filter((e) => e.tagName === 'script');
   const dataBlocks = scripts.filter((s) => /json/.test(attrsOf(s).type || '') && attrsOf(s).id)
     .map((s) => `      <script type="${attrsOf(s).type}" id="${attrsOf(s).id}" dangerouslySetInnerHTML={{ __html: ${JSON.stringify((s.childNodes || []).map((c) => c.value || '').join(''))} }} />`);
-  const srcs = scripts.map((s) => attrsOf(s).src).filter((s) => s && !/^(https?:)?\/\//.test(s));
-  for (const s of srcs) await fs.copyFile(path.join(cloneDir, s), path.join(out, 'public', path.basename(s)));
+  // the scripts, copied to public/ at their own relative paths (a script that loads a sibling file keeps working),
+  // with the files their import statements and import() calls name; a module script stays a module
+  // in document order: files (copied) and inline scripts (run as written); data blocks are rendered in the page
+  const scriptTags = scripts.map((s) => ({ ...attrsOf(s), code: (s.childNodes || []).map((c) => c.value || '').join('') }))
+    .filter((a) => !/json/.test(a.type || '') && (a.src ? !/^(https?:)?\/\//.test(a.src) : a.code.trim()));
+  const copied = new Set();
+  const copyScript = async (rel, depth = 0) => {
+    const clean = rel.split(/[?#]/)[0].replace(/^\.\//, '');
+    if (copied.has(clean) || depth > 4) return;
+    copied.add(clean);
+    const from = path.join(cloneDir, clean);
+    const text = await fs.readFile(from, 'utf8').catch(() => null);
+    if (text === null) { console.warn(`WARNING script referenced but not in clone/: ${clean}`); return; }
+    await fs.mkdir(path.dirname(path.join(out, 'public', clean)), { recursive: true });
+    await fs.copyFile(from, path.join(out, 'public', clean));
+    for (const m of text.matchAll(/(?:^|[^\w$.])import\s*(?:[\w$*{},\s]+from\s*)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+      const spec = m[1] || m[2];
+      if (!spec || /^(https?:)?\/\//.test(spec) || !/^[./]/.test(spec)) continue;
+      await copyScript(path.posix.join(path.posix.dirname(clean), spec), depth + 1);
+    }
+    // a script file named in a string (new URL('vendor/three.module.min.js', here), a worker, a lazy loader)
+    for (const m of text.matchAll(/['"]([\w./-]+\.m?js)['"]/g)) {
+      const rel = path.posix.join(path.posix.dirname(clean), m[1].replace(/^\//, ''));
+      if (!copied.has(rel) && await fs.stat(path.join(cloneDir, rel)).then(() => true, () => false)) await copyScript(rel, depth + 1);
+    }
+  };
+  for (const a of scriptTags) if (a.src) await copyScript(a.src);
   await fs.writeFile(path.join(out, 'components', 'site', 'SiteScripts.tsx'), `'use client';
-// Generated by scripts/next.mjs: runs the clone's scripts (trueclone's reveal and widget players, script.js) in
-// order, once, after hydration, exactly as the static clone does after parsing.
+// Generated by scripts/next.mjs: runs the clone's scripts (trueclone's reveal and widget players, inline scripts,
+// script.js) in order, once, after hydration, exactly as the static clone does after parsing.
 import { useEffect } from 'react';
 
-const SCRIPTS = ${JSON.stringify(srcs.map((s) => '/' + path.basename(s)))};
+const SCRIPTS: { src?: string; code?: string; type?: string }[] = ${JSON.stringify(scriptTags.map((a) => ({ ...(a.src ? { src: '/' + a.src.split(/[?#]/)[0].replace(/^\.\//, '') } : { code: a.code }), ...(a.type === 'module' ? { type: 'module' } : {}) })))};
 
 export default function SiteScripts() {
   useEffect(() => {
@@ -439,12 +495,13 @@ export default function SiteScripts() {
     if (w.__siteScripts) return; // React strict mode runs effects twice in dev
     w.__siteScripts = true;
     (async () => {
-      for (const src of SCRIPTS) {
+      for (const { src, code, type } of SCRIPTS) {
         await new Promise((resolve) => {
           const s = document.createElement('script');
-          s.src = src;
-          s.onload = s.onerror = () => resolve(null);
+          if (type) s.type = type;
+          if (src) { s.src = src; s.onload = s.onerror = () => resolve(null); } else { s.textContent = code || ''; }
           document.body.appendChild(s);
+          if (!src) resolve(null);
         });
       }
     })();

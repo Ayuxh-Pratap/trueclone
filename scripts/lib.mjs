@@ -126,19 +126,22 @@ img,video{object-position:-99999px -99999px!important;background:#888!important}
 svg{background:#888!important} svg *{visibility:hidden!important} iframe{visibility:hidden!important}
 canvas{background:#888!important;filter:contrast(0) brightness(1.066)!important}
 [data-lab-cliptext]{background:none!important;-webkit-text-fill-color:transparent!important}
+[data-lab-bgi]{background-image:none!important;background-color:#888!important}
 [data-lab-bgb]::before,[data-lab-bga]::after{background-image:none!important;background-color:#888!important}`; // canvas = media (WebGL heroes, 3D models): flat grey box like images
 
-// What CSS alone can't select: gradient text (background-clip: text paints the glyphs with its background, so a
-// transparent colour still shows the letters) and photo backgrounds on ::before/::after. Marked with attributes
-// the mask CSS targets; `off` removes them.
+// What CSS alone can't select: photo backgrounds (a script that rewrites an element's inline background every frame
+// would undo an inline override, so the mask is a stylesheet rule on a marker attribute, which inline styles lose
+// to), gradient text (background-clip: text paints the glyphs with its background, so a transparent colour still
+// shows the letters) and photo backgrounds on ::before/::after. `off` removes the markers.
 function maskExtrasInPage(enable) {
-  const marks = ['data-lab-cliptext', 'data-lab-bgb', 'data-lab-bga'];
+  const marks = ['data-lab-bgi', 'data-lab-cliptext', 'data-lab-bgb', 'data-lab-bga'];
   if (!enable) {
     for (const m of marks) for (const el of document.querySelectorAll(`[${m}]`)) el.removeAttribute(m);
     return;
   }
   for (const el of document.querySelectorAll('*')) {
     const s = getComputedStyle(el);
+    if (s.backgroundImage.includes('url(')) el.setAttribute('data-lab-bgi', '');
     if (s.backgroundClip === 'text' || s.webkitBackgroundClip === 'text') el.setAttribute('data-lab-cliptext', '');
     if (getComputedStyle(el, '::before').backgroundImage.includes('url(')) el.setAttribute('data-lab-bgb', '');
     if (getComputedStyle(el, '::after').backgroundImage.includes('url(')) el.setAttribute('data-lab-bga', '');
@@ -148,14 +151,6 @@ function maskExtrasInPage(enable) {
 export async function mask(page) {
   const tag = await page.addStyleTag({ content: MASK_CSS });
   await tag.evaluate((el) => el.setAttribute('data-lab-freeze', ''));
-  await page.evaluate(() => {
-    for (const el of document.querySelectorAll('*')) {
-      if (getComputedStyle(el).backgroundImage.includes('url(')) {
-        el.style.setProperty('background-image', 'none', 'important');
-        el.style.setProperty('background-color', '#888', 'important');
-      }
-    }
-  });
   await page.evaluate(maskExtrasInPage, true);
   await page.waitForTimeout(200);
 }
@@ -173,7 +168,7 @@ export async function freezeLoops(page) {
   }).catch(() => {});
 }
 
-// Reversible version of mask() for live pages: on() masks, off() restores every inline style it touched.
+// Reversible version of mask() for live pages: on() masks, off() removes the stylesheet and every marker.
 export async function maskToggle(page, on) {
   await page.evaluate(([css, enable]) => {
     if (enable) {
@@ -182,19 +177,8 @@ export async function maskToggle(page, on) {
       tag.setAttribute('data-lab-freeze', '');
       tag.textContent = css;
       document.head.appendChild(tag);
-      for (const el of document.querySelectorAll('*')) {
-        if (getComputedStyle(el).backgroundImage.includes('url(')) {
-          el.setAttribute('data-lab-bg', el.style.cssText);
-          el.style.setProperty('background-image', 'none', 'important');
-          el.style.setProperty('background-color', '#888', 'important');
-        }
-      }
     } else {
       document.getElementById('lab-mask')?.remove();
-      for (const el of document.querySelectorAll('[data-lab-bg]')) {
-        el.style.cssText = el.getAttribute('data-lab-bg');
-        el.removeAttribute('data-lab-bg');
-      }
     }
   }, [MASK_CSS, on]);
   await page.evaluate(maskExtrasInPage, on);

@@ -92,6 +92,7 @@ const browser = await openBrowser(flags.cdp);
 const manifest = [];
 const summary = [];
 const rootFontSize = {};
+const inlineStyles = {};
 try {
   for (const vp of VIEWPORTS) {
     const desktop = vp.name === 'desktop';
@@ -150,6 +151,26 @@ try {
     await fs.writeFile(path.join(ref, `${vp.name}.png`), shot);
     const sections = await sectionsOf(page);
     await fs.writeFile(path.join(ref, `${vp.name}.sections.json`), JSON.stringify(sections, null, 2));
+    // inline styles at this width, by element path: scripts size and place things per width (a grid's computed
+    // height, a card's offset), and the rendered HTML only keeps the desktop values. The seed turns what differs
+    // between widths into media-query rules.
+    inlineStyles[vp.name] = await page.evaluate(() => {
+      const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+      const pathOf = (el) => {
+        const parts = [];
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          const sibs = [...n.parentElement.children].filter((c) => !SKIP.has(c.tagName));
+          parts.unshift(`${n.tagName.toLowerCase()}:${sibs.indexOf(n) + 1}`);
+        }
+        return parts.join('>');
+      };
+      const out = {};
+      for (const el of document.body.querySelectorAll('[style]')) {
+        if (SKIP.has(el.tagName) || (el.closest('svg') && el.tagName !== 'svg')) continue;
+        out[pathOf(el)] = el.getAttribute('style');
+      }
+      return out;
+    });
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     rootFontSize[vp.name] = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
     if (desktop) {
@@ -162,6 +183,23 @@ try {
           el.setAttribute('data-tc-rich', String(i));
           restore[i++] = best.html;
         }
+        // open shadow roots (web components, a Webflow code island) are not part of outerHTML: each becomes a
+        // declarative <template shadowrootmode="open"> inside its host, which the browser turns back into a shadow
+        // root while parsing, no script needed. Deepest first, so a host inside a shadow root is carried too.
+        // Constructed stylesheets (adoptedStyleSheets) are written out as a <style> at the top of the template.
+        const hosts = [];
+        (function find(scope) { for (const el of scope.querySelectorAll('*')) if (el.shadowRoot) { find(el.shadowRoot); hosts.push(el); } })(document);
+        for (const host of hosts) {
+          const t = document.createElement('template');
+          t.setAttribute('shadowrootmode', 'open');
+          t.setAttribute('shadowrootserializable', '');
+          const adopted = (host.shadowRoot.adoptedStyleSheets || []).map((s) => { try { return [...s.cssRules].map((r) => r.cssText).join('\n'); } catch { return ''; } }).filter(Boolean);
+          if (adopted.length) { const st = document.createElement('style'); st.textContent = adopted.join('\n'); t.content.appendChild(st); }
+          for (const n of host.shadowRoot.childNodes) t.content.appendChild(n.cloneNode(true));
+          host.prepend(t);
+          host.setAttribute('data-tc-shadow', '');
+        }
+        if (hosts.length) console.log(`tc-shadow: serialised ${hosts.length} open shadow root(s) as declarative shadow DOM`);
         const doc = document.documentElement.cloneNode(true);
         for (const el of document.querySelectorAll('[data-tc-rich]')) el.removeAttribute('data-tc-rich');
         for (const el of doc.querySelectorAll('[data-tc-rich]')) {
@@ -188,6 +226,7 @@ try {
 }
 
 await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
+await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify(inlineStyles));
 await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 console.table(summary);
@@ -202,6 +241,24 @@ async function buildMirror(manifest, url, note) {
   const mirror = path.join(ref, 'mirror');
   await fs.rm(mirror, { recursive: true, force: true });
   await fs.mkdir(path.join(mirror, 'css'), { recursive: true });
+  // Rendered twice: the first pass shows which media the capture never saw (lazy images below the fold, hover and
+  // state images, sources behind a media query, fonts behind @import); fetchMissing() saves them and the second pass
+  // points at the local copies. A page is only as complete as its slowest-loading image.
+  let out = await renderMirror(manifest, url, note, mirror);
+  const missing = findRemoteMedia(out);
+  if (missing.length) {
+    const added = await fetchMissing(missing, manifest, url);
+    if (added) out = await renderMirror(manifest, url, note, mirror);
+    await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
+    console.log(`mirror: fetched ${added}/${missing.length} media the capture had not seen (lazy, hover or conditional sources)`);
+  }
+  for (const [file, css] of out.css) await fs.writeFile(path.join(mirror, 'css', file), css);
+  await fs.writeFile(path.join(mirror, 'index.html'), out.html);
+  const left = findRemoteMedia(out);
+  console.log(`mirror: reference/mirror/index.html (${manifest.length} local assets${left.length ? `, ${left.length} remote media left: ${left.slice(0, 3).join(', ')}` : ''})`);
+}
+
+async function renderMirror(manifest, url, note, mirror) {
   const byUrl = new Map(manifest.map((m) => [m.url.split('#')[0], m]));
   const abs = (u, base) => { try { return new URL(u.trim().replace(/^['"]|['"]$/g, '').replaceAll('&amp;', '&'), base).href.split('#')[0]; } catch { return null; } };
   const cssName = (m) => path.basename(m.file);
@@ -218,9 +275,10 @@ async function buildMirror(manifest, url, note) {
     .replace(/@import\s+(['"])([^'"]+)\1/g, (all, q, u) => `@import "${local(abs(u, base), fromDir) || u}"`);
 
   // stylesheets: rewritten copies under mirror/css
+  const css = new Map();
   for (const m of manifest.filter((x) => x.type === 'stylesheet')) {
-    const css = await fs.readFile(path.join(ref, m.file), 'utf8');
-    await fs.writeFile(path.join(mirror, 'css', cssName(m)), rewriteCssUrls(css, m.url, path.join(mirror, 'css')));
+    const text = await fs.readFile(path.join(ref, m.file), 'utf8').catch(() => null);
+    if (text !== null) css.set(cssName(m), rewriteCssUrls(text, m.url, path.join(mirror, 'css')));
   }
 
   let html = await fs.readFile(path.join(ref, 'rendered.html'), 'utf8');
@@ -235,14 +293,74 @@ async function buildMirror(manifest, url, note) {
       const l = local(abs(u, url), mirror);
       return l ? ` ${attr}=${q}${l}${q}` : all;
     })
+    // a subresource-integrity hash belongs to the bytes at the original URL; after the rewrite it only makes the
+    // browser refuse the local copy (and the whole stylesheet with it)
+    .replace(/<link\b[^>]*>/gi, (tag) => tag.replace(/\s(?:integrity|crossorigin)(?:=("[^"]*"|'[^']*'|[^\s>]+))?/gi, ''))
     .replace(/\s(srcset|data-srcset)=("|')([^"']+)\2/gi, (all, attr, q, list) => ` ${attr}=${q}${list.split(',').map((part) => {
       const [u, ...rest] = part.trim().split(/\s+/);
       return [local(abs(u, url), mirror) || u, ...rest].join(' ');
     }).join(', ')}${q}`)
     .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (all, attrs, css) => `<style${attrs}>${rewriteCssUrls(css, url, mirror)}</style>`)
-    .replace(/\sstyle=("|')([^"']*url\([^"']*)\1/gi, (all, q, css) => ` style=${q}${rewriteCssUrls(css, url, mirror)}${q}`)
+    // quotes inside a style attribute are HTML-escaped (url(&quot;…&quot;)): unescape before rewriting, re-escape after
+    .replace(/\sstyle=(?:"([^"]*)"|'([^']*)')/gi, (all, d, s) => {
+      const value = d ?? s;
+      if (!/url\(/i.test(value)) return all;
+      const plain = value.replaceAll('&quot;', '"').replaceAll('&#39;', "'");
+      return ` style="${rewriteCssUrls(plain, url, mirror).replaceAll('"', '&quot;')}"`;
+    })
     .replace(/<head([^>]*)>/i, `<head$1>\n<!-- trueclone local mirror of ${url}. ${note.replace(/--/g, '-')} Local reference only: do not deploy. -->\n<meta name="robots" content="noindex,nofollow">`);
-  await fs.writeFile(path.join(mirror, 'index.html'), html);
-  const missing = [...html.matchAll(/\s(?:src|href)=["'](https?:[^"']+)["']/gi)].map((m) => m[1]).filter((u) => !/^https?:\/\/[^/]+\/?$/.test(u));
-  console.log(`mirror: reference/mirror/index.html (${manifest.length} local assets, ${missing.length} remote URLs left, e.g. links)`);
+  return { html, css };
+}
+
+// Media the page still points at on the network after the rewrite: image/video/font/stylesheet URLs in src, srcset,
+// poster, data-src, <link> hrefs and CSS url(). Links to other pages (<a href>) are not media.
+function findRemoteMedia({ html, css }) {
+  const urls = new Set();
+  const media = (u) => u && /^https?:\/\//.test(u) && !/^https?:\/\/[^/]+\/?$/.test(u) && !/\.(js|mjs|json|html?)(\?|$)/i.test(u);
+  const add = (u) => { if (media(u)) urls.add(u.replaceAll('&amp;', '&')); };
+  for (const m of html.matchAll(/\s(?:src|poster|data-src)=["']([^"']+)["']/gi)) add(m[1]);
+  for (const m of html.matchAll(/\s(?:srcset|data-srcset)=["']([^"']+)["']/gi)) for (const part of m[1].split(',')) add(part.trim().split(/\s+/)[0]);
+  for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+    const rel = /\srel=["']?([^"'\s>]+)/i.exec(m[0])?.[1] || '';
+    const href = /\shref=["']([^"']+)["']/i.exec(m[0])?.[1];
+    if (/stylesheet|icon|apple-touch-icon|preload|prefetch/i.test(rel) && !/\sas=["']?(script|document|fetch)/i.test(m[0])) add(href);
+  }
+  const cssUrls = (text) => { for (const m of text.matchAll(/url\(\s*(?:&quot;|["'])?(https?:\/\/[^)"'&\s]+)/gi)) add(m[1]); };
+  cssUrls(html);
+  for (const text of css.values()) cssUrls(text);
+  return [...urls].slice(0, 300);
+}
+
+async function fetchMissing(urls, manifest, pageUrl) {
+  const typeOf = (u, contentType = '') => {
+    if (/text\/css/.test(contentType) || /\.css(\?|$)/i.test(u)) return 'stylesheet';
+    if (/^font\/|application\/(x-)?font|application\/vnd\.ms-fontobject/.test(contentType) || /\.(woff2?|ttf|otf|eot)(\?|$)/i.test(u)) return 'font';
+    if (/^image\//.test(contentType) || /\.(png|jpe?g|gif|webp|avif|svg|ico|bmp)(\?|$)/i.test(u)) return 'image';
+    return 'media';
+  };
+  let added = 0;
+  const queue = [...urls];
+  const worker = async () => {
+    for (let u = queue.shift(); u; u = queue.shift()) {
+      try {
+        const res = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', referer: pageUrl, accept: '*/*' }, signal: AbortSignal.timeout(20000), redirect: 'follow' });
+        if (!res.ok) continue;
+        const body = Buffer.from(await res.arrayBuffer());
+        if (!body.length || body.length > MAX_ASSET_BYTES) continue;
+        const contentType = res.headers.get('content-type') || '';
+        if (/text\/html/.test(contentType)) continue; // a page, not media (a soft 404)
+        const type = typeOf(u, contentType);
+        const parsed = new URL(u);
+        const base = (path.basename(parsed.pathname) || 'index').replace(/[^a-z0-9._-]/gi, '_').slice(-80);
+        const hash = crypto.createHash('sha1').update(u).digest('hex').slice(0, 8);
+        const file = path.join('assets', type, `${hash}-${base}`);
+        await fs.mkdir(path.join(ref, 'assets', type), { recursive: true });
+        await fs.writeFile(path.join(ref, file), body);
+        manifest.push({ url: u, type, file: file.replaceAll('\\', '/'), contentType, bytes: body.length, fetched: 'mirror' });
+        added++;
+      } catch { /* offline, blocked, timed out: stays remote and is listed */ }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return added;
 }
