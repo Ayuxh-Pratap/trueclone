@@ -197,6 +197,19 @@ fall.
 | 27 | Exact mode: a "post-boot" pass after seed compares the clone's DOM after its own scripts ran with the post-script mirror and lists regions that differ (the hero grid, the stories island) so the agent knows which runtime-built regions it still owns | the agent discovered the shadow-root stories and the rebuilt hero by scoring, not by being told | 0.5 d | needs the clone's scripts to exist; runs again after each build round |
 | 28 | `drift` check at the start of every full score: live page height and section count per width against `meta.json`; on drift, live-measured checks are marked "stale capture" in REPORT.md with the advice to re-capture | rea.tools changed its nav after capture: detail 100 → 28 with a correct clone | 0.4 d | one page load per width (+15 s); a site with random content height needs a tolerance (1%, min 40 px) |
 
+**Phase 4 status (2026-10-13): items 23–28 done.** `notes.md` is written by the seed with six fixed sections;
+`REPORT.md` reads Findings and Accepted differences back, marks a check "accepted (<reason>)" when every failing
+width is covered by an entry naming the check, and lists the accepted differences first. `trueclone understand`:
+trueclone launches Chrome with a CDP port and drives REA's CLI (`list-browser-targets`, `analyze-web-bundle` with
+source maps, `observe-web-execution` while trueclone scrolls and hovers, `inspect-web-event-listeners` for every
+control plus `body`/`html`); `reference/code.md` ranks the scripts by what ran (varsity: engine 104/123 functions,
+scenes, smooth, hero, portfolio, manifesto; jQuery and Webflow's runtime barely), gives each control's handler with the
+code around it (column window for minified bundles, shared handlers listed once), the endpoints in the code (URL-shaped
+only; fired or not; tracking flagged) and the unknowns. `trueclone owned` lists the sections `script.js` rebuilds at boot
+(structure changed with scripts running vs blocked) and, separately, the ones it only animates. `trueclone drift`
+opens every full score. The skill's section 2 is rewritten around `understand` and the notes contract; REA is never
+called directly for the standard flow (its CLI stays one command away for the deep cases).
+
 ### Phase 5. Prove it and ship 0.3.0. ~1 day plus the cold runs
 
 1. **Cold re-run of varsity**: fresh folder, `npx @trueclone/cli@0.3.0 init`, a fresh agent, the same one-line prompt.

@@ -37,6 +37,8 @@ const vpOnly = typeof flags.viewport === 'string' ? flags.viewport : null;
 const vpList = vpOnly ? [vpOnly] : ['desktop', 'tablet', 'mobile'];
 const only = typeof flags.only === 'string' ? flags.only.split(',').map((s) => s.trim()).filter(Boolean) : null;
 const allSteps = [
+  // first and alone: has the live page changed since the capture? (the live-measured checks are then marked stale)
+  ...(flags.quick ? [] : [{ group: 0, label: 'drift', args: ['scripts/drift.mjs', name, ...(vpOnly ? ['--viewport', vpOnly] : [])], pick: /(\w+): live (\d+)px/g, unit: 'live px', live: true }]),
   { group: 1, label: 'layout', args: withUrl(['scripts/diff.mjs', name, '--structure']), pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g, unit: 'layout %' },
   { group: 1, label: 'states', args: ['scripts/states.mjs', name, '--clone', ...(url ? [url] : []), '--structure', ...(flags.quick || vpOnly ? ['--viewports', vpOnly || 'desktop'] : [])], pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g, unit: 'states %' },
   ...(flags.quick ? [] : vpList.map((v) => ({ group: 2, label: `curves ${v}`, args: withUrl(['scripts/curves.mjs', name, '--viewport', v, ...refresh]), pick: /motion score \((\w+)\): ([\d.]+)%/g, unit: 'motion %' }))),
@@ -83,7 +85,7 @@ const stampsFile = path.join(root, 'compare', '.stamps.json');
 const stamps = url ? {} : await fs.readFile(stampsFile, 'utf8').then(JSON.parse).catch(() => ({}));
 const inputs = url ? null : { hash: await cloneHash(), capturedAt, args: null };
 const stampKey = (step) => JSON.stringify({ hash: inputs?.hash, capturedAt, args: step.args });
-const reusable = (step) => !url && !flags.fresh && !flags['refresh-ref'] && stamps[step.label]?.key === stampKey(step) && stamps[step.label].values !== undefined;
+const reusable = (step) => !step.live && !url && !flags.fresh && !flags['refresh-ref'] && stamps[step.label]?.key === stampKey(step) && stamps[step.label].values !== undefined;
 
 const runStep = (step) => new Promise((resolve) => {
   const started = Date.now();
@@ -132,7 +134,7 @@ for (const group of groups) {
 summary.sort((x, y) => steps.findIndex((st) => st.label === x.step) - steps.findIndex((st) => st.label === y.step));
 const totalMin = +((Date.now() - t0) / 60000).toFixed(1);
 console.log(`\n${flags.quick ? 'quick' : 'full'} score for ${name}${url ? ` (${url})` : ''} in ${totalMin} min`);
-console.table(summary.map((s) => ({ step: s.step, status: s.status, 's': s.seconds, result: Object.entries(s).find(([k]) => k.endsWith('%'))?.[1] })));
+console.table(summary.map((s) => ({ step: s.step, status: s.status, 's': s.seconds, result: Object.entries(s).find(([k]) => k.endsWith('%') || k.endsWith('px'))?.[1] })));
 await fs.mkdir(path.join(root, 'compare'), { recursive: true });
 if (!url) await fs.writeFile(stampsFile, JSON.stringify(stamps, null, 2));
 // where the time went, for REPORT.md and for choosing what to re-run

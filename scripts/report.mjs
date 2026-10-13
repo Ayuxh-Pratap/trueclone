@@ -23,7 +23,7 @@ if (!meta) {
 
 // Targets a clone has to meet (the same ones the skill gives the agent).
 const T = { layout: 98, statesGap: 5, motion: 95, detail: 95, hovers: 90, load: 95 };
-const mark = (ok) => (ok === null ? '–' : ok ? 'pass' : '**below target**');
+const mark = (ok, acceptedNote) => (ok === null ? '–' : ok ? 'pass' : acceptedNote ? `accepted (${acceptedNote})` : '**below target**');
 const pct = (v) => (v === undefined || v === null ? '–' : `${v}%`);
 const VPS = ['desktop', 'tablet', 'mobile'];
 
@@ -36,32 +36,53 @@ const hovers = await read('compare/hovers.desktop.json');
 const detail = await read('compare/detail.json');
 const load = await read('compare/load.json');
 const times = await read('compare/score-times.json');
+const drift = await read('compare/drift.json');
 const motionInv = await read('reference/motion.desktop.json');
+// notes.md: the agent's "Accepted differences" and "Findings" come into the report; an accepted entry that names a
+// check (and optionally a width) turns that check's "below target" into "accepted"
+const notes = await fs.readFile(path.join(root, 'notes.md'), 'utf8').catch(() => '');
+const notesSection = (title) => {
+  const m = new RegExp(`^## ${title}[^\\n]*\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, 'm').exec(notes);
+  return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').split('\n').map((l) => l.trim()).filter((l) => /^[-*]\s+\S/.test(l)).map((l) => l.replace(/^[-*]\s+/, '')) : [];
+};
+const accepted = notesSection('Accepted differences');
+const findings = notesSection('Findings');
+const acceptedFor = (check, vp) => accepted.filter((a) => new RegExp(`\\b${check}\\b`, 'i').test(a) && (!vp || new RegExp(`\\b${vp}\\b`, 'i').test(a) || !/\b(desktop|tablet|mobile)\b/i.test(a)));
 
 const byVp = (rep, key = 'match') => Object.fromEntries((rep?.viewports || []).map((v) => [v.viewport, v[key] ?? v.score]));
 const L = byVp(layout), V = byVp(visual), S = byVp(states), D = byVp(detail, 'score');
 const C = Object.fromEntries(VPS.map((v) => [v, curves[v]?.score]));
 
 const rows = [];
-const row = (check, values, ok, note = '') => rows.push(`| ${check} | ${VPS.map((v) => pct(values[v])).join(' | ')} | ${mark(ok)} | ${note} |`);
+// `test` is a per-width predicate (value, width) => boolean, or a ready boolean/null for single-value checks
+const row = (check, values, test, note = '') => {
+  const ok = typeof test === 'function' ? all(values, test) : test;
+  // below target, but every failing width has an accepted entry in notes.md: the decision is recorded, not hidden
+  const key = check.split(' ')[0].toLowerCase();
+  const failing = typeof test === 'function' ? present(values).filter((v) => !test(values[v], v)) : ok === false ? present(values) : [];
+  const covered = failing.length && failing.every((v) => acceptedFor(key, v).length);
+  const stale = drift?.stale && ['detail', 'hovers', 'motion', 'load', 'interactions'].includes(key) ? ' **stale capture**' : '';
+  rows.push(`| ${check} | ${VPS.map((v) => pct(values[v])).join(' | ')} | ${mark(ok, covered ? acceptedFor(key)[0].slice(0, 60) : null)}${stale} | ${note} |`);
+};
 const present = (vals) => VPS.filter((v) => vals[v] !== undefined && vals[v] !== null);
 const all = (vals, test) => (present(vals).length ? present(vals).every((v) => test(vals[v], v)) : null);
-row(`Layout (structure)`, L, all(L, (x) => x >= T.layout), `target ≥ ${T.layout}%; text and media masked`);
-if (meta.mode === 'exact') row('Layout (real pixels)', V, all(V, (x) => x >= T.layout), 'exact mode: same text and media');
-row('Scroll states', S, all(S, (x, v) => L[v] === undefined || x >= L[v] - T.statesGap), `within ${T.statesGap} points of layout`);
-row('Motion curves', C, all(C, (x) => x >= T.motion), present(C).length ? `target ≥ ${T.motion}%` : 'no motion map (no scroll or time animation to score)');
-row('Detail (styles)', D, all(D, (x) => x >= T.detail), `target ≥ ${T.detail}%; font, size, weight, line height, colour, boxes`);
+row(`Layout (structure)`, L, (x) => x >= T.layout, `target ≥ ${T.layout}%; text and media masked`);
+if (meta.mode === 'exact') row('Layout (real pixels)', V, (x) => x >= T.layout, 'exact mode: same text and media');
+row('Scroll states', S, (x, v) => L[v] === undefined || x >= L[v] - T.statesGap, `within ${T.statesGap} points of layout`);
+row('Motion curves', C, (x) => x >= T.motion, present(C).length ? `target ≥ ${T.motion}%` : 'no motion map (no scroll or time animation to score)');
+row('Detail (styles)', D, (x) => x >= T.detail, `target ≥ ${T.detail}%; font, size, weight, line height, colour, boxes`);
 row('Hovers', { desktop: hovers?.score }, hovers ? hovers.score >= T.hovers : null, `target ≥ ${T.hovers}% of the reference hover effects`);
 const LD = byVp(load, 'score');
-const tts = (side) => VPS.map((v) => load?.viewports.find((x) => x.viewport === v)?.[side]?.settledAt).filter((x) => x !== undefined);
-row('Load sequence', LD, all(LD, (x) => x >= T.load), present(LD).length ? `target ≥ ${T.load}%; how settled each side is at 0.25 to 4 s, cold cache, same network (settled: reference ${tts('ref').map((x) => `${x}ms`).join('/') || '–'}, clone ${tts('clone').map((x) => `${x}ms`).join('/') || '–'})` : 'not measured (trueclone load <name>)');
+const tts = (side) => VPS.map((v) => load?.viewports.find((x) => x.viewport === v)).filter(Boolean).map((x) => (x[side]?.settledAt === null ? '>4000' : x[side]?.settledAt)).filter((x) => x !== undefined);
+row('Load sequence', LD, (x) => x >= T.load, present(LD).length ? `target ≥ ${T.load}%; how settled each side is at 0.25 to 4 s, cold cache, same network (settled at: reference ${tts('ref').map((x) => `${x}ms`).join(' / ') || '–'}, clone ${tts('clone').map((x) => `${x}ms`).join(' / ') || '–'})` : 'not measured (trueclone load <name>)');
 const scenarios = interact?.scenarios || [];
 const failed = scenarios.filter((s) => s.expect && !s.expect.pass);
 row('Interactions', { desktop: scenarios.length ? +(scenarios.reduce((n, s) => n + (s.score || 0), 0) / scenarios.length).toFixed(2) : undefined }, scenarios.length ? failed.length === 0 : null,
   scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change something on both sides` : 'no interactions.json');
 
 const failing = rows.filter((r) => r.includes('below target')).length;
-const verdict = failing ? `${failing} check(s) below target` : 'every scored check meets its target';
+const acceptedCount = rows.filter((r) => r.includes('| accepted (')).length;
+const verdict = (failing ? `${failing} check(s) below target` : 'every scored check meets its target') + (acceptedCount ? ` (${acceptedCount} accepted with a reason in notes.md)` : '') + (drift?.stale ? '; the live site has changed since the capture: re-capture before trusting the live-measured checks' : '');
 
 // Weakest spots, to fix first.
 const weak = [];
@@ -110,8 +131,8 @@ ${(detail?.viewports || []).some((v) => v.unstable) || hovers?.unstable || (load
 |---|---|---|---|---|---|
 ${rows.join('\n')}
 
-${weak.length ? `## Fix first\n\n${weak.join('\n')}\n` : '## Fix first\n\nNothing below 99% on layout, 90% on motion or failing.\n'}
-## Motion found on the reference
+${drift?.stale ? `## Stale capture\n\nThe live page differs from the capture of ${meta.capturedAt}: ${drift.viewports.filter((v) => v.stale).map((v) => `${v.viewport} ${v.livePageHeight}px tall vs ${v.capturedPageHeight}px captured, ${v.liveSections} vs ${v.capturedSections} sections`).join('; ')}. Layout and states score against the captured screenshots; detail, hovers, motion, interactions and load measure the live page and are marked stale above. Re-capture (\`trueclone capture\`, then \`states\`, \`reveals\`, \`seed --force\`) before reading them.\n\n` : ''}${accepted.length ? `## Accepted differences\n\nRecorded in notes.md with a reason; a check below target that is covered here is marked "accepted" in the table.\n\n${accepted.map((a) => `- ${a}`).join('\n')}\n\n` : ''}${weak.length ? `## Fix first\n\n${weak.join('\n')}\n` : '## Fix first\n\nNothing below 99% on layout, 90% on motion or failing.\n'}
+${findings.length ? `## Findings (tool defects met on this site)\n\n${findings.map((f) => `- ${f}`).join('\n')}\n\n` : ''}## Motion found on the reference
 
 ${motionInv ? `Libraries: ${libs.length ? libs.join(', ') : 'none (no GSAP, Lenis, Swiper or similar)'}. ScrollTriggers: ${motionInv.triggers?.length ?? 0}. Tweens created while scrolling: ${motionInv.onScroll?.length ?? 0}. CSS animations: ${(motionInv.css || []).length}.` : 'Not inventoried yet (trueclone motion <name>).'}
 

@@ -68,7 +68,7 @@ URL ─► capture ─► understand ─► design system ─► build ─► sc
 ```
 
 1. **Capture** (`trueclone capture`): full-page screenshots at 390, 768 and 1440px, sections, rendered HTML, assets, every network request.
-2. **Understand** (`trueclone motion`, REA): reads the live animation runtime (GSAP timelines, ScrollTriggers, Lenis and Swiper settings, CSS animations, cursor-driven tweens) and, through REA, bundles, source maps, event listeners and API endpoints.
+2. **Understand** (`trueclone motion`, `trueclone understand`): reads the live animation runtime (GSAP timelines, ScrollTriggers, Lenis and Swiper settings, CSS animations, cursor-driven tweens) and, with REA, which scripts actually run while a visitor scrolls, which handler each control has and the code around it, the endpoints in the code, source maps when published: `code.md`, so the agent copies rules instead of guessing them from effects.
 3. **Design system** (`trueclone design`): one canonical `design-tokens.json`, rendered to DESIGN.md, globals.css and the clone's tokens.
 4. **Build**: `trueclone reveals` records, at every width, the original's scroll reveals frame by frame, its scroll-linked curves (parallax) and its scroll-driven class changes; `trueclone widgets` clicks every tab and menu and records each state; `trueclone seed` turns the script-free mirror into the clone (template mode: layout-measured lorem text and same-size media placeholders), cleans what the original's scripts left in the DOM (pin-spacers, canvas buffer sizes) and replays what was recorded. Layout is at 99%+ before anyone writes CSS; your agent writes the remaining behaviour, guided by the skill. `trueclone rules` shows the original's CSS for any element (like DevTools).
 5. **Score** (`trueclone score`): layout pixel diff per section, scroll states replayed, motion curves sampled, interaction scenarios with change assertions, every hover, computed styles at matching points, and the load sequence (how settled each side is at 0.25 to 4 s after navigation, cold cache, same emulated network). Reference measurements are cached, so only the clone is re-measured.
@@ -86,7 +86,7 @@ trueclone **bundles** [REA](https://github.com/morluto/rea) (Reverse Engineer An
 | Tells you what's wrong | No | "Footer column 2 is at x 189, the original's at 732", plus the original's CSS rule |
 | Outputs | Whatever the agent writes | HTML clone, Next.js app, DESIGN.md, globals.css, motion recipe, REPORT.md |
 
-REA answers *how does this work?* trueclone answers *is my copy identical, and where isn't it?* For the hard parts (a bundled physics rule, a shader, the API a component calls) the skill sends your agent to REA.
+REA answers *how does this work?* trueclone answers *is my copy identical, and where isn't it?* trueclone proves the visual and behavioural match on its own; `trueclone understand` adds REA's code-level evidence (which scripts ran, the handler behind each control with its source, endpoints, original sources when published) so the agent copies rules instead of inferring them. For the hard parts (a bundled physics rule, a shader, a module's data flow) REA's own CLI is one command away.
 
 ## Modes and guardrails
 
@@ -107,6 +107,7 @@ npx trueclone doctor                    # check Node, Chrome and REA
 npx trueclone <url> [name]              # capture + design-system draft
 npx trueclone capture <url> [name] [--mode exact --permission "<owner>"]
 npx trueclone motion <name>             # motion inventory
+npx trueclone understand <name>         # code evidence with REA: which scripts ran, each control's handler with its source -> code.md
 npx trueclone design <name>             # DESIGN.md + globals.css
 npx trueclone reveals <name>            # record scroll reveals and scroll class changes
 npx trueclone widgets <name>            # record every tab and menu state

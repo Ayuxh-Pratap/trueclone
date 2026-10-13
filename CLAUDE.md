@@ -15,6 +15,9 @@ trueclone builds a working twin of a website from its URL (HTML/CSS/JS clone, Ne
 | `scripts/reveals.mjs` | At every width in parallel: one-shot scroll reveals frame by frame, scroll-linked curves (sampled per settled scroll position; pins listed, not replayed) and scroll-caused class changes (with thresholds), library-agnostic |
 | `scripts/design.mjs` | `design-tokens.json` → `DESIGN.md` (linted with `@google/design.md`), shadcn `globals.css`, `clone/tokens.css` |
 | `scripts/motion.mjs` | Motion inventory from the live runtime (GSAP/ScrollTrigger, Lenis, Swiper, CSS animations, cursor probe). Parameters only, never the site's code |
+| `scripts/understand.mjs` | Code evidence with REA (trueclone launches Chrome with a CDP port, REA observes): scripts ranked by V8 coverage during a scroll-through, each control's handler with its source excerpt, endpoints in code vs fired, source maps → `reference/code.md` |
+| `scripts/drift.mjs` | Has the live page changed since the capture? Page height and section count per width vs `meta.json`; first step of every full score, marks live-measured checks stale in the report |
+| `scripts/owned.mjs` | Which top-level sections `script.js` rebuilds at boot (clone loaded with scripts blocked vs running) |
 | `scripts/states.mjs` | Live scroll states + inventory; `--clone` scores each step |
 | `scripts/curves.mjs` | Motion score: sampled property curves (scroll- and time-driven) |
 | `scripts/interact.mjs` | Interaction scenarios on both sides; `expectChange` covers geometry, text, state attributes and canvas pixels |

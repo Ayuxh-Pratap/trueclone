@@ -309,6 +309,42 @@ for (const f of patches) {
 }
 await fs.writeFile(path.join(clone, 'index.html'), html);
 
+// notes.md: the agent's record, with the sections the report reads back (Findings, Accepted differences). Written once.
+const notesFile = path.join(root, 'notes.md');
+if (!(await fs.stat(notesFile).then(() => true, () => false))) {
+  await fs.writeFile(notesFile, `# ${name}: clone notes
+
+Reference: ${meta.url}. Mode: ${exact ? `exact (permission: ${meta.permission})` : 'template'}. Captured ${meta.capturedAt}.
+Keep every section; the report reads "Findings" and "Accepted differences" back. One line per entry, no prose.
+
+## Stack
+
+<!-- what the reference is built with: platform, libraries and versions, fonts, breakpoints (from motion.*.md, reference/code.md, the HAR) -->
+
+## Behaviours
+
+<!-- the motion inventory and the interactions as a list: element, trigger, property, range, timing; one line each -->
+
+## Own-code map
+
+<!-- file -> behaviours it implements -> where its parameters came from (a motion entry, code.md, a measured value) -->
+
+## Findings
+
+<!-- defects in the tool, not in the site: symptom, cause if known, the workaround used. Listed in REPORT.md -->
+
+## Accepted differences
+
+<!-- what cannot or should not match, one per line: "<check> <width> <where>: <why>" (random motion, a live feed, a
+     hover that lands by timing, a third-party embed). Listed first in REPORT.md; a check below target that is covered
+     here is marked "accepted" there. Every entry needs the why. -->
+
+## Unknowns
+
+<!-- what you could not determine: a rule you could not read, a value you measured instead of derived -->
+`);
+}
+
 const scriptFile = path.join(clone, 'script.js');
 if (!(await fs.stat(scriptFile).then(() => true, () => false))) {
   await fs.writeFile(scriptFile, `// ${meta.url} - clone behaviour (your own code). Markup and styles come from the mirror${exact ? '' : ' (placeholder content)'}.\n// Rebuild every interaction and reveal from the reference's parameters; verify with npx trueclone score ${name}.\n`);

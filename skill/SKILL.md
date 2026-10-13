@@ -10,7 +10,7 @@ Everything for a site lives in `sites/<name>/` (gitignored, stays local):
 - `next/`: the same site as a Next.js + Tailwind v4 + shadcn app, generated from `clone/`.
 - `design-tokens.json`: the **one canonical source** of the design system, rendered to `DESIGN.md` (Google design.md format, linted), `globals.css` (shadcn theme) and `clone/tokens.css`.
 - `REPORT.md`: every score against its target, what to fix first, what was not copied. This is the deliverable.
-- `notes.md`: your notes: stack, motion inventory, decisions, known gaps.
+- `notes.md`: your record, written by the seed with fixed sections; `REPORT.md` reads Findings and Accepted differences from it (see 2).
 
 Run every step as `npx trueclone <step> <name>` from the project folder (`npx trueclone help` lists them).
 
@@ -30,7 +30,10 @@ npx trueclone capture <url> [name] [--hide "<cookie banner / popup selectors>"] 
 npx trueclone states <name>      # live scroll states + motion inventory (animations running)
 npx trueclone motion <name>      # animation runtime: ScrollTriggers, timelines, reveals, cursor tweens, loops, Lenis/Swiper, CSS
 npx trueclone spec <name>        # measured boxes and styles per viewport
+npx trueclone understand <name>  # code evidence with REA: which scripts ran, each control's handler with its source -> code.md
 ```
+
+`states`, `motion`, `spec` and `understand` only read the reference: run them together in the background while you read the capture.
 
 `npx trueclone <url> [name]` is a shortcut for capture + design-system draft.
 
@@ -46,14 +49,25 @@ Read the motion inventory before building. Each entry is a behaviour the clone m
 
 If the page is blank or blocked, capture through your own Chrome over CDP (`chrome --remote-debugging-port=9222 --user-data-dir=.chrome-profile`, then `--cdp`). Never try to get past bot checks, logins or paywalls.
 
-## 2. Understand it with REA
+## 2. Understand it
 
-trueclone bundles REA (Reverse Engineer Anything). `npx @trueclone/cli init` registers it as an MCP server; without MCP, run `npx trueclone rea <command>`. With the page open in your CDP Chrome:
-- `inspect_web_page`: DOM, scripts, resources.
-- `analyze_web_bundle` with source maps: framework, vendors (GSAP, ScrollTrigger, Lenis, Swiper, Webflow IX2, three.js), routes and API endpoints.
-- `inspect_web_event_listeners`: hover, drag, wheel and click logic.
+```powershell
+npx trueclone understand <name>   # code evidence with REA -> reference/code.md (2-4 min; run it with states/motion/spec)
+```
 
-Use REA when the capture can't tell you how something works: a behaviour's exact rule, bundled shader or physics code, the API a component calls. Write `notes.md`: stack, breakpoints, and the motion inventory turned into a list of behaviours (trigger, property, range).
+The capture says what the page looks like and does; `code.md` says **which code does it**. trueclone owns the browser and drives REA (Reverse Engineer Anything, bundled) for you; you never call REA directly for this. `code.md` has:
+- the scripts ranked by how much of them ran while scrolling the page and hovering its controls: a script with nothing that ran is not needed for what you are rebuilding;
+- every interactive element's handler, with the original code around it (`click → engine.js:412` and the twenty lines there), plus the delegated handlers on `body`/`html`: **read the rule, write your own**. When `code.md` has the handler, copy the rule (its constants, its conditions), never guess it from recorded effects;
+- the endpoints that exist in the code, fired during the capture or not (a form's POST, a filter's fetch): they go into the report's "Not copied";
+- original sources when the site publishes source maps (most don't);
+- what REA could not see (delegated handlers through a framework, minified names) under Unknowns.
+
+For the part no capture or listener reaches (a bundled physics rule, a shader, a module's data flow), REA's own CLI is one command away: `npx trueclone rea --help`. Record what you learn in `notes.md` under Behaviours and Unknowns.
+
+**`notes.md` is a contract**, not a diary. The seed writes it with six sections, and `REPORT.md` reads two of them back:
+- Stack, Behaviours (one line per motion entry and interaction: element, trigger, property, range, timing), Own-code map (file → behaviours → where each parameter came from), Unknowns;
+- **Findings**: defects in the tool you met (symptom, cause, workaround). They appear in `REPORT.md` and are how the tool gets fixed;
+- **Accepted differences**: what cannot or should not match, one per line with the why (`detail desktop hero chips: random walk on both sides`). A check below target that is covered by an entry naming it (and its width) is marked "accepted" in `REPORT.md` instead of "below target". Every entry needs a reason that would convince the site's owner; an entry without one is a gap you are hiding.
 
 ## 3. Design system
 
@@ -86,6 +100,8 @@ npx trueclone seed <name>      # clone/ from the script-free mirror; replays wha
 Then write `clone/script.js`: every remaining interaction in your own code, using the parameters you read from the reference (timings, physics constants, offsets, breakpoints). Never copy the site's scripts. JS-set initial states, such as a `<details>` closed on phones, are part of the layout, so check every viewport. Data the page fetches live (a star count, a feed) stays as captured; no requests to third parties.
 
 A seed is where layout ends up at 99%+ with zero hand-written CSS; your work is behaviour. Build by hand (below) only what the mirror can't carry.
+
+After each build round, `npx trueclone owned <name>` lists the sections your script rebuilds at boot (the clone loaded with scripts blocked vs running). Those are yours: hand their marks over to `script.js` and hide them until boot if the original hides them too. Everything else stays with the seed's players.
 
 **Building parts by hand:**
 
@@ -150,7 +166,7 @@ How layout and states measure:
 - content that a component mounts only while in view (marked `data-tc-viewmount` by capture) can't appear in a full-page still on either side: layout paints its box the same on both and reports the count; the scroll-state check, with a real viewport, scores it;
 - endless animations (marquees, rotating borders) are frozen on their first frame on both sides before every state screenshot: their phase depends on load time, not on the clone.
 
-The live site can change after capture (a redeploy changes its CSS bundle name). When live-site tools (detail, rules) and screenshot scores (layout, states) disagree about a section, re-capture (`capture`, then `states <name>`); that also resets the cached reference measurements.
+The live site can change after capture (a redeploy, a new nav item, a rotating headline). Every full score starts with `drift`: the live page's height and sections against the capture's. When it reports a change, `REPORT.md` marks detail, hovers, motion, interactions and load **stale capture**: they now measure a page the clone was never a copy of. Re-capture (`capture`, then `states`, `reveals`, `seed --force`) before reading them; never fix the clone against a stale reference.
 
 ## 6. Next.js (after the HTML clone passes)
 
