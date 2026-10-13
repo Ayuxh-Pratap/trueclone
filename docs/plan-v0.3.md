@@ -3,6 +3,21 @@
 Written 2026-10-13 after the first cold end-user run (varsity.vc, Webflow + GSAP + three.js, exact mode, 1h50m, every
 target met, 12 package defects, a visible flash on load in the Next app). Source of truth for the next release.
 
+## Principles (read before every change)
+
+1. **Accuracy first, speed second.** A change that moves a score must be explained by a tool bug fixed or a real
+   difference found, never tuned. Speed work removes only dead time (waiting, re-measuring the unchanged, chasing
+   measurement noise); it never trades a point of accuracy for a minute.
+2. **Every kind of site, not the one in front of us.** varsity, resend, rea.tools and nickho are probes, not targets.
+   A fix is only right when it holds for a static brochure, a Tailwind marketing page, a Webflow/Framer site, a
+   GSAP/three.js showcase, a content-heavy docs site and an app landing page alike. A fix that mentions a site's
+   class names, selectors or numbers is a bug. When a probe site exposes a defect, fix the mechanism (the mirror is a
+   post-script snapshot; inline styles differ per width; a pin is a sticky element) and prove it on the other probes.
+3. **Regression before done.** After any change to capture, seed, reveals or a scorer, re-run every benchmark and
+   compare with its last REPORT.md. The Phase 1 re-run caught two bugs this way (`getHTML()` dropping `<html>`, a
+   canvas losing its aspect ratio) that one site alone would not have shown.
+4. **Never edit generated output by hand.** If a site needs it, the tool is missing a feature; add the feature.
+
 ## Part 1. REA: what it really gives a cloner
 
 ### What REA's web layer is (rea-agents 6.4.0, read from the package)
@@ -128,6 +143,17 @@ changes its aspect ratio.
 | 15 | Anti-flash contract in seed: the clone gets `html.tc-boot` at parse and `trueclone-reveals.js` removes it when every player has started; seed emits `[data-tc-runtime]` regions hidden until boot when the agent asks (`--hide-until-boot`) | the captured hero skeleton showed because the site's own anti-flash keyed on a state the mirror had already passed | 0.3 d | a wrong selector hides content for good; failsafe reveal at 3 s like the site does | 0 |
 | 16 | **Pre-script mirror**: capture the first HTML response and the DOM *before* any script runs (`page.route` blocking scripts, or `document_start` snapshot) alongside the post-script mirror. Seed takes structure from pre-script, content and rich/view-mounted regions from post-script | the root of 4, 5 and the flash: the mirror is a snapshot after scripts and we treat it as source. A Webflow/Framer migration *needs* the pre-script markup | 1.5 d | two mirrors to reconcile; sites that render everything client-side (SPA) have an empty pre-script DOM, so seed must fall back to post-script per region | −10 min on script-heavy sites |
 
+**Phase 2 status (2026-10-13): items 13–15 done; item 16 (pre-script mirror) deferred to last, as planned.**
+Boot parity: the Next app preloads every clone script from the first byte and runs them in order the moment hydration
+completes (ordered insertion, parallel fetch), instead of one fetch after another after hydration. Boot contract in
+the seed: `<html class="tc-boot">` until every script has run and every `tcBoot.hold()` is released; regions named
+with `seed --hide-until-boot` stay invisible meanwhile (3 s failsafe). Load check: `trueclone load`, part of the full
+score and REPORT.md, settledness curves at 0.25/0.5/1/2/4 s on both sides under the same emulated network with a cold
+cache. Measured: rea.tools 99.4–100, resend 98.5–99; varsity HTML clone 56–60 before the contract (the reference stays
+blank until its hero image has loaded; the clone showed the captured grid), 97.5 / 84 / 99.8 after it with the
+agent's hero holding the boot until its image is ready; the Next app 96 / 99.8 / 96.8, its first frame identical to the
+HTML clone's. The tablet 84 is a single late intro start: load curves need the stability pass of Phase 3 (item 17).
+
 ### Phase 3. No noise (C: time). ~2.5 days
 
 | # | Fix | Why | Cost | Drawback / risk | Time per clone |
@@ -159,6 +185,37 @@ changes its aspect ratio.
 3. **A Framer site** as the fourth benchmark (the biggest "move my site to Next.js" audience), template mode, cold.
 4. README Proof tables updated with varsity (exact, Webflow + GSAP + three.js) and the Framer site; a "Load" row.
 5. `npm version minor`, tag, publish, release notes = this document's item list.
+
+### Phase 6. The site-kind benchmark matrix (after every other phase). ~5 days plus runs
+
+The product claims "any website". The proof is a table, by kind of site, with real scores, in the README. Kinds are
+defined by what makes a site hard to clone, not by industry. Starting taxonomy (to be researched and refined before the
+runs; two public sites per kind, template mode unless owned, cold runs with a fresh agent and the published package):
+
+| Kind | What makes it hard | Probe we have |
+|---|---|---|
+| Static brochure (plain HTML/CSS, a few images) | nothing: the floor; must be 100 | – |
+| Tailwind / Next.js marketing page | compiled utility CSS, view-mounted components, tabs, code samples | resend |
+| Webflow (IX2 interactions) | Webflow's own animation runtime, CMS lists, lightboxes | – |
+| Webflow + custom GSAP engine | pins, scrubs, smooth scroll, three.js, code islands | varsity |
+| Framer | React runtime, variants, scroll effects, breakpoints as components | – |
+| Wix / Squarespace / WordPress + Elementor | heavy generated markup, lazy everything, sliders | – |
+| GSAP + ScrollTrigger + Lenis agency showcase | 50+ scroll triggers, SplitText, Swiper, cursor followers | nickho |
+| WebGL / three.js / shader hero | canvas drawing, shaders, pointer-driven scenes | varsity (cords), rea.tools (game) |
+| Lottie / Rive / video-background hero | animation files, HLS/H.264, autoplay rules | – |
+| Content-heavy docs / blog | long pages, code blocks, tables of contents, search, sticky sidebars | rea.tools |
+| E-commerce product page (Shopify and alike) | variants, galleries, carts (server), reviews widgets | – |
+| App landing with client-side routing (SPA) | empty first HTML, hydration, routes, API-driven content | – |
+| Horizontal-scroll / scroll-jacking (Locomotive, fullPage) | transform-based scrolling, sections as slides | – |
+| Page-transition portfolios (Barba, Swup, view transitions) | multi-page, shared layout, transitions | – |
+| Dark/light theme switchers and i18n/RTL | theme state, `dir=rtl`, font fallbacks | – |
+| Embed-heavy pages (YouTube, maps, forms, iframes) | third-party iframes, consent, lazy embeds | – |
+| Marquee / loop / particle heavy | continuous motion that never settles | – |
+| Cookie-banner and popup-first pages | overlays at load, `--hide`, scroll locks | – |
+
+For each kind: run, record every score and the time, fix what fails **generally** (never for the one site), re-run
+every probe, then publish the kind's row in the README with the scores and the known limits. A kind the tool can't do
+yet is listed as such with the reason, not hidden.
 
 ### Order and total
 

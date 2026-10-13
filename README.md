@@ -61,7 +61,7 @@ The hand-built portfolio isn't perfect yet, and its report says so: computed sty
 
 ```
 URL ─► capture ─► understand ─► design system ─► build ─► score ─► report
-        3 widths    motion         DESIGN.md        your      7 checks   REPORT.md
+        3 widths    motion         DESIGN.md        your      8 checks   REPORT.md
         HAR, HTML   inventory      globals.css      agent     in parallel
         assets      + REA          tokens.css                  ▲     │
                                                                └─────┘ until every target passes
@@ -71,7 +71,7 @@ URL ─► capture ─► understand ─► design system ─► build ─► sc
 2. **Understand** (`trueclone motion`, REA): reads the live animation runtime (GSAP timelines, ScrollTriggers, Lenis and Swiper settings, CSS animations, cursor-driven tweens) and, through REA, bundles, source maps, event listeners and API endpoints.
 3. **Design system** (`trueclone design`): one canonical `design-tokens.json`, rendered to DESIGN.md, globals.css and the clone's tokens.
 4. **Build**: `trueclone reveals` records, at every width, the original's scroll reveals frame by frame, its scroll-linked curves (parallax) and its scroll-driven class changes; `trueclone widgets` clicks every tab and menu and records each state; `trueclone seed` turns the script-free mirror into the clone (template mode: layout-measured lorem text and same-size media placeholders), cleans what the original's scripts left in the DOM (pin-spacers, canvas buffer sizes) and replays what was recorded. Layout is at 99%+ before anyone writes CSS; your agent writes the remaining behaviour, guided by the skill. `trueclone rules` shows the original's CSS for any element (like DevTools).
-5. **Score** (`trueclone score`): layout pixel diff per section, scroll states replayed, motion curves sampled, interaction scenarios with change assertions, every hover, computed styles at matching points. Reference measurements are cached, so only the clone is re-measured.
+5. **Score** (`trueclone score`): layout pixel diff per section, scroll states replayed, motion curves sampled, interaction scenarios with change assertions, every hover, computed styles at matching points, and the load sequence (how settled each side is at 0.25 to 4 s after navigation, cold cache, same emulated network). Reference measurements are cached, so only the clone is re-measured.
 6. **Report**: `REPORT.md` with the verdict, what to fix first, and what was not copied.
 
 ## Why not just REA?
@@ -113,6 +113,7 @@ npx trueclone widgets <name>            # record every tab and menu state
 npx trueclone seed <name>               # clone/ from the mirror (template: placeholder text and media)
 npx trueclone rules <name> "<selector>" # the original's CSS rules for an element
 npx trueclone textshape <name> --write  # template mode: placeholder text with the original's line breaks
+npx trueclone load <name>               # load sequence on both sides: settledness 0.25-4 s after navigation, cold cache, same network
 npx trueclone score <name> [--quick]    # every check, then REPORT.md
 npx trueclone next <name> --verify      # Next.js + Tailwind + shadcn app, scored
 npx trueclone rea <args>                # bundled REA

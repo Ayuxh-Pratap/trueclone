@@ -20,9 +20,10 @@ trueclone builds a working twin of a website from its URL (HTML/CSS/JS clone, Ne
 | `scripts/interact.mjs` | Interaction scenarios on both sides; `expectChange` covers geometry, text, state attributes and canvas pixels |
 | `scripts/detail.mjs` | Style diff at matching points, measured the same way on both sides |
 | `scripts/hovers.mjs` | Hover every interactive element on both sides |
+| `scripts/load.mjs` | Load sequence on both sides: viewport frames at 0.25/0.5/1/2/4 s after navigation (cold cache, same emulated network) compared with the settled frame; score = 100 − mean gap between the two settledness curves |
 | `scripts/rules.mjs` | Every CSS rule matching an element (+ pseudo-elements, `@media`), cross-origin sheets included |
 | `scripts/textshape.mjs` | Template mode: placeholder words with the reference's rendered word widths (`--list` for repeated rows) |
-| `scripts/next.mjs` | Next.js mode: HTML → JSX per section (whitespace kept as rendered, verbatim inside `pre`), motion as a client component, shadcn globals; seeded clones import the original's stylesheets after the theme, without Tailwind's preflight unless the original used Tailwind; `--verify` scores it |
+| `scripts/next.mjs` | Next.js mode: HTML → JSX per section (whitespace kept as rendered, verbatim inside `pre`; a declarative shadow root host as raw HTML), motion as a client component, shadcn globals; seeded clones import the original's stylesheets after the theme, without Tailwind's preflight unless the original used Tailwind, preload the clone's scripts and run them in order the moment hydration is done (boot contract: `tc-boot` released after the last one); `--verify` scores it |
 | `scripts/score.mjs`, `scripts/report.mjs` | All scores in parallel groups with time limits, then `REPORT.md` |
 | `scripts/diff.mjs`, `spec.mjs`, `tiles.mjs` | Layout pixel diff per viewport/section; measured boxes; screenshot tiles |
 | `scripts/chrome-debug.ps1` | Windows helper: Chrome with CDP on 9222 and a separate profile, for REA's browser tools |

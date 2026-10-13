@@ -120,13 +120,16 @@ npx trueclone interact <name> --draft              # interactions.draft.json: fi
 npx trueclone interact <name>                      # interactions: click/hover/drag/key scenarios + expectChange (geometry, text, state attributes, canvas pixels)
 npx trueclone detail <name> --viewport all         # styles at matching points: font, size, weight, line height, colour, boxes
 npx trueclone hovers <name>                        # hover effects present on the reference but missing on the clone
+npx trueclone load <name>                          # load sequence: how settled each side is 0.25-4 s after navigation (cold cache, same network)
 ```
 
 Reference measurements are cached until the next capture, so only the clone is re-measured. Sites without scroll/time motion or without interactions simply skip those steps.
 
 Fix in this order: page height drift, the worst layout section, the worst state step, the lowest motion curve, any interaction marked FAIL, then detail and hovers. `REPORT.md` lists them under "Fix first". For a drift, compare the element's ancestor boxes on both sides until one differs, then `rules` that ancestor: the cause is usually one declaration. Fix the cause; never tune numbers to the score.
 
-**Done when:** layout ≥ 98% at every viewport, states within 5 points of layout, motion ≥ 95%, detail ≥ 95%, hovers ≥ 90%, and every interaction passes. Otherwise stop after 8 passes and report what's left and why.
+**Done when:** layout ≥ 98% at every viewport, states within 5 points of layout, motion ≥ 95%, detail ≥ 95%, hovers ≥ 90%, load ≥ 95%, and every interaction passes. Otherwise stop after 8 passes and report what's left and why.
+
+**The load sequence is scored too.** A visitor's first impression is the load, so both pages are photographed 0.25 to 4 s after navigation and compared with their own settled frame. A clone that paints a captured, pre-script state (a hero grid a script builds, a card layout a script places) until its scripts run shows a gap here that no other check sees. The seed's boot contract handles it: `<html class="tc-boot">` from the first byte until the clone's scripts have run and every hold is released; elements marked `data-tc-boot-hide` stay invisible meanwhile (3 s failsafe). Pass the regions your script builds at boot to the seed: `npx trueclone seed <name> --hide-until-boot "<selectors>"`. If your script needs more than "has run" (an intro that waits for its image), call `tcBoot.hold()` at the top of `script.js` and `tcBoot.release()` when the first frame is ready. Hide only what the original also does not show before its scripts run (its first frames are in `reference/load/`); hiding more than the original hides is a gap of its own.
 
 How detail measures, so you can trust it:
 - motion on (many originals ignore `prefers-reduced-motion`, and a clone that honours it lays out differently);

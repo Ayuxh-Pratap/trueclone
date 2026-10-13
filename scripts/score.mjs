@@ -35,6 +35,7 @@ const steps = [
   ...(flags.quick ? [] : [
     { group: 3, label: 'hovers', args: withUrl(['scripts/hovers.mjs', name, ...refresh]), pick: /hover match \((\w+)\): ([\d.]+)%/g, unit: 'hover %' },
     { group: 3, label: 'detail', args: withUrl(['scripts/detail.mjs', name, '--viewport', 'all', ...refresh]), pick: /(\w+): detail match ([\d.]+)%/g, unit: 'detail %' },
+    { group: 3, label: 'load', args: withUrl(['scripts/load.mjs', name, ...refresh]), pick: /(\w+): load match ([\d.]+)%/g, unit: 'load %' },
   ]),
 ];
 

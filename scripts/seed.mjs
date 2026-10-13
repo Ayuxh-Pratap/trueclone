@@ -164,13 +164,19 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
     }, { rootMargin: \`0px 0px -\${((1 - line) * 100).toFixed(1)}% 0px\` });
     io.observe(el);
   }
+  // boot contract: the page shows once every clone script has run (DOMContentLoaded comes after the deferred ones;
+  // the Next app's injector releases after its last script) and every hold is released. script.js holds the boot
+  // while it prepares what a visitor must not see half-built (an intro waiting for its image): tcBoot.hold() at the
+  // top, tcBoot.release() when ready.
+  const boot = window.tcBoot = { holds: 1, hold() { this.holds++; }, release() { if (--this.holds <= 0) requestAnimationFrame(() => document.documentElement.classList.remove('tc-boot')); } };
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', () => boot.release()); else if (!window.__tcInjected) boot.release();
 })();
 `;
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
 if (!name) {
-  console.error('usage: trueclone seed <name> [--force]');
+  console.error('usage: trueclone seed <name> [--force] [--hide-until-boot "<selectors a script rebuilds at boot>"]');
   process.exit(1);
 }
 const root = path.resolve('sites', name);
@@ -278,6 +284,12 @@ if (marked || classMarked || scrubMarked) {
   });
   html = html.replace(/<\/body>/i, `<script type="application/json" id="tc-reveals">${data}</script>\n<script src="trueclone-reveals.js" defer></script>\n</body>`);
 }
+// Boot contract: <html class="tc-boot"> from the first byte until every clone script has run (the reveal player drops
+// it after DOMContentLoaded; the Next app after its last script). Regions a script builds or re-lays out at boot
+// (--hide-until-boot "<selectors>") stay invisible meanwhile, so a visitor never sees their captured, pre-script state;
+// a 3 s failsafe shows everything if no script ever runs.
+html = html.replace(/<html\b([^>]*)>/i, (all, attrs) => (/\bclass=/.test(attrs) ? `<html${attrs.replace(/\bclass=(["'])([^"']*)\1/, (m, q, v) => `class=${q}${v.trim() ? `${v.trim()} ` : ''}tc-boot${q}`)}>` : `<html${attrs} class="tc-boot">`));
+html = html.replace(/<\/head>/i, '<style id="tc-boot-styles">/* trueclone seed: boot contract */@keyframes tc-boot-failsafe{to{visibility:visible}}html.tc-boot [data-tc-boot-hide]{visibility:hidden;animation:tc-boot-failsafe 0s 3s forwards}</style>\n</head>');
 // the clone's own behaviour script, loaded once the DOM is parsed
 if (!/<script[^>]+src="script\.js"/.test(html)) html = html.replace(/<\/body>/i, '<script src="script.js" defer></script>\n</body>');
 await fs.writeFile(path.join(clone, 'index.html'), html);
@@ -292,6 +304,7 @@ if (runtime) {
   const pins = runtime.pins.map((p) => `${p.el} pinned for ${p.distance}px`).join(', ');
   console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"`);
   if (runtime.widthStyled) console.log(`per-width inline styles: ${runtime.widthStyled} element(s) sized or placed differently by the site's scripts at tablet/mobile, now media-query rules (data-tc-w)`);
+  if (runtime.hidden) console.log(`boot contract: ${runtime.hidden} element(s) hidden until the clone's scripts have run (data-tc-boot-hide)`);
 }
 if (widgetGroups.length) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
@@ -335,6 +348,10 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
     if (template) await page.evaluate(placeholdersInPage, [LOREM, null]);
     // last, because the recorded paths above were taken on the live page, pin-spacers included
     const runtime = await page.evaluate(cleanRuntimeInPage);
+    // regions the clone's script builds at boot, hidden until it has run (see the boot contract below)
+    runtime.hidden = typeof flags['hide-until-boot'] === 'string'
+      ? await page.evaluate((sels) => { let n = 0; for (const s of sels) for (const el of document.querySelectorAll(s)) { el.setAttribute('data-tc-boot-hide', ''); n++; } return n; }, flags['hide-until-boot'].split(',').map((s) => s.trim()).filter(Boolean))
+      : 0;
     // inline styles that differ between widths (script-computed sizes and offsets) become media-query rules
     const inlineStyles = JSON.parse(await fs.readFile(path.join(ref, 'inline-styles.json'), 'utf8').catch(() => 'null'));
     runtime.widthStyled = inlineStyles ? await page.evaluate(widthStylesInPage, [inlineStyles, WIDTH_MEDIA]) : 0;

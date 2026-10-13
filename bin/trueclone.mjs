@@ -30,6 +30,7 @@ const STEPS = {
   interact: ['interact.mjs', 'interaction tests: click/hover/drag/key scenarios on both sides (interactions.json)'],
   detail: ['detail.mjs', 'style diff at matching points: font, size, weight, line height, colour, background, radius'],
   hovers: ['hovers.mjs', 'hover every interactive element on both sides and compare what changes'],
+  load: ['load.mjs', 'load sequence: how settled each side is 0.25/0.5/1/2/4 s after navigation, cold cache, same network'],
   rules: ['rules.mjs', 'every CSS rule matching an element on the reference (+ ::before/::after, @media)'],
   textshape: ['textshape.mjs', 'template mode: placeholder words with the reference word widths, so lines break the same'],
   diff: ['diff.mjs', 'full-page pixel diff per viewport and section (--structure masks text and media)'],

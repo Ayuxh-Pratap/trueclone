@@ -22,7 +22,7 @@ if (!meta) {
 }
 
 // Targets a clone has to meet (the same ones the skill gives the agent).
-const T = { layout: 98, statesGap: 5, motion: 95, detail: 95, hovers: 90 };
+const T = { layout: 98, statesGap: 5, motion: 95, detail: 95, hovers: 90, load: 95 };
 const mark = (ok) => (ok === null ? '–' : ok ? 'pass' : '**below target**');
 const pct = (v) => (v === undefined || v === null ? '–' : `${v}%`);
 const VPS = ['desktop', 'tablet', 'mobile'];
@@ -34,6 +34,7 @@ const curves = Object.fromEntries(await Promise.all(VPS.map(async (v) => [v, awa
 const interact = await read('compare/interact/report.json');
 const hovers = await read('compare/hovers.desktop.json');
 const detail = await read('compare/detail.json');
+const load = await read('compare/load.json');
 const motionInv = await read('reference/motion.desktop.json');
 
 const byVp = (rep, key = 'match') => Object.fromEntries((rep?.viewports || []).map((v) => [v.viewport, v[key] ?? v.score]));
@@ -50,6 +51,9 @@ row('Scroll states', S, all(S, (x, v) => L[v] === undefined || x >= L[v] - T.sta
 row('Motion curves', C, all(C, (x) => x >= T.motion), present(C).length ? `target ≥ ${T.motion}%` : 'no motion map (no scroll or time animation to score)');
 row('Detail (styles)', D, all(D, (x) => x >= T.detail), `target ≥ ${T.detail}%; font, size, weight, line height, colour, boxes`);
 row('Hovers', { desktop: hovers?.score }, hovers ? hovers.score >= T.hovers : null, `target ≥ ${T.hovers}% of the reference hover effects`);
+const LD = byVp(load, 'score');
+const tts = (side) => VPS.map((v) => load?.viewports.find((x) => x.viewport === v)?.[side]?.settledAt).filter((x) => x !== undefined);
+row('Load sequence', LD, all(LD, (x) => x >= T.load), present(LD).length ? `target ≥ ${T.load}%; how settled each side is at 0.25 to 4 s, cold cache, same network (settled: reference ${tts('ref').map((x) => `${x}ms`).join('/') || '–'}, clone ${tts('clone').map((x) => `${x}ms`).join('/') || '–'})` : 'not measured (trueclone load <name>)');
 const scenarios = interact?.scenarios || [];
 const failed = scenarios.filter((s) => s.expect && !s.expect.pass);
 row('Interactions', { desktop: scenarios.length ? +(scenarios.reduce((n, s) => n + (s.score || 0), 0) / scenarios.length).toFixed(2) : undefined }, scenarios.length ? failed.length === 0 : null,
@@ -63,6 +67,10 @@ const weak = [];
 for (const v of VPS) for (const s of (layout?.viewports.find((x) => x.viewport === v)?.worstSections || []).slice(0, 2)) if (s.match < 99) weak.push(`- Layout ${v}: section "${String(s.label).slice(0, 50)}" at y ${s.y} is ${s.match}%`);
 for (const v of VPS) for (const e of (curves[v]?.entries || []).filter((x) => x.score < 90).slice(0, 3)) weak.push(`- Motion ${v}: "${e.name}" ${e.score}%${e.note ? ` (${e.note})` : ''}`);
 for (const s of failed) weak.push(`- Interaction "${s.name}": the expected change happened on ${s.expect.ref ? 'the reference' : 'neither side'}${s.expect.clone ? '' : ', not on the clone'}`);
+for (const v of (load?.viewports || []).filter((x) => x.score < T.load)) {
+  const worst = Object.entries(v.gap || {}).sort((a, b) => b[1] - a[1])[0];
+  if (worst) weak.push(`- Load ${v.viewport}: at ${worst[0]}ms the clone is ${v.clone.curve[worst[0]]}% settled, the reference ${v.ref.curve[worst[0]]}% (settled at ${v.clone.settledAt ?? '>4000'}ms vs ${v.ref.settledAt ?? '>4000'}ms)`);
+}
 for (const v of detail?.viewports || []) {
   const groups = new Map();
   for (const it of v.issues || []) { const k = it.props[0].split(' ').slice(0, 1)[0]; groups.set(k, (groups.get(k) || 0) + 1); }
