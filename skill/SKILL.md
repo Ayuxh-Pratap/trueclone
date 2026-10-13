@@ -81,6 +81,8 @@ npx trueclone seed <name>      # clone/ from the script-free mirror; replays wha
 - **Per-width values come with it:** the capture reads every inline style at all three widths. What a script set differently per width (a container's computed height, a card's offset, a custom property, a pin distance) becomes a media-query rule on `[data-tc-w]` elements (`<style id="tc-width-styles">`), and a pin whose distance changes per width carries `data-tc-pin-desktop/tablet/mobile`. Open shadow roots (web components, a Webflow code island) are carried as declarative shadow DOM (`<template shadowrootmode="open">` inside the host), so they render with no script.
 - **Recorded widgets come with it too** (template mode): every tab set and expandable menu, with each state the original showed after a click, placeholdered like the page. `clone/trueclone-widgets.js` swaps the region on click (menus in a header or nav also on hover). Popovers rendered in a portal (comboboxes, tooltips) are listed as not replayed: build those in `script.js`. In interaction scenarios, `selector@n` picks the n-th match in `at`, `click` and `expectChange`; mind hidden duplicates (a mobile menu button is often the first match).
 
+**Never edit `clone/index.html` by hand.** It is seed output and every re-seed rewrites it. Anything a clone needs on top of the seed goes in `clone/patches/`, applied by the seed in name order: `head-*.html` before `</head>`, `*.css` linked before `</head>` (after the site's stylesheets), `body-*.html` before the clone's own `<script src="script.js">` (vendored libraries, a hand-over prelude), `*.js` as a deferred script before `script.js`. A fix that needs the generated markup to change is a missing seed feature: report it in `notes.md` under Findings.
+
 Then write `clone/script.js`: every remaining interaction in your own code, using the parameters you read from the reference (timings, physics constants, offsets, breakpoints). Never copy the site's scripts. JS-set initial states, such as a `<details>` closed on phones, are part of the layout, so check every viewport. Data the page fetches live (a star count, a feed) stays as captured; no requests to third parties.
 
 A seed is where layout ends up at 99%+ with zero hand-written CSS; your work is behaviour. Build by hand (below) only what the mirror can't carry.
@@ -107,6 +109,8 @@ A seed is where layout ends up at 99%+ with zero hand-written CSS; your work is 
 ```powershell
 npx trueclone score <name> --quick   # layout, desktop states, interactions: the loop while building (about a minute)
 npx trueclone score <name>           # everything, in parallel groups, then REPORT.md
+npx trueclone score <name> --only detail,load --viewport desktop   # after a fix: just the checks it can move, at that width
+npx trueclone explain <name> <y>     # one place on the page: what every check saw there + a reference|clone|diff crop
 ```
 
 The steps, if you need one alone:
@@ -125,7 +129,11 @@ npx trueclone load <name>                          # load sequence: how settled 
 
 Reference measurements are cached until the next capture, so only the clone is re-measured. Sites without scroll/time motion or without interactions simply skip those steps.
 
-Fix in this order: page height drift, the worst layout section, the worst state step, the lowest motion curve, any interaction marked FAIL, then detail and hovers. `REPORT.md` lists them under "Fix first". For a drift, compare the element's ancestor boxes on both sides until one differs, then `rules` that ancestor: the cause is usually one declaration. Fix the cause; never tune numbers to the score.
+**Spend scoring time only on what changed.** The first run is a full `score`. After a fix, re-run only the checks it can move, at the width it concerns: `npx trueclone score <name> --only layout,detail --viewport tablet`. A check whose inputs (the clone's files, the capture) have not changed since its last run is reported from that run and not re-measured (`--fresh` forces it). `REPORT.md` shows where the scoring time went. To understand one gap, run `npx trueclone explain <name> <y or "section label"> --viewport <vp>`: it prints what layout, states, detail and hovers saw there and writes a reference | clone | diff crop, so you read the tool's data instead of re-measuring with a browser.
+
+**Unstable probes are not your gaps.** Detail probes and hover effects are read twice on the reference; what does not agree with itself (random motion, a hover that lands by timing, a rotating word) is listed as unstable and excluded from the score. The load check reports its own noise (±). Do not chase a number inside the noise: a gap of 0.3 on a check with ±1 noise is not a gap.
+
+Fix in this order: page height drift, the worst layout section, the worst state step, the lowest motion curve, any interaction marked FAIL, the load sequence, then detail and hovers. `REPORT.md` lists them under "Fix first". For a drift, compare the element's ancestor boxes on both sides until one differs, then `rules` that ancestor: the cause is usually one declaration. Fix the cause; never tune numbers to the score.
 
 **Done when:** layout ≥ 98% at every viewport, states within 5 points of layout, motion ≥ 95%, detail ≥ 95%, hovers ≥ 90%, load ≥ 95%, and every interaction passes. Otherwise stop after 8 passes and report what's left and why.
 

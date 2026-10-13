@@ -86,15 +86,23 @@ async function hoverAll(browser, url, list) {
     const after = await page.evaluate(signature, [t.x, vy]);
     out.push({ sel: before?.sel || null, kinds: before && after && before.sel === after.sel ? changedKinds(before, after) : [] });
   }
+  const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight).catch(() => null);
   await context.close();
-  return { list, out };
+  return { list, out, pageHeight };
 }
 
 const browser = await openBrowser(flags.cdp);
 let ref, cl;
 try {
-  // reference hovers are cached until the next capture (--refresh-ref to re-measure)
-  ref = await cached(root, { tool: 'hovers', vp: vp.name, max: MAX, v: 2 }, () => hoverAll(browser, meta.url, null), Boolean(flags['refresh-ref']));
+  // reference hovers are cached until the next capture (--refresh-ref to re-measure); read twice, so a hover effect
+  // that comes and goes by timing on the reference itself is set aside as unstable rather than demanded of the clone
+  ref = await cached(root, { tool: 'hovers', vp: vp.name, max: MAX, v: 3 }, async () => {
+    const first = await hoverAll(browser, meta.url, null);
+    const captured = meta.viewports?.find((v) => v.viewport === vp.name)?.pageHeight;
+    if (captured && first.pageHeight && Math.abs(first.pageHeight - captured) > Math.max(40, captured * 0.01)) console.warn(`WARNING reference drift (${vp.name}): the live page is ${first.pageHeight}px tall, the capture was ${captured}px (${meta.capturedAt}); re-capture before trusting this score`);
+    const again = await hoverAll(browser, meta.url, first.list);
+    return { ...first, unstable: first.out.map((a, i) => a.sel !== again.out[i]?.sel || a.kinds.join() !== (again.out[i]?.kinds || []).join()) };
+  }, Boolean(flags['refresh-ref']));
   cl = await hoverAll(browser, cloneUrl, ref.list);
 } finally {
   if (!flags.cdp) await browser.close();
@@ -102,15 +110,16 @@ try {
 }
 const rows = ref.list.map((t, i) => {
   const a = ref.out[i], b = cl.out[i];
-  const status = !a.kinds.length ? (b.kinds.length ? 'extra' : 'static') : !b.sel ? 'no element' : !b.kinds.length ? 'MISSING' : a.kinds.some((k) => b.kinds.includes(k)) ? 'ok' : 'different';
+  const status = ref.unstable?.[i] ? 'unstable' : !a.kinds.length ? (b.kinds.length ? 'extra' : 'static') : !b.sel ? 'no element' : !b.kinds.length ? 'MISSING' : a.kinds.some((k) => b.kinds.includes(k)) ? 'ok' : 'different';
   return { y: t.y, ref: a.sel || t.sel, refChanges: a.kinds.join(',') || '-', clone: b.sel || '-', cloneChanges: b.kinds.join(',') || '-', status };
 });
-const withHover = rows.filter((r) => r.refChanges !== '-');
+const withHover = rows.filter((r) => r.refChanges !== '-' && r.status !== 'unstable');
+const unstable = rows.filter((r) => r.status === 'unstable').length;
 const ok = withHover.filter((r) => r.status === 'ok').length;
-const report = { name, viewport: vp.name, at: new Date().toISOString(), score: +(100 * ok / Math.max(1, withHover.length)).toFixed(1), rows };
+const report = { name, viewport: vp.name, at: new Date().toISOString(), score: +(100 * ok / Math.max(1, withHover.length)).toFixed(1), unstable, rows };
 const out = path.join(root, 'compare', `hovers.${vp.name}.json`);
 await fs.mkdir(path.dirname(out), { recursive: true });
 await fs.writeFile(out, JSON.stringify(report, null, 2));
-console.log(`hover match (${vp.name}): ${report.score}% of ${withHover.length} reference hover effects reproduced (${rows.length} interactive elements probed)`);
-console.table(rows.filter((r) => r.status !== 'static' && r.status !== 'ok').slice(0, 25));
+console.log(`hover match (${vp.name}): ${report.score}% of ${withHover.length} reference hover effects reproduced (${rows.length} interactive elements probed${unstable ? `, ${unstable} unstable on the reference itself, not scored` : ''})`);
+console.table(rows.filter((r) => r.status !== 'static' && r.status !== 'ok' && r.status !== 'unstable').slice(0, 25));
 console.log(`-> ${path.relative(process.cwd(), out)}`);

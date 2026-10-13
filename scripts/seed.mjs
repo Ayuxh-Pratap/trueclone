@@ -292,6 +292,21 @@ html = html.replace(/<html\b([^>]*)>/i, (all, attrs) => (/\bclass=/.test(attrs) 
 html = html.replace(/<\/head>/i, '<style id="tc-boot-styles">/* trueclone seed: boot contract */@keyframes tc-boot-failsafe{to{visibility:visible}}html.tc-boot [data-tc-boot-hide]{visibility:hidden;animation:tc-boot-failsafe 0s 3s forwards}</style>\n</head>');
 // the clone's own behaviour script, loaded once the DOM is parsed
 if (!/<script[^>]+src="script\.js"/.test(html)) html = html.replace(/<\/body>/i, '<script src="script.js" defer></script>\n</body>');
+// Patches: what a clone needs on top of the seed lives in clone/patches/ and is applied here on every seed, so the
+// generated index.html is never edited by hand and a re-seed never loses a fix. In name order:
+//   head-*.html  inserted before </head>        (meta, extra stylesheet links)
+//   *.css        linked before </head>          (after the site's stylesheets, so they win ties)
+//   body-*.html  inserted before the clone's own <script src="script.js"> (vendor libraries, a hand-over prelude)
+//   *.js         <script src defer> before script.js (runs after the players, before script.js)
+const patchDir = path.join(clone, 'patches');
+const patches = (await fs.readdir(patchDir).catch(() => [])).filter((f) => /\.(html|css|js)$/i.test(f)).sort();
+const beforeScript = (s) => (/<script[^>]+src="script\.js"/.test(html) ? html.replace(/<script[^>]+src="script\.js"[^>]*><\/script>/i, (tag) => `${s}\n${tag}`) : html.replace(/<\/body>/i, `${s}\n</body>`));
+for (const f of patches) {
+  if (/^head-.*\.html$/i.test(f)) html = html.replace(/<\/head>/i, `${await fs.readFile(path.join(patchDir, f), 'utf8')}\n</head>`);
+  else if (/\.css$/i.test(f)) html = html.replace(/<\/head>/i, `<link rel="stylesheet" href="patches/${f}">\n</head>`);
+  else if (/\.html$/i.test(f)) html = beforeScript(await fs.readFile(path.join(patchDir, f), 'utf8'));
+  else if (/\.js$/i.test(f)) html = beforeScript(`<script src="patches/${f}" defer></script>`);
+}
 await fs.writeFile(path.join(clone, 'index.html'), html);
 
 const scriptFile = path.join(clone, 'script.js');
@@ -307,6 +322,7 @@ if (runtime) {
   if (runtime.hidden) console.log(`boot contract: ${runtime.hidden} element(s) hidden until the clone's scripts have run (data-tc-boot-hide)`);
 }
 if (widgetGroups.length) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
+if (patches.length) console.log(`patches applied from clone/patches/: ${patches.join(', ')}`);
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------

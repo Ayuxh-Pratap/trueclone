@@ -155,7 +155,7 @@ async function sample(browser, url, vp, probes) {
       if (y >= max) break;
     }
     await context.close();
-    return { list, results };
+    return { list, results, pageHeight: max + vp.height };
   }
   const list = probes;
   const results = new Array(list.length);
@@ -177,14 +177,27 @@ const report = { name, at: new Date().toISOString(), viewports: [] };
 try {
   for (const vpName of wanted) {
     const vp = VIEWPORTS.find((v) => v.name === vpName);
-    // reference probes are cached until the next capture (--refresh-ref to re-measure)
-    const ref = await cached(root, { tool: 'detail', vp: vpName, max: MAX, v: 8 }, () => sample(browser, meta.url, vp, null), Boolean(flags['refresh-ref']));
+    // reference probes are cached until the next capture (--refresh-ref to re-measure). The reference is read twice:
+    // a probe that does not agree with itself (random motion, a hover that lands by timing, a rotating word) can
+    // never be matched by any clone and is set aside as unstable instead of being handed over as a gap.
+    const ref = await cached(root, { tool: 'detail', vp: vpName, max: MAX, v: 9 }, async () => {
+      const first = await sample(browser, meta.url, vp, null);
+      // a live site changes: a reference read against today's page scores a clone of yesterday's capture against the
+      // wrong thing. The page height is a cheap tell; the fix is a new capture, not a new clone.
+      const captured = meta.viewports?.find((v) => v.viewport === vpName)?.pageHeight;
+      if (captured && first.pageHeight && Math.abs(first.pageHeight - captured) > Math.max(40, captured * 0.01)) console.warn(`WARNING reference drift (${vpName}): the live page is ${first.pageHeight}px tall, the capture was ${captured}px (${meta.capturedAt}); re-capture before trusting this score`);
+      const again = await sample(browser, meta.url, vp, first.list.map(({ x, xs, y, kind, w, h, scroll }) => ({ x, xs, y, kind, w, h, scroll })));
+      const unstable = first.list.map((p, i) => JSON.stringify(first.results[i]?.style) !== JSON.stringify(again.results[i]?.style) || first.results[i]?.sel !== again.results[i]?.sel);
+      return { ...first, unstable };
+    }, Boolean(flags['refresh-ref']));
     const cl = await sample(browser, cloneUrl, vp, ref.list.map(({ x, xs, y, kind, w, h, scroll }) => ({ x, xs, y, kind, w, h, scroll })));
     const issues = [];
+    const unstableList = [];
     let clean = 0, missing = 0;
     ref.list.forEach((p, i) => {
       const a = ref.results[i], b = cl.results[i];
       if (!a?.style) return;
+      if (ref.unstable?.[i]) { unstableList.push({ y: p.y, kind: p.kind, ref: a.sel }); return; }
       if (!b?.style) { missing++; issues.push({ y: p.y, kind: p.kind, ref: a.sel, clone: b?.top || '(nothing)', props: [`no ${p.kind} element at this point on the clone`] }); return; }
       const A = a.style, B = b.style, props = [];
       if (p.kind === 'text') {
@@ -203,10 +216,10 @@ try {
       if (props.length) issues.push({ y: p.y, kind: p.kind, ref: a.sel, clone: b.sel, props });
       else clean++;
     });
-    const total = ref.list.filter((p, i) => ref.results[i]?.style).length;
+    const total = ref.list.filter((p, i) => ref.results[i]?.style && !ref.unstable?.[i]).length;
     const byProp = {};
     issues.forEach((it) => it.props.forEach((pr) => { const k = pr.split(' ')[0] === 'no' ? 'missing element' : pr.split(' ')[0]; byProp[k] = (byProp[k] || 0) + 1; }));
-    report.viewports.push({ viewport: vpName, probes: total, clean, missing, score: +(100 * clean / Math.max(1, total)).toFixed(1), byProp, issues });
+    report.viewports.push({ viewport: vpName, probes: total, clean, missing, unstable: unstableList.length, score: +(100 * clean / Math.max(1, total)).toFixed(1), byProp, issues, unstableProbes: unstableList });
   }
 } finally {
   if (!flags.cdp) await browser.close();
@@ -216,7 +229,7 @@ const out = path.join(root, 'compare', 'detail.json');
 await fs.mkdir(path.dirname(out), { recursive: true });
 await fs.writeFile(out, JSON.stringify(report, null, 2));
 for (const v of report.viewports) {
-  console.log(`\n${v.viewport}: detail match ${v.score}% (${v.clean}/${v.probes} probes clean, ${v.missing} with no counterpart)  by property: ${JSON.stringify(v.byProp)}`);
+  console.log(`\n${v.viewport}: detail match ${v.score}% (${v.clean}/${v.probes} probes clean, ${v.missing} with no counterpart${v.unstable ? `; ${v.unstable} unstable on the reference itself, not scored: ${[...new Set(v.unstableProbes.map((u) => u.ref))].slice(0, 4).join(', ')}` : ''})  by property: ${JSON.stringify(v.byProp)}`);
   // group identical issues so one root cause prints once with a count
   const groups = new Map();
   for (const it of v.issues) { const k = `${it.ref} -> ${it.clone}: ${it.props.join('; ')}`; const g = groups.get(k) || { ...it, n: 0 }; g.n++; groups.set(k, g); }

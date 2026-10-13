@@ -22,6 +22,7 @@ const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.jso
 const vps = !flags.viewport || flags.viewport === 'all' ? VIEWPORTS : [VIEWPORTS.find((v) => v.name === flags.viewport)].filter(Boolean);
 const TIMES = [250, 500, 1000, 2000, 4000];
 const SETTLED = 98; // a frame this close to the final one counts as settled
+const NOISE_LIMIT = 15; // two runs of one side further apart than this: that side is unstable, the width is not scored
 // the same network for both sides: the clone is served from this machine, the reference from a CDN, so both are
 // bounded by the emulated link, not by where they come from
 const NETWORK = { offline: false, latency: 40, downloadThroughput: 1.25e6, uploadThroughput: 6e5 };
@@ -66,13 +67,28 @@ const server = cloneUrl ? null : await serve(path.join(root, 'clone'));
 const browser = await openBrowser(flags.cdp);
 const viewports = [];
 try {
+  // each side twice: a load is never the same twice (an image that arrives a frame later moves an intro), so the
+  // curve is the mean of two runs and the spread between them is reported as the measurement's own noise
+  const twice = async (url, dir, vp) => {
+    const a = await sequence(browser, url, vp, dir);
+    const b = await sequence(browser, url, vp, dir);
+    const curve = Object.fromEntries(TIMES.map((t) => [t, +((a.curve[t] + b.curve[t]) / 2).toFixed(2)]));
+    const noise = +Math.max(...TIMES.map((t) => Math.abs(a.curve[t] - b.curve[t]))).toFixed(2);
+    return { curve, noise, settledAt: TIMES.find((t) => curve[t] >= SETTLED) ?? null, runs: [a, b] };
+  };
   for (const vp of vps) {
-    const ref = await cached(root, { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 1 }, () => sequence(browser, meta.url, vp, path.join(root, 'reference', 'load')), Boolean(flags['refresh-ref']));
-    const clone = await sequence(browser, cloneUrl || `${server.url}index.html`, vp, path.join(root, 'compare', 'load'));
+    const ref = await cached(root, { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 2 }, () => twice(meta.url, path.join(root, 'reference', 'load'), vp), Boolean(flags['refresh-ref']));
+    const clone = await twice(cloneUrl || `${server.url}index.html`, path.join(root, 'compare', 'load'), vp);
     const gap = Object.fromEntries(TIMES.map((t) => [t, +Math.abs(ref.curve[t] - clone.curve[t]).toFixed(2)]));
-    const score = +(100 - TIMES.reduce((s, t) => s + gap[t], 0) / TIMES.length).toFixed(2);
-    viewports.push({ viewport: vp.name, score, gap, ref, clone });
-    console.log(`${vp.name}: load match ${score}% (settled: reference ${ref.settledAt ?? '>4000'}ms, clone ${clone.settledAt ?? '>4000'}ms; curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${TIMES.map((t) => clone.curve[t]).join('/')})`);
+    const noise = +Math.max(ref.noise, clone.noise).toFixed(2);
+    // a side that does not agree with itself (an intro that starts a second later in one run) cannot be scored
+    // against anything: the width is reported as unstable, like a probe, instead of as a number
+    const unstable = noise > NOISE_LIMIT;
+    const score = unstable ? null : +(100 - TIMES.reduce((s, t) => s + gap[t], 0) / TIMES.length).toFixed(2);
+    viewports.push({ viewport: vp.name, score, unstable, noise, gap, ref, clone });
+    console.log(unstable
+      ? `${vp.name}: load unstable (noise ±${noise} between two runs of the ${ref.noise > clone.noise ? 'reference' : 'clone'} itself; not scored; curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${TIMES.map((t) => clone.curve[t]).join('/')})`
+      : `${vp.name}: load match ${score}% (noise ±${noise}; settled: reference ${ref.settledAt ?? '>4000'}ms, clone ${clone.settledAt ?? '>4000'}ms; curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${TIMES.map((t) => clone.curve[t]).join('/')})`);
   }
 } finally {
   if (!flags.cdp) await browser.close();

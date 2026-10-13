@@ -114,7 +114,8 @@ npx trueclone seed <name>               # clone/ from the mirror (template: plac
 npx trueclone rules <name> "<selector>" # the original's CSS rules for an element
 npx trueclone textshape <name> --write  # template mode: placeholder text with the original's line breaks
 npx trueclone load <name>               # load sequence on both sides: settledness 0.25-4 s after navigation, cold cache, same network
-npx trueclone score <name> [--quick]    # every check, then REPORT.md
+npx trueclone score <name> [--quick]    # every check, then REPORT.md (--only detail,load --viewport tablet after a fix; unchanged checks are kept)
+npx trueclone explain <name> <y>        # one place on the page: what every check saw there, plus a reference|clone|diff crop
 npx trueclone next <name> --verify      # Next.js + Tailwind + shadcn app, scored
 npx trueclone rea <args>                # bundled REA
 npx trueclone help                      # every step

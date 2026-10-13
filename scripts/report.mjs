@@ -35,6 +35,7 @@ const interact = await read('compare/interact/report.json');
 const hovers = await read('compare/hovers.desktop.json');
 const detail = await read('compare/detail.json');
 const load = await read('compare/load.json');
+const times = await read('compare/score-times.json');
 const motionInv = await read('reference/motion.desktop.json');
 
 const byVp = (rep, key = 'match') => Object.fromEntries((rep?.viewports || []).map((v) => [v.viewport, v[key] ?? v.score]));
@@ -100,6 +101,8 @@ const md = `# trueclone report: ${name}
 | Captured | ${meta.capturedAt} |
 | Scored | ${layout?.at || '–'}${layout?.clone && !/127\.0\.0\.1:\d+\/$/.test(layout.clone) ? ` against ${layout.clone}` : ''} |
 | Verdict | **${verdict}** |
+${times ? `| Scoring time | ${times.totalMin} min (${times.kind}${times.only ? `, only ${times.only.join(',')}` : ''}): ${Object.entries(times.steps).filter(([, s]) => s.seconds).map(([k, s]) => `${k} ${s.seconds}s`).join(', ')}${Object.values(times.steps).some((s) => /kept/.test(s.status)) ? '; unchanged checks kept from their last run' : ''} |` : ''}
+${(detail?.viewports || []).some((v) => v.unstable) || hovers?.unstable || (load?.viewports || []).some((v) => v.unstable) ? `| Not scored | ${(detail?.viewports || []).filter((v) => v.unstable).map((v) => `${v.unstable} detail probe${v.unstable > 1 ? 's' : ''} (${v.viewport})`).concat(hovers?.unstable ? [`${hovers.unstable} hover${hovers.unstable > 1 ? 's' : ''}`] : [], (load?.viewports || []).filter((v) => v.unstable).map((v) => `load ${v.viewport} (±${v.noise} between two runs)`)).join(', ')}: unstable on the reference or the clone itself (random motion, timing), excluded from the scores above |` : ''}
 
 ## Scores
 

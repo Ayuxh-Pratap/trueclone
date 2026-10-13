@@ -165,6 +165,27 @@ HTML clone's. The tablet 84 is a single late intro start: load curves need the s
 | 21 | `clone/patches/*.{html,css,js}` applied by seed after generation (string or selector patches), so re-seeding never loses a fix and `index.html` is never edited by hand | 14 hand edits to a generated file; a re-seed would have erased all of them | 0.4 d | one more concept in the skill; patches can go stale after a recapture: seed reports which patch did not apply | −5 min, and makes re-seed safe |
 | 22 | `rules` and `textshape` accept `--clone`; `rules` prints the clone's rule too, with the diff highlighted | the agent compared rules by eye across two runs | 0.3 d | none | −3 min |
 
+**Phase 3 status (2026-10-13): items 17–22 done.** Detail probes and hover effects are read twice on the reference
+and what disagrees with itself is excluded as unstable (varsity desktop: 6 probes, the random hero chips and the
+hover race the agent spent 30 minutes on; detail 100 / 100 / 99.2 with nothing left to chase). The load check runs
+each side twice, reports its noise and marks a width with more than ±15 between its own runs as unstable instead of
+scoring it. `score --only <checks> --viewport <vp>`; a check whose inputs (clone files, capture, reference
+measurements, options) are unchanged is kept from its last run (`--fresh` re-measures); `score-times.json` and a
+"Scoring time" row in REPORT.md. `trueclone explain <name> <y|"label">`: one place, every check's data, a
+reference | clone | diff crop. `clone/patches/` applied on every seed (varsity's vendor tags and hand-over prelude
+are now `patches/body-vendor.html`; the generated `index.html` is never touched). `rules --clone` already existed.
+Load runs in its own group, last: a timing measurement must not share the machine with three other browsers.
+
+**Phase 3 finding (2026-10-13): reference drift.** Layout and states score against the capture's screenshots, but
+detail, hovers, curves and load measure the *live* page, and a live site changes (rea.tools changed its nav between
+the capture on the 12th and a fresh reference read on the 13th: detail fell from 100 to 28 with nothing wrong in the
+clone). Reference caches hide this until they are refreshed. Rule: a reference measurement must be taken against the
+page the capture saw. Done now: the detail and hover reference reads compare the live page height with the capture's
+and print a `WARNING reference drift` that `score` surfaces. To do (Phase 4, item 28): a `drift` check at the start of
+every full score (page height and section count per width against `meta.json`, one page load each) that marks every
+live-measured check as "stale capture" in REPORT.md and tells the agent to re-capture, instead of letting the numbers
+fall.
+
 ### Phase 4. The skill as a contract (C/D). ~1.5 days
 
 | # | Fix | Why | Cost | Drawback / risk |
@@ -174,6 +195,7 @@ HTML clone's. The tablet 84 is a single late intro start: load curves need the s
 | 25 | Skill rules: never edit seed output (use `patches/`); first full score then `--only`; stop chasing a check marked unstable; when `code.md` has the handler, copy the rule, not the effect; REA is never called directly (the `understand` step does it) | each rule removes one noise bucket from the run | 0.3 d | the skill grows; keep the step list on one screen, details in sections |
 | 26 | `understand` step wired in (Part 1), `code.md` consumed in Build, "Code evidence" in the report | 0 REA calls in 296; the understand phase was curl and grep | 1.5 d (in Part 1) | REA version churn: pin `rea-agents` exactly, test `understand` in CI against rea.tools |
 | 27 | Exact mode: a "post-boot" pass after seed compares the clone's DOM after its own scripts ran with the post-script mirror and lists regions that differ (the hero grid, the stories island) so the agent knows which runtime-built regions it still owns | the agent discovered the shadow-root stories and the rebuilt hero by scoring, not by being told | 0.5 d | needs the clone's scripts to exist; runs again after each build round |
+| 28 | `drift` check at the start of every full score: live page height and section count per width against `meta.json`; on drift, live-measured checks are marked "stale capture" in REPORT.md with the advice to re-capture | rea.tools changed its nav after capture: detail 100 → 28 with a correct clone | 0.4 d | one page load per width (+15 s); a site with random content height needs a tolerance (1%, min 40 px) |
 
 ### Phase 5. Prove it and ship 0.3.0. ~1 day plus the cold runs
 
