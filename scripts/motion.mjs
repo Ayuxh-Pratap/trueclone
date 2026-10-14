@@ -42,7 +42,43 @@ const INIT = () => {
   wrap('Lenis', '__labLenis');
 };
 
+// The animation runtimes wherever the site keeps them, found by what they are, not by their global name: a site may
+// bundle its own GSAP (window.VARSITY.gsap), never expose Lenis, or only mark its three.js canvases (data-engine).
+// Sets window.__labGsap / __labST for the other probes; returns what was found and where.
+function findRuntimes() {
+  const found = { gsap: null, gsapAt: null, st: null, stAt: null, lenis: [], three: null };
+  const isGsap = (v) => v && typeof v === 'object' && typeof v.to === 'function' && typeof v.timeline === 'function' && v.globalTimeline;
+  const isST = (v) => v && typeof v === 'function' && typeof v.getAll === 'function' && typeof v.refresh === 'function' && typeof v.create === 'function';
+  const isLenis = (v) => v && typeof v === 'object' && typeof v.raf === 'function' && typeof v.scrollTo === 'function' && v.options && typeof v.options === 'object';
+  const seen = new Set();
+  const visit = (v, at, depth) => {
+    if (!v || (typeof v !== 'object' && typeof v !== 'function') || seen.has(v) || v === window) return;
+    seen.add(v);
+    // anything here may be hostile to read: a cross-origin frame's window, a getter that throws, a Proxy
+    try {
+      if (v instanceof Node) return;
+      if (!found.gsap && isGsap(v)) { found.gsap = v; found.gsapAt = at; }
+      if (!found.st && isST(v)) { found.st = v; found.stAt = at; }
+      if (isLenis(v) && found.lenis.length < 4) found.lenis.push({ at, options: JSON.parse(JSON.stringify(v.options, (k, x) => (typeof x === 'function' ? `[function ${x.name || 'anonymous'}]` : x instanceof Node ? `[element ${x.nodeName.toLowerCase()}]` : x === window ? '[window]' : x))) });
+    } catch { return; }
+    if (depth >= 2) return;
+    let keys = [];
+    try { keys = Object.keys(v).slice(0, 400); } catch { return; }
+    for (const k of keys) { let x; try { x = v[k]; } catch { continue; } visit(x, `${at}.${k}`, depth + 1); }
+  };
+  for (const k of Object.keys(window)) { if (/^(webkit|on)|^(document|navigator|location|history|localStorage|sessionStorage|caches|crypto|performance|chrome|frames|parent|top|self|opener)$/.test(k)) continue; let v; try { v = window[k]; } catch { continue; } visit(v, `window.${k}`, 0); }
+  // a ScrollTrigger registered on the GSAP found, even if never exposed itself
+  if (!found.st && found.gsap?.core?.globals) { const g = found.gsap.core.globals(); if (isST(g?.ScrollTrigger)) { found.st = g.ScrollTrigger; found.stAt = `${found.gsapAt}.core.globals().ScrollTrigger`; } }
+  const engines = [...new Set([...document.querySelectorAll('canvas[data-engine]')].map((c) => c.getAttribute('data-engine')))];
+  found.three = window.THREE?.REVISION || window.__THREE__ || engines.find((e) => /three/i.test(e)) || null;
+  window.__labGsap = found.gsap;
+  window.__labST = found.st;
+  return { gsapAt: found.gsapAt, gsapVersion: found.gsap?.version || null, stAt: found.stAt, lenis: found.lenis, three: found.three, engines };
+}
+
 function inventory() {
+  const runtimes = window.__labRuntimes;
+  const gsap = window.__labGsap, ScrollTrigger = window.__labST;
   const pathOf = (el) => {
     const parts = [];
     for (let n = el; n && n !== document.body && n.parentElement; n = n.parentElement) parts.unshift(`${n.tagName.toLowerCase()}:${[...n.parentElement.children].indexOf(n) + 1}`);
@@ -91,7 +127,7 @@ function inventory() {
     };
   };
 
-  const triggers = (window.ScrollTrigger ? ScrollTrigger.getAll() : []).map((st, i) => ({
+  const triggers = (ScrollTrigger ? ScrollTrigger.getAll() : []).map((st, i) => ({
     i,
     trigger: target(st.trigger),
     start: st.vars.start ?? 'top bottom', end: st.vars.end ?? 'bottom top',
@@ -104,7 +140,7 @@ function inventory() {
     animation: st.animation ? describe(st.animation) : null,
   }));
 
-  const standalone = window.gsap ? gsap.globalTimeline.getChildren(false, true, true).filter((a) => !a.scrollTrigger) : [];
+  const standalone = gsap ? gsap.globalTimeline.getChildren(false, true, true).filter((a) => !a.scrollTrigger) : [];
   const isElTween = (a) => !a.getChildren && a.targets().some((t) => t instanceof Element);
   const quickTo = (a) => isElTween(a) && a.paused() && Object.values(a.vars).some((v) => v === '+=0.1');
   const pointer = standalone.filter(quickTo).map((a) => ({ target: target(a.targets()[0]), prop: Object.keys(a.vars).find((k) => a.vars[k] === '+=0.1'), duration: a.duration(), ease: easeName(a.vars.ease) }));
@@ -128,11 +164,12 @@ function inventory() {
   window.__lab = { describe, target };
   return {
     libs: {
-      gsap: window.gsap?.version, ScrollTrigger: Boolean(window.ScrollTrigger), SplitText: Boolean(window.SplitText), CustomEase: Boolean(window.CustomEase),
-      Lenis: Boolean(window.Lenis), Swiper: Boolean(window.Swiper), three: window.THREE?.REVISION, jquery: window.jQuery?.fn?.jquery,
-      webflow: Boolean(window.Webflow), hls: Boolean(window.Hls), lottie: Boolean(window.lottie),
+      gsap: gsap?.version, gsapAt: runtimes?.gsapAt, ScrollTrigger: Boolean(ScrollTrigger), ScrollTriggerAt: runtimes?.stAt,
+      SplitText: Boolean(window.SplitText || gsap?.core?.globals?.()?.SplitText), CustomEase: Boolean(window.CustomEase || gsap?.core?.globals?.()?.CustomEase),
+      Lenis: Boolean(window.Lenis) || Boolean(runtimes?.lenis?.length), Swiper: Boolean(window.Swiper), three: runtimes?.three || null, engines: runtimes?.engines || [],
+      jquery: window.jQuery?.fn?.jquery, webflow: Boolean(window.Webflow), hls: Boolean(window.Hls), lottie: Boolean(window.lottie),
     },
-    lenis: window.__labLenis || [],
+    lenis: [...(window.__labLenis || []), ...(runtimes?.lenis || []).map((l) => ({ ...l.options, foundAt: l.at }))],
     triggers, pointer, loops, other, swipers, css: cssGrouped,
   };
 }
@@ -147,6 +184,7 @@ try {
   await page.mouse.move(5, vp.height - 5);
   const intro = await waitStill(page, { timeout: 15000, interval: 200 });
   const introMs = Date.now() - t0;
+  await page.evaluate(`window.__labRuntimes = (${findRuntimes.toString()})()`);
   result = await page.evaluate(inventory);
 
   // Pointer probe at the top of the page: which elements react when the cursor moves?
@@ -163,10 +201,11 @@ try {
   await page.mouse.move(5, vp.height - 5);
   await page.evaluate(() => {
     window.__labSeen = new WeakSet();
-    if (window.gsap) gsap.globalTimeline.getChildren(true, true, true).forEach((a) => window.__labSeen.add(a));
+    if (window.__labGsap) window.__labGsap.globalTimeline.getChildren(true, true, true).forEach((a) => window.__labSeen.add(a));
   });
   const scan = () => page.evaluate(() => {
-    if (!window.gsap) return [];
+    const gsap = window.__labGsap;
+    if (!gsap) return [];
     const out = [];
     for (const a of gsap.globalTimeline.getChildren(true, true, true)) {
       if (window.__labSeen.has(a)) continue;

@@ -495,7 +495,14 @@ function markWidgetsInPage(groups) {
   };
   const ok = {};
   for (const g of groups) {
-    const scope = resolve(g.scopePath);
+    // a dialog or listbox (kind "portal") gets an empty host of its own at the end of <body>: the recorded element is
+    // shown there when its trigger is clicked
+    let scope;
+    if (g.kind === 'portal') {
+      scope = document.createElement('div');
+      scope.setAttribute('data-tc-portal', String(g.i));
+      document.body.appendChild(scope);
+    } else scope = g.scopePath ? resolve(g.scopePath) : null;
     const triggers = g.triggers.map((t) => resolve(t.path));
     if (!scope || triggers.some((t) => !t)) continue;
     const ids = (scope.getAttribute('data-tc-scope') || '').split(' ').filter(Boolean);
@@ -516,6 +523,12 @@ function widgetPlayer() {
   // a region script.js took over (tcOwn / data-tc-own) is never rewritten by the recorded states
   const show = (i, html) => { const r = regionOf(i); if (r && !r.closest('[data-tc-own]') && html != null && r.innerHTML !== html) r.innerHTML = html; };
   const parse = (t) => t.dataset.tcTrigger.split(':').map(Number);
+  // a dialog trigger says whether its dialog is open, as the original's does (aria-expanded, and data-state where
+  // the component library uses it)
+  const setOpen = (t, open) => {
+    t.setAttribute('aria-expanded', String(open));
+    if (t.hasAttribute('data-state')) t.setAttribute('data-state', open ? 'open' : 'closed');
+  };
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-tc-trigger]');
     if (!t) return;
@@ -524,7 +537,23 @@ function widgetPlayer() {
     if (!g) return;
     e.preventDefault();
     if (g.kind === 'tabs') show(i, g.states[j]);
+    else if (g.kind === 'portal') { const r = regionOf(i); setOpen(t, !(r && r.innerHTML)); show(i, r && r.innerHTML ? '' : g.states[0]); }
     else show(i, t.getAttribute('aria-expanded') === 'true' ? g.closed : g.states[j]);
+  });
+  // an open dialog closes like the original's: Escape, its close button, or a click on the backdrop around it
+  const closePortals = () => {
+    for (const [i, g] of data.groups.entries()) {
+      if (!g || g.kind !== 'portal') continue;
+      show(i, '');
+      for (const t of document.querySelectorAll(`[data-tc-trigger^="${i}:"]`)) setOpen(t, false);
+    }
+  };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePortals(); });
+  document.addEventListener('click', (e) => {
+    const host = e.target.closest('[data-tc-portal]');
+    if (!host || !host.innerHTML) return;
+    const closeBtn = e.target.closest('[aria-label*="close" i], [aria-label*="dismiss" i], [data-dismiss], .close');
+    if (closeBtn || !e.target.closest('[role="dialog"], [role="listbox"], dialog')) { e.preventDefault(); closePortals(); }
   });
   const hoverMenu = (t) => t.closest('header, nav') && data.groups[parse(t)[0]]?.kind === 'expand';
   document.addEventListener('pointerover', (e) => {

@@ -50,12 +50,39 @@ if (flags.draft) {
   process.exit(0);
 }
 
-const scenarioText = await fs.readFile(path.join(root, 'interactions.json'), 'utf8').catch(() => null);
-if (scenarioText === null) {
-  console.log('interactions: skipped, no interactions.json (run --draft, or write the scenarios by hand)');
+// --auto: find what a visitor can operate on the live reference (older captures, or after the site changed)
+const autoFile = path.join(ref, 'interactions.auto.json');
+if (flags.auto) {
+  const { detectInPage } = await import('./interactions-auto.mjs');
+  const browser = await openBrowser(flags.cdp);
+  const found = [];
+  try {
+    for (const vp of VIEWPORTS) {
+      const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
+      await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
+      await waitStill(page, { timeout: 15000, interval: 200 });
+      await page.evaluate(() => scrollTo(0, 0));
+      found.push(...await page.evaluate(detectInPage, [vp.name, meta.mode === 'exact' ? 'visual' : 'structure', 10]));
+      await context.close();
+    }
+  } finally { if (!flags.cdp) await browser.close(); }
+  await fs.writeFile(autoFile, JSON.stringify(found, null, 2));
+  console.log(`${found.length} scenario(s) found on the reference -> ${path.relative(process.cwd(), autoFile)}`);
   process.exit(0);
 }
-let scenarios = JSON.parse(scenarioText);
+
+// The scenarios: the agent's (interactions.json) and the ones the capture found (reference/interactions.auto.json).
+// The agent's win by name; { "name": "...", "skip": "<why>" } retires one, and the reason is reported.
+const own = JSON.parse(await fs.readFile(path.join(root, 'interactions.json'), 'utf8').catch(() => '[]'));
+const auto = JSON.parse(await fs.readFile(autoFile, 'utf8').catch(() => '[]'));
+const ownNames = new Set(own.map((s) => s.name));
+const skipped = own.filter((s) => s.skip);
+let scenarios = [...own.filter((s) => !s.skip), ...auto.filter((s) => !ownNames.has(s.name))];
+if (!scenarios.length) {
+  console.log('interactions: none (no interactions.json, and the capture found nothing to operate; trueclone interact <name> --auto re-checks the live page)');
+  process.exit(0);
+}
+if (skipped.length) console.log(`retired by the agent: ${skipped.map((s) => `${s.name} (${s.skip})`).join('; ')}`);
 if (typeof flags.only === 'string') scenarios = scenarios.filter((s) => s.name.includes(flags.only));
 const outDir = path.join(root, COMPARE, 'interact');
 await fs.mkdir(outDir, { recursive: true });
@@ -75,15 +102,17 @@ const stateOf = (page, selector) => page.evaluate((sel) => {
   if (el.tagName === 'CANVAS') {
     try { const d = el.toDataURL(); let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d.charCodeAt(i)) | 0; pixels = String(h); } catch { /* tainted canvas */ }
   }
-  return `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}|${cs.transform}|${cs.opacity}|${cs.visibility}|${cs.clipPath}|${attrs}|${text}|${pixels}`;
+  return `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}|${Math.round(el.scrollLeft)},${Math.round(el.scrollTop)}|${cs.transform}|${cs.opacity}|${cs.visibility}|${cs.clipPath}|${attrs}|${text}|${pixels}`;
 }, selector);
 
 async function runSide(url, side, list) {
   if (!list.length) return [];
   const browser = await openBrowser(flags.cdp);
   const results = [];
-  try {
-    for (const sc of list) {
+  // three scenarios at a time, each in its own browser context (a page load is most of a scenario's time)
+  const queue = [...list];
+  const one = async (sc) => {
+    {
       const vp = VIEWPORTS.find((v) => v.name === (sc.viewport || 'desktop'));
       const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
       await page.goto(url, { waitUntil: 'load', timeout: 60000 });
@@ -149,6 +178,10 @@ async function runSide(url, side, list) {
             const [s, idx] = target.split('@');
             await page.locator(s).nth(Number(idx || 0)).click({ timeout: 5000 }).catch((e) => results.push({ name: sc.name, error: `click ${target}: ${e.message.split('\n')[0]}` }));
           }
+        } else if (st.wheel) {
+          // a wheel turn over a point: how a desktop visitor scrolls a sideways scroller (dx) or a panel (dy)
+          await page.mouse.move(...px(st.wheel.at || [0.5, 0.5]), { steps: 5 });
+          for (let i = 0, n = 6; i < n; i++) { await page.mouse.wheel((st.wheel.dx || 0) / n, (st.wheel.dy || 0) / n); await page.waitForTimeout(40); }
         } else if (st.key) await page.keyboard.press(st.key);
         else if (st.wait) await page.waitForTimeout(st.wait);
         else if (st.shot) await shot(st.shot);
@@ -158,6 +191,13 @@ async function runSide(url, side, list) {
       results.push({ name: sc.name, shots, changed, before, after });
       await context.close();
     }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+      for (let sc = queue.shift(); sc; sc = queue.shift()) {
+        await one(sc).catch((e) => results.push({ name: sc.name, error: e.message.split('\n')[0] }));
+      }
+    }));
   } finally {
     if (!flags.cdp) await browser.close();
   }
@@ -201,13 +241,19 @@ for (const sc of scenarios) {
   // a scenario passes when the change happens on both sides AND the clone ends up where the reference does: a wrong
   // panel opening is a change too
   const endOk = score !== null && score >= END_STATE_MIN;
+  // a scenario the capture found, where the reference itself does not react, is not a behaviour of the site
+  // (a scroller that only scrolls by touch, a disclosure a script never wires): set aside, not failed
+  if (sc.auto && a && a.changed === false) { report.scenarios.push({ name: sc.name, auto: true, notBehaviour: true, score: null, shots, expect: { ref: false, clone: b?.changed ?? null, endState: score, pass: true }, errors }); continue; }
   const expect = sc.expectChange
     ? { ref: a?.changed, clone: b?.changed, endState: score, pass: a?.changed === true && b?.changed === true && endOk }
     : { ref: null, clone: null, endState: score, pass: endOk };
-  report.scenarios.push({ name: sc.name, score, shots, expect, errors });
+  report.scenarios.push({ name: sc.name, ...(sc.auto ? { auto: true } : {}), score, shots, expect, errors });
 }
+report.skipped = skipped.map((s) => ({ name: s.name, why: s.skip }));
 await fs.writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
-console.table(report.scenarios.map((s) => ({
+const notBehaviour = report.scenarios.filter((s) => s.notBehaviour);
+if (notBehaviour.length) console.log(`set aside (found by the capture, but the reference does not react): ${notBehaviour.map((s) => s.name).join('; ')}`);
+console.table(report.scenarios.filter((s) => !s.notBehaviour).map((s) => ({
   scenario: s.name,
   'match %': s.score,
   shots: Object.entries(s.shots).map(([k, v]) => `${k} ${v}`).join('  '),

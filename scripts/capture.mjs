@@ -7,6 +7,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
+import { detectInPage } from './interactions-auto.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [url, nameArg] = pos;
@@ -107,6 +108,7 @@ const summary = [];
 const rootFontSize = {};
 const inlineStyles = {};
 const scriptQueries = new Set(); // media queries the page's scripts asked (matchMedia), at any size
+const autoScenarios = []; // interaction scenarios found on the page (interactions-auto.mjs)
 // the language and region the page is asked for (meta.locale; every later step uses the same, see lib.mjs LOCALE)
 const locale = typeof flags.locale === 'string' ? flags.locale : LOCALE;
 const asked = { locale, extraHTTPHeaders: { 'accept-language': `${locale},${locale.split('-')[0]};q=0.9` } };
@@ -170,6 +172,14 @@ try {
     // same state as the extra sizes (a full-page shot mounts content and fires reveals).
     if (!vp.heldOut) inlineStyles[`${vp.width}x${vp.height}`] = await page.evaluate(readInlineStyles);
     for (const q of await page.evaluate(() => window.__tcMediaQueries || []).catch(() => [])) scriptQueries.add(q);
+    // what a visitor can operate at this size (scrollers, carousels, tabs, accordions, menus, dialogs): scored by the
+    // interaction check whether or not the agent writes scenarios (reference/interactions.auto.json)
+    if (!vp.heldOut) {
+      const top = await page.evaluate(() => scrollY);
+      await page.evaluate(() => scrollTo(0, 0));
+      autoScenarios.push(...await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 10]).catch((e) => { console.warn(`WARNING interactions not detected at ${vp.name}: ${e.message.split('\n')[0]}`); return []; }));
+      await page.evaluate((y) => scrollTo(0, y), top);
+    }
     if (finishEvidence) {
       const ev = await finishEvidence(path.join(ref, 'scripts')).catch((e) => { console.warn(`WARNING scripts not saved: ${e.message}`); return null; });
       if (ev) console.log(`scripts: ${ev.scripts} saved to reference/scripts/ (${ev.ran} ran during load and scroll), ${ev.listeners} event-listener handlers located (INDEX.md)`);
@@ -267,6 +277,8 @@ if (fitSizes.length) {
     if (!flags.cdp) await browser2.close();
   }
 }
+await fs.writeFile(path.join(ref, 'interactions.auto.json'), JSON.stringify(autoScenarios, null, 2));
+console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
 await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));

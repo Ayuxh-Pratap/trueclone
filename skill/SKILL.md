@@ -127,8 +127,12 @@ npx trueclone review <name> --size wide                       # side by side by 
 
 The checks: layout (full page, structure), scroll states (every half screen, scrolled with the wheel), canvases (what
 each scene draws), motion curves, detail (styles at matching points), hovers (every control and every element with a
-hover listener: the region after the hover must match), interactions (`interactions.json`: the change must happen on
-both sides and end in the same state), load (0.25-4 s after navigation, cold cache, same network). Unstable probes
+hover listener: the region after the hover must match), interactions (the change must happen on both sides and end in
+the same state), load (0.25-4 s after navigation, cold cache, same network). Interactions come from two places: the
+capture finds every scroller, carousel, tab set, accordion, header menu and dialog at each size
+(`reference/interactions.auto.json`, scored by default, so a carousel that does not swipe fails), and your own
+`interactions.json` adds scenarios, overrides one by name, or retires one with `{ "name": "…", "skip": "<why>" }`
+(the reason is reported). One the reference itself does not react to is set aside, not failed. Unstable probes
 (random motion, timing) are measured twice on the reference and excluded; do not chase a number inside the noise.
 Unchanged checks are not re-measured (`--fresh` forces it). `drift` opens every full score: if the live site changed
 since the capture, the live-measured checks are marked stale; re-capture before trusting them.

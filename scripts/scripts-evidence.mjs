@@ -30,8 +30,59 @@ export async function startScriptEvidence(page, pageUrl) {
     let listeners = [];
     try {
       const { result } = await cdp.send('Runtime.evaluate', { expression: 'document', objectGroup: 'tc' });
-      ({ listeners } = await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId, depth: -1, pierce: true }));
+      ({ listeners } = await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId, depth: -1, pierce: true, objectGroup: 'tc' }));
     } catch { /* no listeners readable */ }
+    // Where a function really is: error trackers and frameworks wrap handlers (Sentry's __sentry_original__, zone.js,
+    // rrweb), so the listener's own location is the wrapper's, the same line for every handler on the page. The
+    // innermost original function is followed and its location used.
+    const UNWRAP = `function () {
+      const keys = ['__sentry_original__', '__zone_symbol__OriginalDelegate', '__rrweb_original__', '__original__', '__originalFunction', '__wrapped__', '_original', 'originalHandler', '__raven__'];
+      let f = this, n = 0;
+      for (; n < 6; n++) { let o = null; for (const k of keys) { try { if (typeof f[k] === 'function') { o = f[k]; break; } } catch {} } if (!o) break; f = o; }
+      return n ? f : null;
+    }`;
+    const locationOf = async (objectId) => {
+      const { internalProperties = [] } = await cdp.send('Runtime.getProperties', { objectId, ownProperties: true });
+      return internalProperties.find((p) => p.name === '[[FunctionLocation]]')?.value?.value || null;
+    };
+    let unwrapped = 0;
+    for (const l of listeners.slice(0, 3000)) {
+      if (!l.handler?.objectId) continue;
+      try {
+        const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: l.handler.objectId, functionDeclaration: UNWRAP, objectGroup: 'tc' });
+        if (!result?.objectId) continue;
+        const loc = await locationOf(result.objectId);
+        if (loc) { Object.assign(l, { scriptId: loc.scriptId, lineNumber: loc.lineNumber, columnNumber: loc.columnNumber, unwrapped: true }); unwrapped++; }
+      } catch { /* gone */ }
+    }
+    // React keeps one listener per event at its root; the handlers a visitor triggers live on each element's props
+    // (__reactProps$…): onClick, onPointerDown, onScroll… Each is located like a listener and listed with its element.
+    try {
+      const { result } = await cdp.send('Runtime.evaluate', { objectGroup: 'tc', expression: `(() => {
+        const out = [];
+        for (const el of document.querySelectorAll('*')) {
+          const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+          if (!key) continue;
+          const props = el[key] || {};
+          for (const [k, v] of Object.entries(props)) if (/^on[A-Z]/.test(k) && typeof v === 'function') out.push([el, k.slice(2).toLowerCase(), v]);
+          if (out.length >= 400) break;
+        }
+        return out;
+      })()` });
+      if (result?.objectId) {
+        const { result: items } = await cdp.send('Runtime.getProperties', { objectId: result.objectId, ownProperties: true });
+        for (const it of items.filter((p) => /^\d+$/.test(p.name))) {
+          const { result: parts } = await cdp.send('Runtime.getProperties', { objectId: it.value.objectId, ownProperties: true });
+          const [el, type, fn] = ['0', '1', '2'].map((i) => parts.find((p) => p.name === i)?.value);
+          if (!fn?.objectId) continue;
+          const loc = await locationOf(fn.objectId);
+          if (!loc) continue;
+          const { node } = await cdp.send('DOM.describeNode', { objectId: el.objectId }).catch(() => ({}));
+          listeners.push({ type: `${type.value} (React)`, scriptId: loc.scriptId, lineNumber: loc.lineNumber, columnNumber: loc.columnNumber, backendNodeId: node?.backendNodeId });
+        }
+      }
+    } catch { /* not React, or not readable */ }
+    if (unwrapped) console.log(`scripts: ${unwrapped} listener(s) traced past a wrapper (error tracking, zone.js) to the handler itself`);
     const labels = new Map();
     const labelOf = async (backendNodeId) => {
       if (!backendNodeId) return 'window';

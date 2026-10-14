@@ -18,19 +18,20 @@ trueclone builds the exact same website from its URL, at every screen size (HTML
 | `skill/SKILL.md` | The agent workflow `init` installs. **The product's brain: keep it in step with the scripts** |
 | `scripts/lib.mjs` | Shared: `VIEWPORTS` (build sizes), `HELD_OUT` and `SCORED`, browser/page setup with timeouts, settle/freeze, scroll (`wheelTo`), masks (re-marked by an observer), pixel match, `canvasSimilarity`, compressed `serve()`, reference cache |
 | `scripts/capture.mjs` | Full-page screenshots (shot until stable) at the 5 scored sizes, sections, tokens, rendered HTML (view-mounted content, declarative shadow DOM), assets, HAR, script evidence (`scripts-evidence.mjs`), inline styles at extra sizes inside the breakpoint ranges of the site's stylesheets and scripts (`matchMedia`), read settled before any screenshot (`inline-styles.json`), script-free mirror (SRI dropped, missing media fetched) |
-| `scripts/scripts-evidence.mjs` | Every script the page ran, saved and beautified, ranked by V8 coverage, every listener located (CDP) → `reference/scripts/INDEX.md` |
+| `scripts/scripts-evidence.mjs` | Every script the page ran, saved and beautified, ranked by V8 coverage, every listener located (CDP) past error-tracking and framework wrappers, React props handlers included → `reference/scripts/INDEX.md` |
 | `scripts/viewport-fit.mjs` | Inline values read at many sizes → constant, a `calc()` of the viewport or a cover/contain `max()`/`min()` (globally, or per group of breakpoint ranges one function fits), or script-owned at every size |
 | `scripts/seed.mjs` | `clone/` from the mirror: template placeholders; the viewport-fit plan applied (`--tc-vw`, `data-tc-w`, `data-tc-script-owned`); pins as sticky + a tail sized by `--tc-pin`; one-shot reveals and scroll class changes replayed (class tokens, never the whole attribute; scroll curves not); GSAP-written transforms marked `data-tc-gsap`; `tcOwn(selector)` hands elements to script.js; boot contract; `clone/patches/` (`--patches` re-applies them on `.seed-base.html`) |
 | `scripts/reveals.mjs` | At every build size: one-shot reveals frame by frame, scroll-linked curves (evidence), pins, scroll-caused class changes; pointer events off while recording |
-| `scripts/widgets.mjs` | Every tab and menu state by clicking it |
+| `scripts/widgets.mjs` | Every tab, menu and dialog state by clicking it (dialogs and listboxes as the element they open, shown in a portal host) |
 | `scripts/design.mjs` | `design-tokens.json` → `DESIGN.md` (linted), shadcn `globals.css`, `clone/tokens.css` |
-| `scripts/motion.mjs` | Motion inventory from the live runtime. Parameters only |
+| `scripts/motion.mjs` | Motion inventory from the live runtime, found wherever the site keeps it (a bundled GSAP, an unexposed Lenis, three.js by `__THREE__` or `data-engine`). Parameters only |
 | `scripts/understand.mjs` | Optional REA code evidence → `reference/code.md`; not in the standard flow |
 | `scripts/drift.mjs` | Live page vs capture (two loads before calling it changed); first step of every full score |
 | `scripts/owned.mjs` | Sections `script.js` rebuilds at boot (scripts blocked vs running) |
 | `scripts/states.mjs` | Scroll states at every scored size; `--clone` scores each step and the canvases in it |
 | `scripts/curves.mjs` | Motion score: sampled property curves |
-| `scripts/interact.mjs` | Scenarios on both sides; pass = change on both sides and the same end state (≥ 95) |
+| `scripts/interact.mjs` | Scenarios on both sides, three at a time; pass = change on both sides and the same end state (≥ 95); the agent's `interactions.json` plus `reference/interactions.auto.json` (`--auto` re-detects) |
+| `scripts/interactions-auto.mjs` | What a visitor can operate (scrollers, carousels, tabs, accordions, menus, dialogs), found on the reference at each build size and written as scenarios |
 | `scripts/detail.mjs` | Style diff at matching points; reference read twice, unstable probes excluded |
 | `scripts/hovers.mjs` | Every control and every element with a hover listener (CDP); outcome compared as pixels |
 | `scripts/load.mjs` | Load sequence at every scored size, each side twice, noise reported |

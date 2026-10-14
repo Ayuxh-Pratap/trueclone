@@ -84,5 +84,6 @@ just score.
 | Phase | State |
 |---|---|
 | 1 | done: airpods Next app builds with no hand fix (the one invalid Apple declaration removed, namespaced/numeric/boolean attributes typed); varsity hero keeps "WE INVEST"; next --verify skips a port held on 0.0.0.0, checks the app identifies itself and leaves compare/ and REPORT.md untouched; class replay by tokens and tcOwn() verified in a browser; GSAP-written transforms marked and cleared on tcOwn; airpods fonts sheet served as CSS; capture warns on redirects and pins the locale; design refuses to draft typography without spec. Regression: resend 99.7-100 layout/states/interactions; rea-tools interactions fail because rea.tools itself changed since its capture (drift: desktop 6352 -> 4870px) |
-| 2 | in progress |
-| 3–5 | waiting |
+| 2 | done: capture finds what a visitor operates (stripe: 25 scenarios; the case-study carousel, product dialogs and accordions now fail visibly instead of passing unseen; 7 the reference does not react to set aside), scenarios run three at a time (stripe first measurement 10.6 -> 4.0 min); motion finds varsity's GSAP at window.VARSITY.gsap (13 triggers, was 1), Lenis options, stripe's three.js r178; 68 stripe listeners traced past Sentry to the carousel's own code, React handlers located; dialogs recorded and replayed (stripe desktop dialogs 96-99, were failing). Open: dialogs are recorded at desktop only (mobile open frames 47-63) |
+| 3 | in progress |
+| 4–5 | waiting |

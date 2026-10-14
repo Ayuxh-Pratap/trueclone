@@ -102,10 +102,13 @@ if (reviewFrames.length) {
   const sizes = [...new Set(reviewFrames.map((x) => x.size))];
   rows.push(`| Review (by eye) | ${VPS.map((v) => (sizes.includes(v) ? `${reviewFrames.filter((x) => x.size === v && x.verdict && /^same\b/i.test(x.verdict)).length}/${reviewFrames.filter((x) => x.size === v).length}` : '–')).join(' | ')} | ${reviewOpen.length ? '**below target**' : 'pass'} | frames signed off "same" in notes.md (trueclone review) |`);
 } else rows.push(`| Review (by eye) | – | – | – | – | – | **below target** | not done: run trueclone review <name> and give every frame a verdict in notes.md |`);
-const scenarios = interact?.scenarios || [];
+// scenarios the capture found where the reference itself does not react are not behaviour: not counted
+const scenarios = (interact?.scenarios || []).filter((s) => !s.notBehaviour);
 const failed = scenarios.filter((s) => s.expect && !s.expect.pass);
+const autoCount = scenarios.filter((s) => s.auto).length;
+const retired = interact?.skipped || [];
 row('Interactions', { desktop: scenarios.length ? +(scenarios.reduce((n, s) => n + (s.score || 0), 0) / scenarios.length).toFixed(2) : undefined }, scenarios.length ? failed.length === 0 : null,
-  scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change on both sides and end in the reference's state (≥ 95)` : 'no interactions.json');
+  scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change on both sides and end in the reference's state (≥ 95)${autoCount ? `; ${autoCount} found by the capture` : ''}${failed.length ? `; failing: ${failed.slice(0, 4).map((s) => s.name).join(', ')}${failed.length > 4 ? '…' : ''}` : ''}${retired.length ? `; retired: ${retired.map((s) => `${s.name} (${s.why})`).join(', ')}` : ''}` : 'no scenarios (interactions.json, or reference/interactions.auto.json from capture)');
 
 const failing = rows.filter((r) => r.includes('below target')).length;
 const acceptedCount = rows.filter((r) => r.includes('| accepted (')).length;
