@@ -1,4 +1,6 @@
-// Detail diff: style-level comparison by page position, no mapping needed. Once the layout matches (diff ≥ 97%),
+// Detail diff: style-level comparison of the same elements. Each reference probe records its element's place in the
+// document; the clone is read at that place (the seed keeps the structure), or, where its script rebuilt that part,
+// by page position. Originally by page position only: once the layout matches (diff ≥ 97%),
 // the element at a given page coordinate on the reference corresponds to the element at the same coordinate on
 // the clone. For every reference text element and every styled box (background, border, radius) this probes the
 // clone at the same point and compares computed styles: font family, size, weight, line height, letter spacing,
@@ -7,7 +9,7 @@
 // usage: node scripts/detail.mjs <name> [--viewport desktop|tablet|mobile|all] [--url <clone url>] [--max 400]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -15,7 +17,7 @@ if (!name) {
   console.error('usage: npm run detail -- <name> [--viewport desktop|all] [--url <clone url>]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
 const wanted = !flags.viewport || flags.viewport === 'all' ? VIEWPORTS.map((v) => v.name) : String(flags.viewport).split(',');
 const MAX = Number(flags.max || 400);
@@ -120,7 +122,32 @@ function probeAt([xs, py, kind, W, H]) {
   }
   if (!el) return { none: true, top: stack[0] ? `${stack[0].tagName.toLowerCase()}.${String(stack[0].getAttribute('class') || '').split(' ')[0]}` : null };
   const r = el.getBoundingClientRect();
-  return { sel: `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.')}`, w: Math.round(r.width), h: Math.round(r.height), style: window.__styleOf(el) };
+  // the element's place in the document (as the seed keeps it), so the clone can be read at the same element
+  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  const parts = [];
+  for (let n = el; n && n !== document.body && n.parentElement; n = n.parentElement) parts.unshift(`${n.tagName.toLowerCase()}:${[...n.parentElement.children].filter((c) => !SKIP.has(c.tagName)).indexOf(n) + 1}`);
+  return { sel: `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.')}`, w: Math.round(r.width), h: Math.round(r.height), path: parts.join('>'), style: window.__styleOf(el) };
+}
+
+// The clone's element at the reference element's place in the document: pairs the two by structure, not by page
+// point, so text that wraps differently (template placeholders, a font metric) does not move the probe onto a
+// neighbour. Falls back to the page point when the clone's script rebuilt that part (no visible element there).
+function probeByPath([p, xs, py, kind, W, H]) {
+  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  let el = document.body;
+  for (const part of String(p || '').split('>')) {
+    if (!part) { el = null; break; }
+    const [tag, i] = part.split(':');
+    el = el && [...el.children].filter((c) => !SKIP.has(c.tagName))[Number(i) - 1];
+    if (!el || el.tagName.toLowerCase() !== tag) { el = null; break; }
+  }
+  const own = (e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+  const r = el?.getBoundingClientRect();
+  const s = el && getComputedStyle(el);
+  if (el && r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && (kind !== 'text' || own(el))) {
+    return { sel: `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.')}`, w: Math.round(r.width), h: Math.round(r.height), by: 'structure', style: window.__styleOf(el) };
+  }
+  return { fallback: true };
 }
 
 async function sample(browser, url, vp, probes) {
@@ -162,7 +189,8 @@ async function sample(browser, url, vp, probes) {
   let at = null;
   for (const [p, i] of list.map((q, k) => [q, k]).sort((x, y) => x[0].scroll - y[0].scroll)) {
     if (at === null || Math.abs(at - p.scroll) > 1) at = await go(p.scroll);
-    results[i] = await page.evaluate(probeAt, [p.xs || [p.x], p.y, p.kind, p.w, p.h]);
+    const byPath = p.path ? await page.evaluate(probeByPath, [p.path, p.xs || [p.x], p.y, p.kind, p.w, p.h]) : { fallback: true };
+    results[i] = byPath.fallback ? await page.evaluate(probeAt, [p.xs || [p.x], p.y, p.kind, p.w, p.h]) : byPath;
   }
   await context.close();
   return { list, results };
@@ -180,7 +208,7 @@ try {
     // reference probes are cached until the next capture (--refresh-ref to re-measure). The reference is read twice:
     // a probe that does not agree with itself (random motion, a hover that lands by timing, a rotating word) can
     // never be matched by any clone and is set aside as unstable instead of being handed over as a gap.
-    const ref = await cached(root, { tool: 'detail', vp: vpName, max: MAX, v: 9 }, async () => {
+    const ref = await cached(root, { tool: 'detail', vp: vpName, max: MAX, v: 10 }, async () => {
       const first = await sample(browser, meta.url, vp, null);
       // a live site changes: a reference read against today's page scores a clone of yesterday's capture against the
       // wrong thing. The page height is a cheap tell; the fix is a new capture, not a new clone.
@@ -190,7 +218,7 @@ try {
       const unstable = first.list.map((p, i) => JSON.stringify(first.results[i]?.style) !== JSON.stringify(again.results[i]?.style) || first.results[i]?.sel !== again.results[i]?.sel);
       return { ...first, unstable };
     }, Boolean(flags['refresh-ref']));
-    const cl = await sample(browser, cloneUrl, vp, ref.list.map(({ x, xs, y, kind, w, h, scroll }) => ({ x, xs, y, kind, w, h, scroll })));
+    const cl = await sample(browser, cloneUrl, vp, ref.list.map(({ x, xs, y, kind, w, h, scroll }, i) => ({ x, xs, y, kind, w, h, scroll, path: ref.results[i]?.path })));
     const issues = [];
     const unstableList = [];
     let clean = 0, missing = 0;

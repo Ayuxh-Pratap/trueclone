@@ -18,7 +18,7 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -26,7 +26,7 @@ if (!name) {
   console.error('usage: trueclone interact <name> [--only "<scenario text>"] | trueclone interact <name> --draft   (scenario format: the comment at the top of scripts/interact.mjs, and SKILL.md)');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 

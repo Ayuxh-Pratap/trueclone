@@ -7,7 +7,7 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -15,7 +15,7 @@ if (!name) {
   console.error('usage: npm run states -- <name> [--step 0.5] [--viewports desktop] | <name> --clone [url] [--structure]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 const cloneMode = Boolean(flags.clone);

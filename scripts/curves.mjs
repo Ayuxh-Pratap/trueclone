@@ -14,7 +14,7 @@
 //        node scripts/curves.mjs <name> --draft      (writes motion-map.draft.json from reference/motion.<vp>.json)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -22,7 +22,7 @@ if (!name) {
   console.error('usage: npm run curves -- <name> [--viewport desktop] [--only text] | --draft');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop'));

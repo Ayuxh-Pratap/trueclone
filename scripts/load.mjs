@@ -9,7 +9,7 @@
 //   -> sites/<name>/compare/load.json, frames in compare/load/ and reference/load/
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, PNG, withTimeout, COMPARE } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, PNG, withTimeout, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -17,7 +17,7 @@ if (!name) {
   console.error('usage: trueclone load <name> [--viewport desktop|all] [--url <clone url>] [--refresh-ref]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
 const vps = !flags.viewport || flags.viewport === 'all' ? VIEWPORTS : [VIEWPORTS.find((v) => v.name === flags.viewport)].filter(Boolean);
 const TIMES = [250, 500, 1000, 2000, 4000];

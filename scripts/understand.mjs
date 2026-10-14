@@ -12,7 +12,7 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
-import { VIEWPORTS, parseArgs, newPage, settle, wheelTo, withTimeout } from './lib.mjs';
+import { VIEWPORTS, parseArgs, newPage, settle, wheelTo, withTimeout, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -20,7 +20,7 @@ if (!name) {
   console.error('usage: trueclone understand <name> [--elements 40] [--observe-ms 20000]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 const MAX_ELEMENTS = Number(flags.elements || 40);

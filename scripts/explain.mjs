@@ -5,7 +5,7 @@
 // usage: node scripts/explain.mjs <name> <y | "section label"> [--viewport desktop] [--range 800]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { PNG, parseArgs, crop, COMPARE } from './lib.mjs';
+import { PNG, parseArgs, crop, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name, where] = pos;
@@ -15,7 +15,7 @@ if (!name || where === undefined) {
 }
 const vp = flags.viewport || 'desktop';
 const range = Number(flags.range || 800);
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const read = async (rel) => fs.readFile(path.join(root, rel), 'utf8').then(JSON.parse).catch(() => null);
 
 const layout = await read(`${COMPARE}/report.mask.json`);

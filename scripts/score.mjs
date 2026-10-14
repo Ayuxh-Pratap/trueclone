@@ -16,7 +16,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, COMPARE } from './lib.mjs';
+import { parseArgs, COMPARE, siteDir } from './lib.mjs';
 
 // steps are the sibling scripts of this file, wherever the package is installed; sites/ is in the current folder
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -59,7 +59,7 @@ if (!steps.length) {
 // Incremental: a check whose inputs have not changed since its last run (the clone's files, the capture, the
 // options) is not re-measured; its last result is reported again. --fresh re-measures everything. Scoring another
 // build (--url) is always measured, since its files are not the clone's.
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const metaJson = await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').then(JSON.parse).catch(() => ({}));
 const capturedAt = metaJson.capturedAt || null;
 // every step asks the live page in the capture's language and region (lib.mjs LOCALE)

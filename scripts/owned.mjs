@@ -6,7 +6,7 @@
 // usage: node scripts/owned.mjs <name> [--viewport desktop]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, settle, sectionsOf, COMPARE } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, settle, sectionsOf, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -14,7 +14,7 @@ if (!name) {
   console.error('usage: trueclone owned <name> [--viewport desktop]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop'));
 const server = await serve(path.join(root, 'clone'));
 const browser = await openBrowser(flags.cdp);

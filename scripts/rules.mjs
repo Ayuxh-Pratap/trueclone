@@ -8,7 +8,7 @@
 //        node scripts/rules.mjs <name> --text "Car number"     (the element whose own text starts with this)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, waitStill } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, waitStill, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name, target] = pos;
@@ -16,7 +16,7 @@ if (!name || (!target && typeof flags.text !== 'string')) {
   console.error('usage: npm run rules -- <name> "<selector>[@n]" [--viewport desktop] [--clone] | <name> --text "label"');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
 const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop'));
 const server = flags.clone && typeof flags.url !== 'string' ? await serve(path.join(root, 'clone')) : null;

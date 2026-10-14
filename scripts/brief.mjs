@@ -1,0 +1,175 @@
+// One section's work packet: everything the capture knows about that part of the page, in one place, so the agent
+// never has to discover the evidence: the site's own handlers there (file:line and the code at that point), the
+// recorded motion (pins, reveals, scroll curves, class changes), the values its scripts compute there, what a visitor
+// operates there (the interaction scenarios), the canvases, and the current scores of that section at this size.
+//
+// usage: trueclone brief <name>                  the sections, with how much evidence and how far each is
+//        trueclone brief <name> <n> [--viewport desktop]   section n (1-based) -> compare/brief/<vp>-<n>.md
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, COMPARE, siteDir } from './lib.mjs';
+
+const { pos, flags } = parseArgs(process.argv.slice(2));
+const [name, nArg] = pos;
+if (!name) {
+  console.error('usage: trueclone brief <name> [<section number>] [--viewport desktop]');
+  process.exit(1);
+}
+const root = siteDir(name);
+const ref = path.join(root, 'reference');
+const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop')) || VIEWPORTS.find((v) => v.name === 'desktop');
+const read = (p, fallback = null) => fs.readFile(path.join(root, p), 'utf8').then(JSON.parse).catch(() => fallback);
+const sections = await read(`reference/${vp.name}.sections.json`, []);
+if (!sections.length) { console.error(`no reference/${vp.name}.sections.json: run capture first`); process.exit(1); }
+const scripts = await read('reference/scripts/scripts.json', { listeners: [] });
+const reveals = await read(`reference/reveals.${vp.name}.json`, {});
+const owned = (await read('reference/script-owned.json', { owned: [] })).owned || [];
+const auto = await read('reference/interactions.auto.json', []);
+const own = await read('interactions.json', []);
+const motion = await read(`reference/motion.${vp.name}.json`, { triggers: [] });
+const layout = await read(`${COMPARE}/report.mask.json`);
+const states = await read(`${COMPARE}/states/report.mask.json`);
+const hovers = await read(`${COMPARE}/hovers.${vp.name}.json`);
+const interact = await read(`${COMPARE}/interact/report.json`);
+const labelOf = (s) => (s.label || `${s.tag}${s.classes ? `.${String(s.classes).split(/\s+/).slice(0, 2).join('.')}` : ''}`).replace(/\s+/g, ' ').slice(0, 60);
+
+// Where every piece of evidence is on the clone at this size: the seed's marks sit on the same elements, and the
+// recorded paths and selectors resolve the same way they did on the reference.
+const server = await serve(path.join(root, 'clone'));
+const browser = await openBrowser();
+let placed;
+try {
+  const { page } = await newPage(browser, vp, {});
+  await page.goto(server.url, { waitUntil: 'load', timeout: 60000 });
+  placed = await page.evaluate(([curves, ownedList, scenarios, triggers]) => {
+    const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+    const byPath = (p) => {
+      let n = document.body;
+      for (const part of String(p).split('>')) {
+        const [tag, i] = part.split(':');
+        n = n && [...n.children].filter((c) => !SKIP.has(c.tagName))[Number(i) - 1];
+        if (!n || n.tagName.toLowerCase() !== tag) return null;
+      }
+      return n;
+    };
+    const bySel = (s) => { if (!s) return null; const [q, i] = String(s).split('@'); try { return document.querySelectorAll(q)[Number(i || 0)] || null; } catch { return null; } };
+    const y = (el) => (el ? Math.round(el.getBoundingClientRect().top + scrollY) : null);
+    const label = (el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.classList.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''}`;
+    const marks = (attr) => [...document.querySelectorAll(`[${attr}]`)].map((el) => ({ y: y(el), el: label(el), v: el.getAttribute(attr) }));
+    return {
+      reveals: marks('data-tc-reveal'),
+      classes: marks('data-tc-class'),
+      pins: marks('data-tc-pin'),
+      gsap: marks('data-tc-gsap'),
+      canvases: [...document.querySelectorAll('canvas')].map((c) => ({ y: y(c), el: label(c), w: c.width, h: c.height, engine: c.getAttribute('data-engine') || '' })),
+      curves: curves.map((s) => ({ y: y(byPath(s.path)), path: s.path, cls: s.cls, key: s.key, n: (s.samples || []).length, from: s.samples?.[0], to: s.samples?.at(-1) })),
+      owned: ownedList.map((o) => ({ y: y(byPath(o.path)), ...o })),
+      scenarios: scenarios.map((s) => ({ y: y(bySel(s.at?.clone || s.at?.ref)) ?? (s.at?.offset || 0), name: s.name, auto: Boolean(s.auto) })),
+      triggers: triggers.map((t) => ({ y: y(bySel(t.trigger?.sel)), sel: t.trigger?.sel, start: t.start, end: t.end, scrub: t.scrub, pin: t.pin?.sel || null })),
+      pageHeight: document.documentElement.scrollHeight,
+    };
+  }, [reveals.scrubs || [], owned, [...own, ...auto.filter((a) => a.viewport === vp.name)], motion.triggers || []]);
+} finally {
+  await browser.close();
+  server.close();
+}
+
+const ranges = sections.map((s, i) => ({ i, s, from: s.y, to: s.y + s.height }));
+const inRange = (r, y) => y !== null && y !== undefined && y >= r.from && y < r.to;
+const evidenceOf = (r) => ({
+  handlers: (scripts.listeners || []).filter((l) => (l.ys || []).some((y) => inRange(r, y))),
+  reveals: placed.reveals.filter((x) => inRange(r, x.y)),
+  classes: placed.classes.filter((x) => inRange(r, x.y)),
+  pins: placed.pins.filter((x) => inRange(r, x.y)),
+  curves: placed.curves.filter((x) => inRange(r, x.y)),
+  owned: placed.owned.filter((x) => inRange(r, x.y)),
+  scenarios: placed.scenarios.filter((x) => inRange(r, x.y)),
+  canvases: placed.canvases.filter((x) => inRange(r, x.y)),
+  triggers: placed.triggers.filter((x) => inRange(r, x.y)),
+  gsap: placed.gsap.filter((x) => inRange(r, x.y)),
+});
+const layoutOf = (r) => layout?.viewports?.find((v) => v.viewport === vp.name)?.worstSections?.find((s) => s.index === r.s.index)?.match ?? null;
+
+// ---- the list ----
+if (!nArg) {
+  console.log(`# ${name}: sections at ${vp.name} (${vp.width}x${vp.height})\n`);
+  console.log('| # | section | y | handlers | motion | operated | canvases | layout |');
+  console.log('|---|---|---|---|---|---|---|---|');
+  for (const r of ranges) {
+    const e = evidenceOf(r);
+    const motionCount = e.reveals.length + e.classes.length + e.pins.length + e.curves.length + e.triggers.length;
+    console.log(`| ${r.i + 1} | ${labelOf(r.s)} | ${r.from}-${r.to} | ${e.handlers.length} | ${motionCount} | ${e.scenarios.length} | ${e.canvases.length} | ${layoutOf(r) ?? '–'} |`);
+  }
+  console.log(`\nnext: trueclone brief ${name} <n> for a section's evidence, one section at a time`);
+  process.exit(0);
+}
+
+// ---- one section ----
+const r = ranges[Number(nArg) - 1];
+if (!r) { console.error(`no section ${nArg} (1-${ranges.length})`); process.exit(1); }
+const e = evidenceOf(r);
+const sources = new Map();
+const excerpt = async (l) => {
+  if (!l.file) return '';
+  if (!sources.has(l.file)) sources.set(l.file, (await fs.readFile(path.join(ref, 'scripts', l.file), 'utf8').catch(() => '')).split('\n'));
+  const line = sources.get(l.file)[l.line - 1] || '';
+  return (line.length > 200 ? line.slice(Math.max(0, l.column - 60), l.column + 160) : line.trim()).replace(/\|/g, '\\|').replace(/`/g, "'");
+};
+const out = [];
+const P = (s = '') => out.push(s);
+P(`# ${name}, section ${r.i + 1}: ${labelOf(r.s)} (${vp.name}, y ${r.from}-${r.to})`);
+P();
+P('Port the rule, never the code: read each handler at its line, write the behaviour in `clone/script.js` computed from the viewport, and one line per behaviour in notes.md Behaviours citing the file:line. If your script drives this section, `tcOwn(\'<selector>\')` at the top of script.js first.');
+P();
+P('## Scores here');
+P();
+P(`- layout (${vp.name}): ${layoutOf(r) ?? 'not scored yet'}`);
+const steps = states?.viewports?.find((v) => v.viewport === vp.name)?.worst?.filter((s) => inRange(r, s.y)) || [];
+P(`- scroll states in this range: ${steps.length ? steps.map((s) => `y ${s.y}: ${s.match}%`).join(', ') : 'none among the worst (or not scored yet)'}`);
+const hv = (hovers?.rows || []).filter((h) => inRange(r, h.y) && !['ok', 'static', 'unstable'].includes(h.status));
+P(`- hovers failing here: ${hv.length ? hv.map((h) => `${h.ref} ${h.status} (${h.outcome ?? '-'})`).join('; ') : 'none'}`);
+const sc = (interact?.scenarios || []).filter((s) => e.scenarios.some((x) => x.name === s.name) && !s.notBehaviour);
+P(`- interactions here: ${sc.length ? sc.map((s) => `${s.name}: ${s.expect?.pass ? 'pass' : `FAIL (${s.expect?.ref ? 'reference changes' : ''}${s.expect?.clone === false ? ', clone does not' : ''}; end state ${s.score ?? '-'})`}`).join('; ') : 'none scored'}`);
+P();
+P(`## The site's code for this section (${e.handlers.length} handler(s))`);
+P();
+if (e.handlers.length) {
+  P('| event | handler | on | code at the handler |');
+  P('|---|---|---|---|');
+  for (const l of e.handlers.slice(0, 40)) P(`| ${l.type} | \`${l.file}:${l.line}:${l.column}\` | ${l.elements.slice(0, 3).join(', ')} | \`${await excerpt(l)}\` |`);
+} else P('No listener sits on an element in this range. Its behaviour, if any, is driven from elsewhere: the scroll triggers and recorded motion below, or a handler on document/window (reference/scripts/INDEX.md).');
+P();
+P('## Motion here (recorded on the reference: evidence of what the code does)');
+P();
+for (const t of e.triggers) P(`- ScrollTrigger on \`${t.sel}\`: start "${t.start}", end "${t.end}"${t.scrub !== false ? `, scrub ${t.scrub}` : ''}${t.pin ? `, pins \`${t.pin}\`` : ''}`);
+for (const p of e.pins) P(`- pin: \`${p.el}\` for ${p.v}px (sticky in the seed; data-tc-pin)`);
+if (e.reveals.length) P(`- ${e.reveals.length} one-shot reveal(s) replayed by the seed's player (${e.reveals.slice(0, 4).map((x) => `\`${x.el}\``).join(', ')}${e.reveals.length > 4 ? '…' : ''}); tcOwn takes them over`);
+if (e.classes.length) P(`- ${e.classes.length} scroll class change(s) replayed by the player (${e.classes.slice(0, 4).map((x) => `\`${x.el}\``).join(', ')})`);
+for (const c of e.curves.slice(0, 12)) P(`- scroll curve (not replayed, yours to write): \`${c.cls || c.path}\` ${c.n} samples from ${JSON.stringify(c.from)} to ${JSON.stringify(c.to)}`);
+if (e.gsap.length) P(`- ${e.gsap.length} element(s) with GSAP-written transforms (data-tc-gsap): tcOwn clears them before your script animates`);
+if (!e.triggers.length && !e.pins.length && !e.reveals.length && !e.classes.length && !e.curves.length) P('- none recorded');
+P();
+P('## Values its scripts compute here (script-owned: removed from the seed, yours to compute)');
+P();
+if (e.owned.length) for (const o of e.owned.slice(0, 20)) P(`- \`${o.path}\` ${o.prop}: ${o.samples.join(' | ')}`);
+else P('- none');
+P();
+P('## What a visitor operates here (scored by the interaction check)');
+P();
+if (e.scenarios.length) for (const s of e.scenarios) P(`- ${s.name}${s.auto ? ' (found by the capture)' : ''}`);
+else P('- nothing found');
+P();
+if (e.canvases.length) {
+  P('## Canvases here (scored: what each draws)');
+  P();
+  for (const c of e.canvases) P(`- \`${c.el}\` ${c.w}x${c.h}${c.engine ? ` (${c.engine})` : ''}`);
+  P();
+}
+P('## Check after each change');
+P();
+P(`\`npx trueclone score ${name} --only layout,states${e.scenarios.length ? ',interact' : ''}${hv.length ? ',hovers' : ''} --viewport ${vp.name}\`, then \`npx trueclone review ${name} --size wide\` once this section looks right.`);
+const file = path.join(root, COMPARE, 'brief', `${vp.name}-${r.i + 1}.md`);
+await fs.mkdir(path.dirname(file), { recursive: true });
+await fs.writeFile(file, out.join('\n') + '\n');
+console.log(out.join('\n'));
+console.log(`\n-> ${path.relative(process.cwd(), file)}`);

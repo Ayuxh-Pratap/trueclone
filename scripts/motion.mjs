@@ -9,7 +9,7 @@
 // usage: node scripts/motion.mjs <name> [--viewport desktop|tablet|mobile]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, statesInPage } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, statesInPage, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -17,7 +17,7 @@ if (!name) {
   console.error('usage: npm run motion -- <name> [--viewport desktop]');
   process.exit(1);
 }
-const ref = path.resolve('sites', name, 'reference');
+const ref = path.join(siteDir(name), 'reference');
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop'));
 
@@ -46,7 +46,7 @@ const INIT = () => {
 // bundle its own GSAP (window.VARSITY.gsap), never expose Lenis, or only mark its three.js canvases (data-engine).
 // Sets window.__labGsap / __labST for the other probes; returns what was found and where.
 function findRuntimes() {
-  const found = { gsap: null, gsapAt: null, st: null, stAt: null, lenis: [], three: null };
+  const found = { gsap: null, gsapAt: null, st: null, stAt: null, lenis: [], three: null, all: [], allST: [] };
   const isGsap = (v) => v && typeof v === 'object' && typeof v.to === 'function' && typeof v.timeline === 'function' && v.globalTimeline;
   const isST = (v) => v && typeof v === 'function' && typeof v.getAll === 'function' && typeof v.refresh === 'function' && typeof v.create === 'function';
   const isLenis = (v) => v && typeof v === 'object' && typeof v.raf === 'function' && typeof v.scrollTo === 'function' && v.options && typeof v.options === 'object';
@@ -57,8 +57,8 @@ function findRuntimes() {
     // anything here may be hostile to read: a cross-origin frame's window, a getter that throws, a Proxy
     try {
       if (v instanceof Node) return;
-      if (!found.gsap && isGsap(v)) { found.gsap = v; found.gsapAt = at; }
-      if (!found.st && isST(v)) { found.st = v; found.stAt = at; }
+      if (isGsap(v) && !found.all.some((g) => g.v === v)) found.all.push({ v, at });
+      if (isST(v) && !found.allST.some((s) => s.v === v)) found.allST.push({ v, at });
       if (isLenis(v) && found.lenis.length < 4) found.lenis.push({ at, options: JSON.parse(JSON.stringify(v.options, (k, x) => (typeof x === 'function' ? `[function ${x.name || 'anonymous'}]` : x instanceof Node ? `[element ${x.nodeName.toLowerCase()}]` : x === window ? '[window]' : x))) });
     } catch { return; }
     if (depth >= 2) return;
@@ -67,13 +67,22 @@ function findRuntimes() {
     for (const k of keys) { let x; try { x = v[k]; } catch { continue; } visit(x, `${at}.${k}`, depth + 1); }
   };
   for (const k of Object.keys(window)) { if (/^(webkit|on)|^(document|navigator|location|history|localStorage|sessionStorage|caches|crypto|performance|chrome|frames|parent|top|self|opener)$/.test(k)) continue; let v; try { v = window[k]; } catch { continue; } visit(v, `window.${k}`, 0); }
-  // a ScrollTrigger registered on the GSAP found, even if never exposed itself
-  if (!found.st && found.gsap?.core?.globals) { const g = found.gsap.core.globals(); if (isST(g?.ScrollTrigger)) { found.st = g.ScrollTrigger; found.stAt = `${found.gsapAt}.core.globals().ScrollTrigger`; } }
+  // A page can load two GSAPs (a CMS's and the site's own bundle): the one driving the page is the one with the most
+  // scroll triggers and running animations. Each GSAP's ScrollTrigger is the one registered on it.
+  const stOf = (g) => { try { const s = g.core?.globals?.()?.ScrollTrigger; return isST(s) ? s : null; } catch { return null; } };
+  const weight = (g) => { try { return (stOf(g)?.getAll().length || 0) * 10 + g.globalTimeline.getChildren(true, true, true).length; } catch { return 0; } };
+  const best = found.all.slice().sort((a, b) => weight(b.v) - weight(a.v))[0];
+  if (best) {
+    found.gsap = best.v; found.gsapAt = best.at;
+    const st = stOf(best.v);
+    if (st) { found.st = st; found.stAt = `${best.at}.core.globals().ScrollTrigger`; }
+  }
+  if (!found.st && found.allST[0]) { found.st = found.allST[0].v; found.stAt = found.allST[0].at; }
   const engines = [...new Set([...document.querySelectorAll('canvas[data-engine]')].map((c) => c.getAttribute('data-engine')))];
   found.three = window.THREE?.REVISION || window.__THREE__ || engines.find((e) => /three/i.test(e)) || null;
   window.__labGsap = found.gsap;
   window.__labST = found.st;
-  return { gsapAt: found.gsapAt, gsapVersion: found.gsap?.version || null, stAt: found.stAt, lenis: found.lenis, three: found.three, engines };
+  return { gsapAt: found.gsapAt, gsapVersion: found.gsap?.version || null, gsaps: found.all.map((g) => ({ at: g.at, version: g.v.version, weight: weight(g.v) })), stAt: found.stAt, lenis: found.lenis, three: found.three, engines };
 }
 
 function inventory() {
@@ -164,7 +173,7 @@ function inventory() {
   window.__lab = { describe, target };
   return {
     libs: {
-      gsap: gsap?.version, gsapAt: runtimes?.gsapAt, ScrollTrigger: Boolean(ScrollTrigger), ScrollTriggerAt: runtimes?.stAt,
+      gsap: gsap?.version, gsapAt: runtimes?.gsapAt, gsaps: runtimes?.gsaps || [], ScrollTrigger: Boolean(ScrollTrigger), ScrollTriggerAt: runtimes?.stAt,
       SplitText: Boolean(window.SplitText || gsap?.core?.globals?.()?.SplitText), CustomEase: Boolean(window.CustomEase || gsap?.core?.globals?.()?.CustomEase),
       Lenis: Boolean(window.Lenis) || Boolean(runtimes?.lenis?.length), Swiper: Boolean(window.Swiper), three: runtimes?.three || null, engines: runtimes?.engines || [],
       jquery: window.jQuery?.fn?.jquery, webflow: Boolean(window.Webflow), hls: Boolean(window.Hls), lottie: Boolean(window.lottie),

@@ -18,7 +18,7 @@ import net from 'node:net';
 import { parse, serialize } from 'parse5';
 import { transform as transformCss } from 'lightningcss';
 import { fileURLToPath as toPath } from 'node:url';
-import { parseArgs } from './lib.mjs';
+import { parseArgs, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -26,7 +26,7 @@ if (!name) {
   console.error('usage: npm run next -- <name> [--install] [--build] [--verify] [--port 3100]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const cloneDir = path.join(root, 'clone');
 const out = path.join(root, 'next');
 const port = Number(flags.port || 3100);

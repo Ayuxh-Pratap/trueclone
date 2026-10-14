@@ -19,6 +19,10 @@ const require = createRequire(import.meta.url);
 const { name, version } = JSON.parse(await fs.readFile(path.join(PKG, 'package.json'), 'utf8'));
 
 const STEPS = {
+  status: ['status.mjs', 'where the clone stands and the one next step, from the files alone (exit 0 only when every gate passes)'],
+  brief: ['brief.mjs', 'one section\'s evidence: the site\'s handlers (file:line + code), recorded motion, script-owned values, what a visitor operates, scores'],
+  vendor: ['vendor.mjs', 'the site\'s libraries at the site\'s versions (GSAP + plugins, Lenis, three.js, Swiper) into clone/patches/'],
+  serve: ['serve.mjs', 'open the clone (or --next, the built app) on a free port'],
   capture: ['capture.mjs', 'capture a live page at 5 sizes (3 to build from, 2 held out), its scripts, assets, rendered HTML, inline values at extra sizes'],
   seed: ['seed.mjs', 'clone/ from the script-free mirror: structure, viewport functions, pins, reveals (--patches: re-apply clone/patches/ only)'],
   design: ['design.mjs', 'design-tokens.json -> DESIGN.md (linted), shadcn globals.css, clone/tokens.css'],
@@ -82,7 +86,7 @@ async function init() {
   await fs.copyFile(path.join(PKG, 'skill', 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
   // 2. AGENTS.md block for Codex, Cursor and other agents
   const agentsFile = path.join(cwd, 'AGENTS.md');
-  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first and follow it step by step. Run every step with \`npx trueclone <step> <name>\` and finish only when \`npx trueclone score <name>\` passes the targets in the skill; \`sites/<name>/REPORT.md\` is the deliverable.\n<!-- trueclone:end -->\n`;
+  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first. Then capture, and loop: run \`npx trueclone status <name>\`, do exactly the step it names, run it again. Do not end your turn or ask whether to continue while \`status\` says work is left (only a real blocker stops you: write it under Findings in notes.md). Done is \`status\` reporting that every gate passes; \`sites/<name>/REPORT.md\` is the deliverable.\n<!-- trueclone:end -->\n`;
   let agents = (await exists(agentsFile)) ? await fs.readFile(agentsFile, 'utf8') : '';
   agents = agents.includes('<!-- trueclone:start -->') ? agents.replace(/<!-- trueclone:start -->[\s\S]*?<!-- trueclone:end -->\n?/, block) : `${agents}${agents && !agents.endsWith('\n\n') ? '\n' : ''}${block}`;
   await fs.writeFile(agentsFile, agents);

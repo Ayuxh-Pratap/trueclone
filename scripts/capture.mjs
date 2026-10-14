@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 import { detectInPage } from './interactions-auto.mjs';
 
@@ -27,7 +27,7 @@ if (mode === 'exact' && !permission) {
   console.error('exact mode copies the site\'s own text and media. Pass --permission "<owner / who authorised this copy>".');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const MAX_ASSET_BYTES = mode === 'exact' ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
 // A saved asset's file name: hash + the URL's base name, with the extension its type needs. A URL like

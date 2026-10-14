@@ -17,7 +17,7 @@ export async function startScriptEvidence(page, pageUrl) {
   cdp.on('Debugger.scriptParsed', (e) => {
     if (!e.executionContextAuxData?.isDefault) return; // the page's own world, not tooling
     if (!e.url) return; // eval'd code
-    scripts.set(e.scriptId, { url: e.url, inline: e.url.split('#')[0] === pageUrl.split('#')[0], start: e.startLine });
+    scripts.set(e.scriptId, { url: e.url, inline: e.url.split('#')[0] === pageUrl.split('#')[0], start: e.startLine, startColumn: e.startColumn });
   });
   await cdp.send('Debugger.enable');
   await cdp.send('Profiler.enable');
@@ -84,6 +84,20 @@ export async function startScriptEvidence(page, pageUrl) {
     } catch { /* not React, or not readable */ }
     if (unwrapped) console.log(`scripts: ${unwrapped} listener(s) traced past a wrapper (error tracking, zone.js) to the handler itself`);
     const labels = new Map();
+    // where an element is on the page (desktop, document y), so a section's brief can list the handlers inside it
+    const ys = new Map();
+    const yOf = async (backendNodeId) => {
+      if (!backendNodeId) return null;
+      if (ys.has(backendNodeId)) return ys.get(backendNodeId);
+      let y = null;
+      try {
+        const { object } = await cdp.send('DOM.resolveNode', { backendNodeId, objectGroup: 'tc' });
+        const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, functionDeclaration: 'function () { if (!this.getBoundingClientRect) return null; const r = this.getBoundingClientRect(); return r.width || r.height ? Math.round(r.top + scrollY) : null; }', returnByValue: true });
+        y = result.value ?? null;
+      } catch { /* detached */ }
+      ys.set(backendNodeId, y);
+      return y;
+    };
     const labelOf = async (backendNodeId) => {
       if (!backendNodeId) return 'window';
       if (labels.has(backendNodeId)) return labels.get(backendNodeId);
@@ -128,10 +142,16 @@ export async function startScriptEvidence(page, pageUrl) {
     for (const l of listeners) {
       const f = files.get(l.scriptId);
       const key = `${l.type}|${l.scriptId}|${l.lineNumber}|${l.columnNumber}`;
-      if (!groups.has(key)) groups.set(key, { type: l.type, file: f?.file || null, url: f?.url || null, line: l.lineNumber + 1, column: l.columnNumber, elements: [] });
+      // positions in the saved file: an inline script's are reported in the page (its first line starts at the
+      // <script> tag's column), its file starts at line 1, column 0
+      const s = scripts.get(l.scriptId) || {};
+      const fileLine = l.lineNumber - (s.start || 0);
+      const fileCol = fileLine === 0 ? l.columnNumber - (s.startColumn || 0) : l.columnNumber;
+      if (!groups.has(key)) groups.set(key, { type: l.type, file: f?.file || null, url: f?.url || null, line: fileLine + 1, column: fileCol, elements: [], ys: [] });
       const g = groups.get(key);
       if (g.elements.length < 6) g.elements.push(await labelOf(l.backendNodeId));
       else g.more = (g.more || 0) + 1;
+      if (g.ys.length < 40) { const y = await yOf(l.backendNodeId); if (y !== null) g.ys.push(y); }
     }
     const excerpt = (f, line, col) => {
       const text = f?.source.split('\n')[line - 1 - (f.inline ? 0 : 0)] || '';

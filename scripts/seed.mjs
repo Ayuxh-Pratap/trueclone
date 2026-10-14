@@ -12,7 +12,7 @@
 // usage: node scripts/seed.mjs <name> [--force]   (--force overwrites an existing clone/)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { parseArgs, openBrowser, newPage, serve, VIEWPORTS } from './lib.mjs';
+import { parseArgs, openBrowser, newPage, serve, VIEWPORTS, siteDir } from './lib.mjs';
 import { planInlineStyles } from './viewport-fit.mjs';
 
 // placeholder vocabulary, wide enough to match most word widths
@@ -214,7 +214,7 @@ if (!name) {
   console.error('usage: trueclone seed <name> [--force] [--hide-until-boot "<selectors a script rebuilds at boot>"]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 const exact = meta.mode === 'exact' && Boolean(meta.permission);

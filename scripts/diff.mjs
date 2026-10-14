@@ -3,7 +3,7 @@
 // Without --url it serves sites/<name>/clone/ itself on a free local port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, crop, match, PNG, COMPARE } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, crop, match, PNG, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -11,7 +11,7 @@ if (!name) {
   console.error('usage: npm run diff -- <name> [--url <dev server url>]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const out = path.join(root, COMPARE);
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));

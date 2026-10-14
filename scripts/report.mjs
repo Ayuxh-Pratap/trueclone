@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { parseArgs, COMPARE, REPORT_FILE } from './lib.mjs';
+import { parseArgs, COMPARE, REPORT_FILE, siteDir } from './lib.mjs';
 
 const { pos } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -14,7 +14,7 @@ if (!name) {
   console.error('usage: trueclone report <name>');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const read = (rel) => fs.readFile(path.join(root, rel), 'utf8').then(JSON.parse, () => null);
 const meta = await read('reference/meta.json');
 if (!meta) {
@@ -61,8 +61,13 @@ for (const size of ['wide', 'laptop', 'desktop', 'tablet', 'mobile']) {
     reviewFrames.push({ size, id: x.id, pct: x.pct, verdict: v ? v.slice(v.indexOf(':') + 1).trim() : null });
   }
 }
-const reviewOpen = reviewFrames.filter((x) => !x.verdict || !/^same\b/i.test(x.verdict));
-const findings = notesSection('Findings');
+// a frame is closed when it is "same", or "tool: <why>; evidence: <file>" with the file there (a difference proved to
+// be the instrument's, not the clone's); "differs" and frames without a verdict are open
+const reviewClosed = (v) => Boolean(v) && (/^same\b/i.test(v) || (/^tool\b/i.test(v) && /evidence:\s*([^\s;,)]+)/i.test(v) && fsSync.existsSync(path.resolve(root, /evidence:\s*([^\s;,)]+)/i.exec(v)[1]))));
+const reviewOpen = reviewFrames.filter((x) => !reviewClosed(x.verdict));
+// findings under any heading that says so ("## Findings", "## Progress / findings", "## Tool findings")
+const findings = [...notes.matchAll(/^## [^\n]*finding[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/gim)]
+  .flatMap((m) => m[1].replace(/<!--[\s\S]*?-->/g, '').split('\n').map((l) => l.trim()).filter((l) => /^[-*]\s+\S/.test(l)).map((l) => l.replace(/^[-*]\s+/, '')));
 // an entry needs `evidence: <file>` naming a file in the site folder (a crop, a measurement): a reason without proof
 // is a gap, not a decision
 const hasEvidence = (a) => { const m = /evidence:\s*([^\s;,)]+)/i.exec(a); return Boolean(m && fsSync.existsSync(path.resolve(root, m[1]))); };
@@ -75,8 +80,20 @@ const C = Object.fromEntries(VPS.map((v) => [v, curves[v]?.score]));
 
 const rows = [];
 // `test` is a per-width predicate (value, width) => boolean, or a ready boolean/null for single-value checks
+// When each check was last measured, against when the clone last changed: a number measured before the change
+// describes a clone that no longer exists, so it is shown as stale and cannot pass (score again).
+const cloneChanged = (() => {
+  let t = 0;
+  const walk = (d) => { for (const e of fsSync.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p); } else t = Math.max(t, fsSync.statSync(p).mtimeMs); } };
+  try { walk(path.join(root, COMPARE === 'compare' ? 'clone' : 'next')); } catch { /* no clone */ }
+  return t;
+})();
+const measuredAt = { layout: layout?.at, scroll: states?.at, canvases: states?.at, detail: detail?.at, hovers: hovers?.at, load: load?.at, interactions: interact?.at, motion: Object.values(curves).map((c) => c?.at).filter(Boolean).sort()[0] };
+const isStale = (key) => Boolean(measuredAt[key]) && Date.parse(measuredAt[key]) < cloneChanged - 1000;
 const row = (check, values, test, note = '') => {
-  const ok = typeof test === 'function' ? all(values, test) : test;
+  const key0 = check.split(' ')[0].toLowerCase();
+  if (isStale(key0)) note = `**stale: measured ${String(measuredAt[key0]).slice(0, 16).replace('T', ' ')}, before the clone's last change; score again** ${note}`;
+  const ok = isStale(key0) ? false : typeof test === 'function' ? all(values, test) : test;
   // below target, but every failing width has an accepted entry in notes.md: the decision is recorded, not hidden
   const key = check.split(' ')[0].toLowerCase();
   const failing = typeof test === 'function' ? present(values).filter((v) => !test(values[v], v)) : ok === false ? present(values) : [];
@@ -84,7 +101,10 @@ const row = (check, values, test, note = '') => {
   const covered = failing.length && failing.every((v) => (typeof values[v] !== 'number' || values[v] >= ACCEPT_FLOOR) && acceptedFor(key, v).length);
   const stale = drift?.stale && ['detail', 'hovers', 'motion', 'load', 'interactions'].includes(key) ? ' **stale capture**' : '';
   rows.push(`| ${check} | ${VPS.map((v) => pct(values[v])).join(' | ')} | ${mark(ok, covered ? acceptedFor(key)[0].slice(0, 60) : null)}${stale} | ${note} |`);
+  // the same verdict, machine-readable (verdict.json), for trueclone status
+  if (ok !== null && ok !== undefined) checks.push({ check, key, pass: ok === true || Boolean(covered), accepted: Boolean(covered), stale: isStale(key0), failing: covered ? [] : failing.map((v) => ({ viewport: v, value: values[v] })) });
 };
+const checks = [];
 const present = (vals) => VPS.filter((v) => vals[v] !== undefined && vals[v] !== null);
 const all = (vals, test) => (present(vals).length ? present(vals).every((v) => test(vals[v], v)) : null);
 row(`Layout (structure)`, L, (x) => x >= T.layout, `target ≥ ${T.layout}%; text and media masked`);
@@ -100,8 +120,15 @@ const tts = (side) => VPS.map((v) => load?.viewports.find((x) => x.viewport === 
 row('Load sequence', LD, (x) => x >= T.load, present(LD).length ? `target ≥ ${T.load}%; how settled each side is at 0.25 to 4 s, cold cache, same network (settled at: reference ${tts('ref').map((x) => `${x}ms`).join(' / ') || '–'}, clone ${tts('clone').map((x) => `${x}ms`).join(' / ') || '–'})` : 'not measured (trueclone load <name>)');
 if (reviewFrames.length) {
   const sizes = [...new Set(reviewFrames.map((x) => x.size))];
-  rows.push(`| Review (by eye) | ${VPS.map((v) => (sizes.includes(v) ? `${reviewFrames.filter((x) => x.size === v && x.verdict && /^same\b/i.test(x.verdict)).length}/${reviewFrames.filter((x) => x.size === v).length}` : '–')).join(' | ')} | ${reviewOpen.length ? '**below target**' : 'pass'} | frames signed off "same" in notes.md (trueclone review) |`);
+  rows.push(`| Review (by eye) | ${VPS.map((v) => (sizes.includes(v) ? `${reviewFrames.filter((x) => x.size === v && reviewClosed(x.verdict)).length}/${reviewFrames.filter((x) => x.size === v).length}` : '–')).join(' | ')} | ${reviewOpen.length ? '**below target**' : 'pass'} | frames closed in notes.md: "same", or "tool" with an evidence file (trueclone review) |`);
 } else rows.push(`| Review (by eye) | – | – | – | – | – | **below target** | not done: run trueclone review <name> and give every frame a verdict in notes.md |`);
+// the written plan: behaviours in notes.md, each tied to the site's own code (file:line) when the site has handlers
+const behaviours = notesSection('Behaviours').join('\n');
+const cites = (behaviours.match(/[\w.-]+\.js:\d+/g) || []).length;
+const siteListeners = ((await read('reference/scripts/scripts.json'))?.listeners || []).length;
+const notesOk = Boolean(behaviours) && (!siteListeners || cites > 0);
+rows.push(`| Notes (behaviours) | ${cites} cited | – | – | – | – | ${notesOk ? 'pass' : '**below target**'} | ${notesOk ? 'notes.md Behaviours tie each behaviour to the site\'s code' : behaviours ? 'notes.md Behaviours cite no file:line of the site\'s code (trueclone brief lists them per section)' : 'notes.md has no Behaviours yet (trueclone brief <name> <n>, one section at a time)'} |`);
+checks.push({ check: 'Notes (behaviours)', key: 'notes', pass: notesOk, failing: notesOk ? [] : [{ viewport: null, value: cites }] });
 // scenarios the capture found where the reference itself does not react are not behaviour: not counted
 const scenarios = (interact?.scenarios || []).filter((s) => !s.notBehaviour);
 const failed = scenarios.filter((s) => s.expect && !s.expect.pass);
@@ -110,6 +137,9 @@ const retired = interact?.skipped || [];
 row('Interactions', { desktop: scenarios.length ? +(scenarios.reduce((n, s) => n + (s.score || 0), 0) / scenarios.length).toFixed(2) : undefined }, scenarios.length ? failed.length === 0 : null,
   scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change on both sides and end in the reference's state (≥ 95)${autoCount ? `; ${autoCount} found by the capture` : ''}${failed.length ? `; failing: ${failed.slice(0, 4).map((s) => s.name).join(', ')}${failed.length > 4 ? '…' : ''}` : ''}${retired.length ? `; retired: ${retired.map((s) => `${s.name} (${s.why})`).join(', ')}` : ''}` : 'no scenarios (interactions.json, or reference/interactions.auto.json from capture)');
 
+checks.push({ check: 'Review (by eye)', key: 'review', pass: reviewFrames.length > 0 && !reviewOpen.length, failing: reviewFrames.length ? reviewOpen.map((x) => ({ viewport: x.size, frame: x.id, verdict: x.verdict })) : [{ viewport: null, frame: null, verdict: 'not done' }] });
+await fs.mkdir(path.join(root, COMPARE), { recursive: true });
+await fs.writeFile(path.join(root, COMPARE, 'verdict.json'), JSON.stringify({ at: new Date().toISOString(), drift: Boolean(drift?.stale), checks }, null, 2));
 const failing = rows.filter((r) => r.includes('below target')).length;
 const acceptedCount = rows.filter((r) => r.includes('| accepted (')).length;
 const verdict = (failing ? `${failing} check(s) below target` : 'every scored check meets its target') + (acceptedCount ? ` (${acceptedCount} accepted with a reason in notes.md)` : '') + (drift?.stale ? '; the live site has changed since the capture: re-capture before trusting the live-measured checks' : '');

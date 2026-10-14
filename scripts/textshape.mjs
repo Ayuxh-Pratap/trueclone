@@ -17,7 +17,7 @@
 //           works where the list still drifts, and for a placeholder repeated in a data array)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, waitStill } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, waitStill, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -25,7 +25,7 @@ if (!name) {
   console.error('usage: npm run textshape -- <name> [--viewport desktop] [--write]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
 if (meta.mode === 'exact') {
   console.error('exact mode clones carry the real text already; textshape is for template clones');
@@ -319,9 +319,42 @@ try {
     }
   } else {
     const max = await clone.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    // Horizontal scrollers (a gallery of cards) hold text beyond the first screen sideways: both sides' scroller (the
+    // same element: found by its place in the document, which the seed keeps) are stepped sideways together and the
+    // blocks paired at every step, like the vertical windows.
+    const scrollersInView = () => {
+      const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+      const pathOf = (el) => { const parts = []; for (let n = el; n && n !== document.body && n.parentElement; n = n.parentElement) parts.unshift(`${n.tagName.toLowerCase()}:${[...n.parentElement.children].filter((c) => !SKIP.has(c.tagName)).indexOf(n) + 1}`); return parts.join('>'); };
+      const out = [];
+      for (const el of document.body.querySelectorAll('*')) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > innerHeight || r.width < 160) continue;
+        const s = getComputedStyle(el);
+        if (/(auto|scroll)/.test(s.overflowX) && el.scrollWidth > el.clientWidth + 24) out.push({ path: pathOf(el), steps: Math.min(8, Math.ceil((el.scrollWidth - el.clientWidth) / (el.clientWidth * 0.8))) });
+      }
+      return out;
+    };
+    const setScroll = ([p, x]) => {
+      const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+      let el = document.body;
+      for (const part of p.split('>')) { const [tag, i] = part.split(':'); el = el && [...el.children].filter((c) => !SKIP.has(c.tagName))[Number(i) - 1]; if (!el || el.tagName.toLowerCase() !== tag) return false; }
+      el.style.scrollBehavior = 'auto';
+      el.scrollLeft = x * el.clientWidth * 0.8;
+      return true;
+    };
+    const sideways = new Set();
     for (let y = 0; ; y += Math.round(vp.height / 2)) {
       const at = Math.min(y, max);
       await Promise.all([ref, clone].map(async (p) => { await p.evaluate((yy) => window.scrollTo(0, yy), at); await waitStill(p, { timeout: 3000 }); }));
+      const steps = [null];
+      for (const s of await clone.evaluate(scrollersInView)) if (!sideways.has(s.path)) { sideways.add(s.path); for (let k = 1; k <= s.steps; k++) steps.push([s.path, k]); steps.push([s.path, 0]); }
+      for (const step of steps) {
+      if (step) {
+        const ok = await Promise.all([ref, clone].map((p) => p.evaluate(setScroll, step)));
+        if (!ok.every(Boolean)) continue;
+        await Promise.all([ref, clone].map((p) => waitStill(p, { timeout: 1500 })));
+        if (step[1] === 0) continue; // back to the start: nothing new to pair
+      }
       for (const c of await clone.evaluate(blocksInView)) {
         if (seen.has(c.id)) continue;
         const r = await ref.evaluate(refBlockAt(c.x, c.y));
@@ -342,6 +375,7 @@ try {
           continue;
         }
         await consider(r, c, at);
+      }
       }
       if (at >= max) break;
     }

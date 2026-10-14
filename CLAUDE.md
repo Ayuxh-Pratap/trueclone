@@ -15,7 +15,11 @@ trueclone builds the exact same website from its URL, at every screen size (HTML
 | Path | What |
 |---|---|
 | `bin/trueclone.mjs` | The CLI: `init` (`--with-rea` for REA as MCP), `doctor`, `<url>` shortcut, `rea` passthrough, one command per step script |
-| `skill/SKILL.md` | The agent workflow `init` installs. **The product's brain: keep it in step with the scripts** |
+| `skill/SKILL.md` | The agent workflow `init` installs: capture, then the `status` loop, the rules, notes.md, reference. **Keep it in step with the scripts** |
+| `scripts/status.mjs` | Where a clone stands and the one next step, from the files alone (the process lives here, not in the model): reads, design, seed, briefs, Behaviours with file:line, script.js, fresh scores, failing checks in fix order, review, Next app; exit 0 only when every gate passes |
+| `scripts/brief.mjs` | One section's evidence in one page: the site's handlers there (file:line + code), recorded motion, script-owned values, what a visitor operates, canvases, scores |
+| `scripts/vendor.mjs` | The site's libraries at its versions (the busiest GSAP + plugins, Lenis, three.js, Swiper) into clone/patches/ |
+| `scripts/serve.mjs` | The clone or the built Next app on a free port |
 | `scripts/lib.mjs` | Shared: `VIEWPORTS` (build sizes), `HELD_OUT` and `SCORED`, browser/page setup with timeouts, settle/freeze, scroll (`wheelTo`), masks (re-marked by an observer), pixel match, `canvasSimilarity`, compressed `serve()`, reference cache |
 | `scripts/capture.mjs` | Full-page screenshots (shot until stable) at the 5 scored sizes, sections, tokens, rendered HTML (view-mounted content, declarative shadow DOM), assets, HAR, script evidence (`scripts-evidence.mjs`), inline styles at extra sizes inside the breakpoint ranges of the site's stylesheets and scripts (`matchMedia`), read settled before any screenshot (`inline-styles.json`), script-free mirror (SRI dropped, missing media fetched) |
 | `scripts/scripts-evidence.mjs` | Every script the page ran, saved and beautified, ranked by V8 coverage, every listener located (CDP) past error-tracking and framework wrappers, React props handlers included → `reference/scripts/INDEX.md` |
@@ -32,12 +36,12 @@ trueclone builds the exact same website from its URL, at every screen size (HTML
 | `scripts/curves.mjs` | Motion score: sampled property curves |
 | `scripts/interact.mjs` | Scenarios on both sides, three at a time; pass = change on both sides and the same end state (≥ 95); the agent's `interactions.json` plus `reference/interactions.auto.json` (`--auto` re-detects) |
 | `scripts/interactions-auto.mjs` | What a visitor can operate (scrollers, carousels, tabs, accordions, menus, dialogs), found on the reference at each build size and written as scenarios |
-| `scripts/detail.mjs` | Style diff at matching points; reference read twice, unstable probes excluded |
+| `scripts/detail.mjs` | Style diff of the same elements (paired by document path, page point where the clone rebuilt it); reference read twice, unstable probes excluded |
 | `scripts/hovers.mjs` | Every control and every element with a hover listener (CDP); outcome compared as pixels |
 | `scripts/load.mjs` | Load sequence at every scored size, each side twice, noise reported |
-| `scripts/review.mjs` | Reference and clone side by side at a held-out size; the agent's verdicts in `notes.md` are counted by the report |
+| `scripts/review.mjs` | Reference and clone side by side at any size: load frames from each side's load event, lazy media loaded first, every scroll position verified and recorded, contact sheets; verdicts same / differs / tool (with evidence) in notes.md |
 | `scripts/rules.mjs` | Every CSS rule matching an element (+ pseudo-elements, `@media`), cross-origin sheets included |
-| `scripts/textshape.mjs` | Template mode: placeholder words with the reference's rendered word widths |
+| `scripts/textshape.mjs` | Template mode: placeholder words with the reference's rendered word widths, inside horizontal scrollers too |
 | `scripts/next.mjs` | Next.js app from the clone: site layer order first in globals, head links and seed head scripts carried, relative `@import`s carried, declarations the Next CSS parser rejects removed as the browser ignores them (Lightning CSS, the version Next ships), namespaced attributes dropped, numeric and boolean attributes typed, inline whitespace kept, scripts preloaded and run at hydration; `--verify` serves on a port free on every interface, checks the app identifies itself, and scores into `REPORT.next.md` / `compare-next/` (`TC_COMPARE`/`TC_REPORT`) |
 | `scripts/score.mjs`, `scripts/report.mjs` | All checks in groups with time limits (`--only`, `--viewport`, unchanged checks kept, `--fresh`); `REPORT.md` with build and held-out columns, review, accepted differences (≥ 95 and evidence only), findings |
 | `scripts/explain.mjs`, `diff.mjs`, `spec.mjs`, `tiles.mjs` | One place on the page; layout diff; measured boxes; screenshot tiles |
@@ -52,7 +56,7 @@ After changing a scoring or seeding script, re-run the probes and compare with t
 
 ## Rules
 
-- Scripts must work from any folder: resolve siblings with `import.meta.url`, packages with `import.meta.resolve`; `sites/` is always relative to the current folder.
+- Scripts must work from any folder: resolve siblings with `import.meta.url`, packages with `import.meta.resolve`, a site with `siteDir(name)` (lib.mjs: the nearest `sites/<name>` up from the current folder).
 - Rendering must stay identical between capture and scoring: same sizes, frozen animations, deviceScaleFactor 1. Change both sides together (`scripts/lib.mjs`).
 - Measure both sides the same way. Any asymmetry shows up as fake gaps.
 - Nothing that builds the clone may read the held-out sizes.

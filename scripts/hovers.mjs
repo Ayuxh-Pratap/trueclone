@@ -10,7 +10,7 @@
 // usage: node scripts/hovers.mjs <name> [--viewport desktop] [--url <clone url>] [--max 60] [--refresh-ref]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -18,7 +18,7 @@ if (!name) {
   console.error('usage: trueclone hovers <name> [--viewport desktop] [--url <clone url>] [--max 60]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
 const vp = SCORED.find((v) => v.name === (flags.viewport || 'desktop'));
 const MAX = Number(flags.max || 60);

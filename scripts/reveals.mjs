@@ -18,7 +18,7 @@
 // usage: node scripts/reveals.mjs <name> [--viewport desktop]   -> sites/<name>/reference/reveals.<vp>.json
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -26,7 +26,7 @@ if (!name) {
   console.error('usage: trueclone reveals <name> [--viewport desktop|tablet|mobile]');
   process.exit(1);
 }
-const root = path.resolve('sites', name);
+const root = siteDir(name);
 const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
 const vps = flags.viewport ? [VIEWPORTS.find((v) => v.name === flags.viewport)] : VIEWPORTS;
 if (vps.some((v) => !v)) {

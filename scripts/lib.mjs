@@ -1,7 +1,7 @@
 // Shared capture settings so the reference and the clone are rendered identically.
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import fsSync, { createReadStream } from 'node:fs';
 import http from 'node:http';
 import zlib from 'node:zlib';
 import path from 'node:path';
@@ -27,6 +27,17 @@ export const SCORED = [...VIEWPORTS, ...HELD_OUT];
 // Where a score run writes (sites/<name>/<COMPARE>/, <REPORT_FILE>): the HTML clone's by default; `next --verify` sets
 // compare-next / REPORT.next.md for the app, so the two never share or move each other's files.
 export const COMPARE = process.env.TC_COMPARE || 'compare';
+
+// sites/<name> from any folder inside the project: the current folder, the nearest parent that has sites/<name>, or
+// the site folder itself (an agent that cd'd into sites/<name>). A new site (capture) goes in ./sites/<name>.
+export function siteDir(name) {
+  const here = path.resolve('sites', name);
+  for (let d = process.cwd(); ; d = path.dirname(d)) {
+    if (fsSync.existsSync(path.join(d, 'sites', name))) return path.join(d, 'sites', name);
+    if (path.basename(d) === name && path.basename(path.dirname(d)) === 'sites') return d;
+    if (path.dirname(d) === d) return here;
+  }
+}
 export const REPORT_FILE = process.env.TC_REPORT || 'REPORT.md';
 
 // Jump every animation/transition to its end state so screenshots are deterministic.
