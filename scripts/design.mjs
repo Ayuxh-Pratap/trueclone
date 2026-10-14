@@ -74,6 +74,8 @@ async function draft() {
   const tokens = await readJson(path.join(ref, 'tokens.json'), null);
   const spec = await readJson(path.join(ref, 'desktop.spec.json'), []);
   if (!tokens) throw new Error(`no ${path.join(ref, 'tokens.json')}: run capture first`);
+  // typography comes from the measured text runs (font family per size and weight); without them it would be guessed
+  if (!spec.length) throw new Error(`no ${path.join(ref, 'desktop.spec.json')}: run "trueclone spec ${name}" first (the typography is measured from it)`);
   const rootPx = parseFloat(meta.rootFontSize?.desktop || tokens.rootFontSize || 16);
   const rem = (px) => `${+(parseFloat(px) / rootPx).toFixed(4)}rem`;
   const origin = 'captured';
@@ -164,7 +166,9 @@ async function draft() {
   const toType = (e) => {
     const [family, size, lh, weight, ls, transform] = e.key.split('|');
     const px = parseFloat(size);
-    const t = { fontFamily: family, fontSize: rem(px), fontWeight: Number(weight) || 400, lineHeight: lh === 'normal' ? 1.2 : +(parseFloat(lh) / px).toFixed(2) };
+    // line height as a ratio; "normal" (or anything not a length, a 0px font) is the browser's normal, ~1.2
+    const ratio = parseFloat(lh) / px;
+    const t = { fontFamily: family, fontSize: rem(px), fontWeight: Number(weight) || 400, lineHeight: lh !== 'normal' && Number.isFinite(ratio) && ratio > 0 ? +ratio.toFixed(2) : 1.2 };
     if (ls && ls !== 'normal' && parseFloat(ls) !== 0) t.letterSpacing = `${+(parseFloat(ls) / px).toFixed(3)}em`;
     if (transform && transform !== 'none') t.textTransform = transform;
     return { ...t, uses: e.chars, origin };

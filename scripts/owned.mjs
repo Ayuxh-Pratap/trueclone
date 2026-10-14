@@ -6,7 +6,7 @@
 // usage: node scripts/owned.mjs <name> [--viewport desktop]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, settle, sectionsOf } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, settle, sectionsOf, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -54,8 +54,8 @@ const rows = before.map((s, i) => {
   return { section: s.label, y: s.y, before: s.elements, after: t.elements ?? null, changed };
 });
 for (const t of after.slice(before.length)) rows.push({ section: t.label, y: t.y, before: 0, after: t.elements, changed: 'added by a script' });
-await fs.mkdir(path.join(root, 'compare'), { recursive: true });
-await fs.writeFile(path.join(root, 'compare', 'owned.json'), JSON.stringify({ at: new Date().toISOString(), viewport: vp.name, rows }, null, 2));
+await fs.mkdir(path.join(root, COMPARE), { recursive: true });
+await fs.writeFile(path.join(root, COMPARE, 'owned.json'), JSON.stringify({ at: new Date().toISOString(), viewport: vp.name, rows }, null, 2));
 // structure changed: the script owns the section; only inline styles changed: it animates inside the seed's markup
 const owned = rows.filter((r) => r.changed && !r.changed.startsWith('restyled'));
 const animated = rows.filter((r) => r.changed?.startsWith('restyled'));
@@ -63,4 +63,4 @@ console.log(owned.length ? `script.js rebuilds ${owned.length} section(s) at ${v
 for (const r of owned) console.log(`  ${r.section} (y ${r.y}): ${r.changed}`);
 if (owned.length) console.log('hand these over to script.js (remove the data-tc-* marks there) and hide them until boot if the original hides them too (seed --hide-until-boot).');
 if (animated.length) console.log(`animated inside the seed's markup (inline styles only): ${animated.map((r) => r.section).join(', ')}`);
-console.log(`-> ${path.relative(process.cwd(), path.join(root, 'compare', 'owned.json'))}`);
+console.log(`-> ${path.relative(process.cwd(), path.join(root, COMPARE, 'owned.json'))}`);

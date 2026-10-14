@@ -3,7 +3,7 @@
 // Without --url it serves sites/<name>/clone/ itself on a free local port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, crop, match, PNG } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, crop, match, PNG, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -13,7 +13,7 @@ if (!name) {
 }
 const root = path.resolve('sites', name);
 const ref = path.join(root, 'reference');
-const out = path.join(root, 'compare');
+const out = path.join(root, COMPARE);
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 await fs.mkdir(out, { recursive: true });
 

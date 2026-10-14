@@ -80,27 +80,56 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
   const vpName = (sameRange.length ? sameRange : seedSizes).reduce((a, b) => (Math.abs(b.width - W) < Math.abs(a.width - W) ? b : a)).name;
   const pick = (entry) => (entry && (entry.desktop || entry.tablet || entry.mobile) ? entry[vpName] || entry.desktop || entry.tablet || entry.mobile : entry);
 
-  // class changes are state, not motion: they apply with reduced motion too
+  // Hand-over: script.js takes elements from every player with tcOwn("selector") (or data-tc-own on the element or
+  // an ancestor, or by removing its data-tc-* mark); the players never touch them again.
+  const owned = (el) => Boolean(el.closest('[data-tc-own]'));
+  // Taking an element over also clears the transforms GSAP had written on it and on its GSAP-animated descendants
+  // (data-tc-gsap, marked by the seed): the clone's script starts from the page as it was before any script ran,
+  // as the site's own script did.
+  window.tcOwn = (sel) => {
+    for (const el of document.querySelectorAll(sel)) {
+      el.setAttribute('data-tc-own', '');
+      for (const g of [el, ...el.querySelectorAll('[data-tc-gsap]')]) {
+        if (!g.hasAttribute('data-tc-gsap')) continue;
+        for (const p of ['transform', 'translate', 'rotate', 'scale']) g.style.removeProperty(p);
+        g.removeAttribute('data-tc-gsap');
+      }
+    }
+  };
+
+  // class changes are state, not motion: they apply with reduced motion too. Only the recorded difference is applied
+  // (the classes added and removed between the two recorded states), so classes anything else sets are kept.
+  const tokens = (s) => String(s || '').split(/\\s+/).filter(Boolean);
+  const shift = (el, from, to) => {
+    if (owned(el)) return;
+    const a = tokens(from), b = tokens(to);
+    el.classList.remove(...a.filter((t) => !b.includes(t)));
+    el.classList.add(...b.filter((t) => !a.includes(t)));
+  };
   let scrolled = false;
   const pinned = [];
   for (const el of document.querySelectorAll('[data-tc-class]')) {
     const c = classData[Number(el.dataset.tcClass)];
     if (!c) continue;
-    if (c.sticky) { pinned.push([el, c]); continue; }
+    if (c.sticky) { pinned.push([el, c, false]); continue; }
     const line = Math.max(0, Math.min(1, c.trigger ?? 1));
     // an element without a box (display: contents) never intersects: watch its first descendant that has one
     const watched = el.getBoundingClientRect().height ? el : [...el.querySelectorAll('*')].find((d) => d.getBoundingClientRect().height) || el;
+    let on = false;
     new IntersectionObserver(([e], io) => {
-      if (e.isIntersecting) { el.setAttribute('class', c.to); if (!c.reverts) io.disconnect(); }
-      else if (c.reverts && el.getAttribute('class') === c.to) el.setAttribute('class', c.back ?? c.from);
+      if (!el.hasAttribute('data-tc-class')) { io.disconnect(); return; }
+      if (e.isIntersecting && !on) { shift(el, c.from, c.to); on = true; if (!c.reverts) io.disconnect(); }
+      else if (!e.isIntersecting && c.reverts && on) { shift(el, c.to, c.back ?? c.from); on = false; }
     }, { rootMargin: \`0px 0px -\${((1 - line) * 100).toFixed(1)}% 0px\` }).observe(watched);
   }
   const applyPinned = () => {
     if (scrollY > 0) scrolled = true;
-    for (const [el, c] of pinned) {
+    for (const p of pinned) {
+      const [el, c, on] = p;
+      if (!el.hasAttribute('data-tc-class')) continue;
       const past = scrollY >= (c.threshold ?? 1);
-      if (past) el.setAttribute('class', c.to);
-      else if (c.reverts && scrolled) el.setAttribute('class', c.back ?? c.from);
+      if (past && !on) { shift(el, c.from, c.to); p[2] = true; }
+      else if (!past && on && c.reverts && scrolled) { shift(el, c.to, c.back ?? c.from); p[2] = false; }
     }
   };
   if (pinned.length) {
@@ -135,7 +164,7 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
   // script.js takes an element over by removing its data-tc-scrub / data-tc-reveal mark: the player then leaves it alone
   const applyScrubs = () => {
     for (const x of scrubs) {
-      if (!x.ready || !x.el.hasAttribute('data-tc-scrub')) continue;
+      if (!x.ready || !x.el.hasAttribute('data-tc-scrub') || owned(x.el)) continue;
       const pos = x.key === 'v' ? x.el.getBoundingClientRect().top - x.ty : scrollY;
       const f = at(x.s, x.key, pos);
       x.ty = f.ty;
@@ -165,7 +194,7 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
       for (const e of entries) {
         if (!e.isIntersecting) continue;
         io.disconnect();
-        if (el.hasAttribute('data-tc-reveal')) play(el, r);
+        if (el.hasAttribute('data-tc-reveal') && !owned(el)) play(el, r);
       }
     }, { rootMargin: \`0px 0px -\${((1 - line) * 100).toFixed(1)}% 0px\` });
     io.observe(el);
@@ -368,7 +397,7 @@ if (recorded.length || classChanges.length) console.log(`replayed by trueclone-r
 if (recordedScrubs.length) console.log(`not replayed: ${recordedScrubs.length} scroll-linked curve(s) (parallax, scrubbed fades): evidence in reference/reveals.<size>.json; script.js reproduces the rule behind them`);
 if (runtime) {
   const pins = runtime.pins.map((p) => `${p.el} pinned for ${p.distance}px${p.axis ? ' (sideways: left to script.js)' : ''}`).join(', ');
-  console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"`);
+  console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"${runtime.gsap ? `, ${runtime.gsap} GSAP-written transform(s) marked data-tc-gsap (tcOwn() clears them for script.js)` : ''}`);
   if (runtime.viewport) console.log(`viewport values: ${runtime.viewport.fitted} value(s) a script computes from the screen size carried as functions of it (read at ${runtime.viewport.sizes} sizes, site breakpoints ${runtime.viewport.breakpoints.join('/') || 'none'})${runtime.viewport.dropped ? `; ${runtime.viewport.dropped} fit no such function and are left to script.js (data-tc-script-owned, reference/script-owned.json)` : ''}`);
   if (runtime.hidden) console.log(`boot contract: ${runtime.hidden} element(s) hidden until the clone's scripts have run (data-tc-boot-hide)`);
 }
@@ -484,7 +513,8 @@ function markWidgetsInPage(groups) {
 function widgetPlayer() {
   const data = window.__tcWidgetData || { groups: [] };
   const regionOf = (i) => document.querySelector(`[data-tc-scope~="${i}"]`);
-  const show = (i, html) => { const r = regionOf(i); if (r && html != null && r.innerHTML !== html) r.innerHTML = html; };
+  // a region script.js took over (tcOwn / data-tc-own) is never rewritten by the recorded states
+  const show = (i, html) => { const r = regionOf(i); if (r && !r.closest('[data-tc-own]') && html != null && r.innerHTML !== html) r.innerHTML = html; };
   const parse = (t) => t.dataset.tcTrigger.split(':').map(Number);
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-tc-trigger]');
@@ -639,7 +669,7 @@ function applyInlineStylePlanInPage(plan) {
 // sticky, and records the distance on it (`data-tc-pin`), so layout and scroll states hold without a script. The
 // clone's script may take the pin over (unwrap the spacer, drop the sticky style) and draws the marked canvases.
 function cleanRuntimeInPage() {
-  const log = { pins: [], canvases: 0 };
+  const log = { pins: [], canvases: 0, gsap: 0 };
   const label = (el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.classList.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''}`;
   // what ScrollTrigger writes on the pinned element while pinning (its own values live in the stylesheet)
   const PIN_PROPS = ['translate', 'rotate', 'scale', 'inset', 'top', 'left', 'right', 'bottom', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'max-width', 'width', 'max-height', 'height', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'box-sizing', 'position', 'transform', 'flex-basis'];
@@ -679,6 +709,16 @@ function cleanRuntimeInPage() {
   for (const c of document.querySelectorAll('canvas')) {
     c.setAttribute('data-tc-runtime', 'canvas');
     log.canvases++;
+  }
+  // GSAP's signature: it writes translate/rotate/scale: none next to the transform it sets. That transform is the
+  // animation's state, not the page's: GSAP in the clone has no record of having written it and reads it back as
+  // pixels, so a script.js that animates the element again (xPercent: -50) would centre it twice. Marked (last, after
+  // the pin clean-up removed what pinning wrote); tcOwn() clears it, so the clone's script starts from the page as it
+  // was before any script ran.
+  for (const el of document.querySelectorAll('[style*="translate: none"][style*="rotate: none"][style*="scale: none"]')) {
+    if (!/(^|;)\s*transform\s*:/.test(el.getAttribute('style'))) continue;
+    el.setAttribute('data-tc-gsap', '');
+    log.gsap++;
   }
   return log;
 }

@@ -7,7 +7,7 @@
 // usage: node scripts/detail.mjs <name> [--viewport desktop|tablet|mobile|all] [--url <clone url>] [--max 400]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -225,7 +225,7 @@ try {
   if (!flags.cdp) await browser.close();
   server?.close();
 }
-const out = path.join(root, 'compare', 'detail.json');
+const out = path.join(root, COMPARE, 'detail.json');
 await fs.mkdir(path.dirname(out), { recursive: true });
 await fs.writeFile(out, JSON.stringify(report, null, 2));
 for (const v of report.viewports) {

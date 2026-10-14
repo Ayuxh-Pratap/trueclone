@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -18,7 +18,7 @@ const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 const depth = Number(flags.depth || 6);
 const clone = flags.clone ? (typeof flags.clone === 'string' ? flags.clone : pathToFileURL(path.resolve('sites', name, 'clone', 'index.html')).href) : null;
 const hide = clone ? [] : typeof flags.hide === 'string' ? flags.hide.split(',') : meta.hide || [];
-const outDir = clone ? path.resolve('sites', name, 'compare') : ref;
+const outDir = clone ? path.resolve('sites', name, COMPARE) : ref;
 await fs.mkdir(outDir, { recursive: true });
 
 function specInPage(maxDepth) {

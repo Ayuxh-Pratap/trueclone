@@ -7,7 +7,7 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -29,7 +29,7 @@ for (const v of viewportsAll) {
   if (flags.clone && !(await fs.stat(path.join(ref, 'states', `${v.name}.json`)).then(() => true, () => false))) { console.log(`${v.name}: no reference states (run trueclone states ${name}); skipped`); continue; }
   viewports.push(v);
 }
-const outRoot = path.join(cloneMode ? path.join(root, 'compare') : ref, 'states');
+const outRoot = path.join(cloneMode ? path.join(root, COMPARE) : ref, 'states');
 
 const server = cloneMode && typeof flags.clone !== 'string' ? await serve(path.join(root, 'clone')) : null;
 const target = cloneMode ? (typeof flags.clone === 'string' ? flags.clone : server.url) : meta.url;

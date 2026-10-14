@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { parseArgs } from './lib.mjs';
+import { parseArgs, COMPARE, REPORT_FILE } from './lib.mjs';
 
 const { pos } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -32,16 +32,16 @@ const pct = (v) => (v === undefined || v === null ? '–' : `${v}%`);
 const VPS = ['desktop', 'tablet', 'mobile', 'laptop', 'wide'];
 const HELD = new Set(['laptop', 'wide']);
 
-const layout = await read('compare/report.mask.json');
-const visual = await read('compare/report.json');
-const states = await read('compare/states/report.mask.json');
-const curves = Object.fromEntries(await Promise.all(VPS.map(async (v) => [v, await read(`compare/curves.${v}.json`)])));
-const interact = await read('compare/interact/report.json');
-const hovers = await read('compare/hovers.desktop.json');
-const detail = await read('compare/detail.json');
-const load = await read('compare/load.json');
-const times = await read('compare/score-times.json');
-const drift = await read('compare/drift.json');
+const layout = await read(`${COMPARE}/report.mask.json`);
+const visual = await read(`${COMPARE}/report.json`);
+const states = await read(`${COMPARE}/states/report.mask.json`);
+const curves = Object.fromEntries(await Promise.all(VPS.map(async (v) => [v, await read(`${COMPARE}/curves.${v}.json`)])));
+const interact = await read(`${COMPARE}/interact/report.json`);
+const hovers = await read(`${COMPARE}/hovers.desktop.json`);
+const detail = await read(`${COMPARE}/detail.json`);
+const load = await read(`${COMPARE}/load.json`);
+const times = await read(`${COMPARE}/score-times.json`);
+const drift = await read(`${COMPARE}/drift.json`);
 const motionInv = await read('reference/motion.desktop.json');
 // notes.md: the agent's "Accepted differences" and "Findings" come into the report; an accepted entry that names a
 // check (and optionally a width) turns that check's "below target" into "accepted"
@@ -142,7 +142,7 @@ const host = (u) => { try { return new URL(u).host; } catch { return u; } };
 const uniq = (list) => [...new Map(list.map((c) => [`${c.method} ${c.url.split('?')[0]}`, c])).values()];
 
 const libs = motionInv ? Object.entries(motionInv.libs || {}).filter(([, v]) => v).map(([k]) => k) : [];
-const md = `# trueclone report: ${name}
+const md = `# trueclone report: ${name}${COMPARE === 'compare' ? '' : ' (Next.js app; the review is the HTML clone\'s, which the app is generated from)'}
 
 | | |
 |---|---|
@@ -176,5 +176,5 @@ ${data.length ? `- **Data and API calls** the reference makes (${uniq(data).leng
 `;
 // rows left out of the summary table (an empty optional row) must not leave a blank line that splits it
 const [head, ...rest] = md.split('\n## Scores');
-await fs.writeFile(path.join(root, 'REPORT.md'), [head.replace(/(\|[^\n]*)\n(?:\n)+(?=\|)/g, '$1\n'), ...rest].join('\n## Scores'));
-console.log(`${verdict} -> ${path.relative(process.cwd(), path.join(root, 'REPORT.md'))}`);
+await fs.writeFile(path.join(root, REPORT_FILE), [head.replace(/(\|[^\n]*)\n(?:\n)+(?=\|)/g, '$1\n'), ...rest].join('\n## Scores'));
+console.log(`${verdict} -> ${path.relative(process.cwd(), path.join(root, REPORT_FILE))}`);

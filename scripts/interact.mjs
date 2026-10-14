@@ -18,7 +18,7 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -57,7 +57,7 @@ if (scenarioText === null) {
 }
 let scenarios = JSON.parse(scenarioText);
 if (typeof flags.only === 'string') scenarios = scenarios.filter((s) => s.name.includes(flags.only));
-const outDir = path.join(root, 'compare', 'interact');
+const outDir = path.join(root, COMPARE, 'interact');
 await fs.mkdir(outDir, { recursive: true });
 
 const stateOf = (page, selector) => page.evaluate((sel) => {

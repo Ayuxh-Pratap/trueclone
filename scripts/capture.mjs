@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
@@ -29,6 +29,18 @@ if (mode === 'exact' && !permission) {
 const root = path.resolve('sites', name);
 const ref = path.join(root, 'reference');
 const MAX_ASSET_BYTES = mode === 'exact' ? 200 * 1024 * 1024 : 15 * 1024 * 1024;
+// A saved asset's file name: hash + the URL's base name, with the extension its type needs. A URL like
+// /wss/fonts?families=… has none, and a host picks the content type by extension: a stylesheet saved as "fonts" is
+// served as octet-stream and silently dropped.
+const EXT_OF = { 'text/css': '.css', 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/avif': '.avif', 'image/gif': '.gif', 'image/svg+xml': '.svg', 'font/woff2': '.woff2', 'font/woff': '.woff', 'font/ttf': '.ttf', 'font/otf': '.otf', 'application/font-woff2': '.woff2', 'application/font-woff': '.woff', 'video/mp4': '.mp4', 'video/webm': '.webm', 'audio/mpeg': '.mp3', 'application/json': '.json', 'model/gltf-binary': '.glb' };
+function assetName(url, type, contentType = '') {
+  const base = (path.basename(new URL(url).pathname) || 'index').replace(/[^a-z0-9._-]/gi, '_').slice(-80);
+  const hash = crypto.createHash('sha1').update(url).digest('hex').slice(0, 8);
+  const want = type === 'stylesheet' ? '.css' : EXT_OF[String(contentType).split(';')[0].trim().toLowerCase()];
+  const ext = path.extname(base).toLowerCase();
+  const fix = want && ext !== want && !(want === '.jpg' && ext === '.jpeg') && (type === 'stylesheet' || !ext);
+  return `${hash}-${base}${fix ? want : ''}`;
+}
 const SAVED_TYPES = new Set(['stylesheet', 'image', 'font', 'media']);
 // Exact mode also keeps runtime-fetched media: 3D models, textures, video streams, animation files. Never scripts.
 const EXTRA_MEDIA = /\.(glb|gltf|bin|hdr|exr|ktx2|basis|mp4|webm|mov|m3u8|ts|m4s|lottie|riv|json)(\?|$)/i;
@@ -95,11 +107,15 @@ const summary = [];
 const rootFontSize = {};
 const inlineStyles = {};
 const scriptQueries = new Set(); // media queries the page's scripts asked (matchMedia), at any size
+// the language and region the page is asked for (meta.locale; every later step uses the same, see lib.mjs LOCALE)
+const locale = typeof flags.locale === 'string' ? flags.locale : LOCALE;
+const asked = { locale, extraHTTPHeaders: { 'accept-language': `${locale},${locale.split('-')[0]};q=0.9` } };
+let finalUrl = null; // where the page ended up, when that is not the URL asked for (a geo or consent redirect)
 try {
   // the seed sizes and the held-out sizes: the held-out ones are shot and measured for scoring, nothing else
   for (const vp of SCORED) {
     const desktop = vp.name === 'desktop';
-    const { context, page } = await newPage(browser, vp, desktop ? { recordHar: { path: path.join(ref, 'desktop.har'), content: 'omit' } } : {});
+    const { context, page } = await newPage(browser, vp, { ...asked, ...(desktop ? { recordHar: { path: path.join(ref, 'desktop.har'), content: 'omit' } } : {}) });
     await page.addInitScript(recordMediaQueries);
     if (desktop) {
       page.on('response', async (res) => {
@@ -109,10 +125,7 @@ try {
         try {
           const body = await res.body();
           if (body.length > MAX_ASSET_BYTES) return;
-          const u = new URL(res.url());
-          const base = (path.basename(u.pathname) || 'index').replace(/[^a-z0-9._-]/gi, '_').slice(-80);
-          const hash = crypto.createHash('sha1').update(res.url()).digest('hex').slice(0, 8);
-          const file = path.join('assets', type, `${hash}-${base}`);
+          const file = path.join('assets', type, assetName(res.url(), type, res.headers()['content-type']));
           await fs.mkdir(path.join(ref, 'assets', type), { recursive: true });
           await fs.writeFile(path.join(ref, file), body);
           manifest.push({ url: res.url(), type, file: file.replaceAll('\\', '/'), contentType: res.headers()['content-type'], bytes: body.length });
@@ -122,6 +135,13 @@ try {
     // desktop: the page's own scripts and what ran, saved as evidence (reference/scripts/)
     const finishEvidence = desktop ? await startScriptEvidence(page, url).catch(() => null) : null;
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    if (desktop) {
+      const norm = (u) => { const x = new URL(u); return `${x.host.replace(/^www\./, '')}${x.pathname.replace(/\/$/, '')}`; };
+      if (norm(page.url()) !== norm(url)) {
+        finalUrl = page.url();
+        console.warn(`WARNING the page redirected: ${url} -> ${finalUrl} (language/region or consent). This capture is of that page; capture again with --locale <xx-YY> or the final URL if it is not the one meant`);
+      }
+    }
     // Components that mount only while in view (a lazy wordmark, an embed) are often unmounted again by the time
     // the DOM is saved. Watch from load: an element that was empty, got content while scrolled into view and is empty
     // again at snapshot time is saved with the fullest content it had. Things that start full and empty out (a
@@ -234,7 +254,7 @@ if (fitSizes.length) {
   try {
     await Promise.all(Array.from({ length: 3 }, async () => {
       for (let s = queue.shift(); s; s = queue.shift()) {
-        const { context, page } = await newPage(browser2, { name: `fit${s.width}`, width: s.width, height: s.height });
+        const { context, page } = await newPage(browser2, { name: `fit${s.width}`, width: s.width, height: s.height }, asked);
         try {
           await page.goto(url, { waitUntil: 'load', timeout: 60000 });
           await settle(page, hide);
@@ -249,7 +269,7 @@ if (fitSizes.length) {
 }
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 console.table(summary);
 console.log(`${manifest.length} assets saved. Reference: ${path.relative(process.cwd(), ref)}, mirror in reference/mirror${mode === 'exact' ? ` (exact mode, authorised by: ${permission})` : ''}`);
@@ -372,10 +392,7 @@ async function fetchMissing(urls, manifest, pageUrl) {
         const contentType = res.headers.get('content-type') || '';
         if (/text\/html/.test(contentType)) continue; // a page, not media (a soft 404)
         const type = typeOf(u, contentType);
-        const parsed = new URL(u);
-        const base = (path.basename(parsed.pathname) || 'index').replace(/[^a-z0-9._-]/gi, '_').slice(-80);
-        const hash = crypto.createHash('sha1').update(u).digest('hex').slice(0, 8);
-        const file = path.join('assets', type, `${hash}-${base}`);
+        const file = path.join('assets', type, assetName(u, type, contentType));
         await fs.mkdir(path.join(ref, 'assets', type), { recursive: true });
         await fs.writeFile(path.join(ref, file), body);
         manifest.push({ url: u, type, file: file.replaceAll('\\', '/'), contentType, bytes: body.length, fetched: 'mirror' });

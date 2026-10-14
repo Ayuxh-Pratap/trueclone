@@ -10,7 +10,7 @@
 // usage: node scripts/hovers.mjs <name> [--viewport desktop] [--url <clone url>] [--max 60] [--refresh-ref]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -184,7 +184,7 @@ try {
     }));
     return { ...first, unstable };
   }, Boolean(flags['refresh-ref']));
-  cl = await hoverAll(browser, cloneUrl, ref.list, path.join(root, 'compare', `hovers-${vp.name}`));
+  cl = await hoverAll(browser, cloneUrl, ref.list, path.join(root, COMPARE, `hovers-${vp.name}`));
 } finally {
   if (!flags.cdp) await browser.close();
   server?.close();
@@ -209,7 +209,7 @@ const scored = rows.filter((r) => r.status !== 'static' && r.status !== 'unstabl
 const unstable = rows.filter((r) => r.status === 'unstable').length;
 const ok = scored.filter((r) => r.status === 'ok').length;
 const report = { name, viewport: vp.name, at: new Date().toISOString(), score: +(100 * ok / Math.max(1, scored.length)).toFixed(1), unstable, listened: ref.listened ?? null, rows };
-const out = path.join(root, 'compare', `hovers.${vp.name}.json`);
+const out = path.join(root, COMPARE, `hovers.${vp.name}.json`);
 await fs.mkdir(path.dirname(out), { recursive: true });
 await fs.writeFile(out, JSON.stringify(report, null, 2));
 console.log(`hover match (${vp.name}): ${report.score}% of ${scored.length} hover effects reproduced with the same outcome (${rows.length} elements probed, ${rows.filter((r) => r.found === 'listener').length} found by their mouse listeners${unstable ? `, ${unstable} unstable on the reference itself, not scored` : ''})`);

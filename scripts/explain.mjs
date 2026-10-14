@@ -5,7 +5,7 @@
 // usage: node scripts/explain.mjs <name> <y | "section label"> [--viewport desktop] [--range 800]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { PNG, parseArgs, crop } from './lib.mjs';
+import { PNG, parseArgs, crop, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name, where] = pos;
@@ -18,7 +18,7 @@ const range = Number(flags.range || 800);
 const root = path.resolve('sites', name);
 const read = async (rel) => fs.readFile(path.join(root, rel), 'utf8').then(JSON.parse).catch(() => null);
 
-const layout = await read('compare/report.mask.json');
+const layout = await read(`${COMPARE}/report.mask.json`);
 const lv = layout?.viewports.find((v) => v.viewport === vp);
 if (!lv) {
   console.error(`no layout score for ${vp} yet: run trueclone score ${name} first`);
@@ -40,12 +40,12 @@ console.log(`\nLayout: page ${lv.heightRef}px vs clone ${lv.heightClone}px (${lv
 if (section) console.log(`  section "${String(section.label).slice(0, 60)}" y ${section.y} h ${section.height}: ${section.match}%`);
 for (const s of lv.sections.filter((s) => s !== section && (within(s.y) || within(s.y + s.height)))) console.log(`  nearby "${String(s.label).slice(0, 40)}" y ${s.y}: ${s.match}%`);
 
-const states = await read('compare/states/report.mask.json');
+const states = await read(`${COMPARE}/states/report.mask.json`);
 const sv = states?.viewports?.find((v) => v.viewport === vp);
 const steps = (sv?.steps || sv?.states || []).filter((st) => within(st.scrollY ?? st.y ?? st.scroll ?? -1));
 if (steps.length) console.log(`\nScroll states scrolled to here: ${steps.map((st) => `${st.scrollY ?? st.y ?? st.scroll}px ${st.match ?? st.score}%`).join(', ')}`);
 
-const detail = await read('compare/detail.json');
+const detail = await read(`${COMPARE}/detail.json`);
 const dv = detail?.viewports?.find((v) => v.viewport === vp);
 if (dv) {
   const here = dv.issues.filter((it) => within(it.y));
@@ -56,7 +56,7 @@ if (dv) {
   [...groups.values()].sort((a, b) => b.n - a.n).slice(0, 12).forEach((g) => console.log(`  x${String(g.n).padEnd(3)} y${String(g.y).padEnd(6)} ${g.ref} -> ${g.clone}: ${g.props.join('; ')}`));
 }
 
-const hovers = await read(`compare/hovers.${vp}.json`);
+const hovers = await read(`${COMPARE}/hovers.${vp}.json`);
 if (hovers) {
   const rows = hovers.rows.filter((r) => within(r.y) && !['static', 'ok', 'unstable'].includes(r.status));
   if (rows.length) { console.log(`\nHovers differing here:`); rows.slice(0, 10).forEach((r) => console.log(`  y${r.y} ${r.ref}: reference changes ${r.refChanges}, clone ${r.cloneChanges} (${r.status})`)); }
@@ -64,7 +64,7 @@ if (hovers) {
 
 // the crop: reference | clone | diff, masked, half size
 try {
-  const imgs = await Promise.all([`reference/${vp}.mask.png`, `compare/${vp}.mask.clone.png`, `compare/${vp}.mask.diff.png`].map(async (f) => PNG.sync.read(await fs.readFile(path.join(root, f)))));
+  const imgs = await Promise.all([`reference/${vp}.mask.png`, `${COMPARE}/${vp}.mask.clone.png`, `${COMPARE}/${vp}.mask.diff.png`].map(async (f) => PNG.sync.read(await fs.readFile(path.join(root, f)))));
   const top = Math.max(0, Math.round(lo)), h = Math.min(Math.round(hi) - top, Math.min(...imgs.map((i) => i.height)) - top);
   const parts = imgs.map((img) => crop(img, top, h));
   const scale = 0.5, w = Math.round(parts[0].width * scale), hh = Math.round(h * scale);
@@ -77,7 +77,7 @@ try {
       out.data[di] = p.data[si]; out.data[di + 1] = p.data[si + 1]; out.data[di + 2] = p.data[si + 2]; out.data[di + 3] = 255;
     }
   });
-  const file = path.join(root, 'compare', 'explain', `${vp}-${y}.png`);
+  const file = path.join(root, COMPARE, 'explain', `${vp}-${y}.png`);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, PNG.sync.write(out));
   console.log(`\nCrop (reference | clone | diff, y ${top}-${top + h}): ${path.relative(process.cwd(), file)}`);

@@ -9,7 +9,7 @@
 //   -> sites/<name>/compare/load.json, frames in compare/load/ and reference/load/
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, PNG, withTimeout } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, PNG, withTimeout, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -78,7 +78,7 @@ try {
   };
   for (const vp of vps) {
     const ref = await cached(root, { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 2 }, () => twice(meta.url, path.join(root, 'reference', 'load'), vp), Boolean(flags['refresh-ref']));
-    const clone = await twice(cloneUrl || `${server.url}index.html`, path.join(root, 'compare', 'load'), vp);
+    const clone = await twice(cloneUrl || `${server.url}index.html`, path.join(root, COMPARE, 'load'), vp);
     const gap = Object.fromEntries(TIMES.map((t) => [t, +Math.abs(ref.curve[t] - clone.curve[t]).toFixed(2)]));
     const noise = +Math.max(ref.noise, clone.noise).toFixed(2);
     const match = (curve) => +(100 - TIMES.reduce((s, t) => s + Math.abs(ref.curve[t] - curve[t]), 0) / TIMES.length).toFixed(2);
@@ -98,8 +98,8 @@ try {
   if (!flags.cdp) await browser.close();
   server?.close();
 }
-await fs.mkdir(path.join(root, 'compare'), { recursive: true });
-const out = path.join(root, 'compare', 'load.json');
+await fs.mkdir(path.join(root, COMPARE), { recursive: true });
+const out = path.join(root, COMPARE, 'load.json');
 const previous = await fs.readFile(out, 'utf8').then(JSON.parse).catch(() => null);
 const merged = vps.length === VIEWPORTS.length || !previous ? viewports : [...(previous.viewports || []).filter((v) => !viewports.some((n) => n.viewport === v.viewport)), ...viewports];
 await fs.writeFile(out, JSON.stringify({ at: new Date().toISOString(), clone: cloneUrl || server?.url, times: TIMES, network: NETWORK, viewports: merged }, null, 2));

@@ -40,7 +40,7 @@ Next.js app generated from it), `notes.md` (your record, a contract), `REPORT.md
 ## 1. Capture
 
 ```powershell
-npx trueclone capture <url> [name] [--hide "<cookie banner / popup selectors>"] [--mode exact --permission "<owner>"]
+npx trueclone capture <url> [name] [--hide "<cookie banner / popup selectors>"] [--mode exact --permission "<owner>"] [--locale en-US]
 npx trueclone states <name>    # scroll states at every scored size (reference/states/)
 npx trueclone motion <name>    # the animation runtime: ScrollTriggers, timelines, tweens, loops, Lenis/Swiper, CSS
 npx trueclone spec <name>      # measured boxes and styles per size
@@ -50,7 +50,9 @@ npx trueclone spec <name>      # measured boxes and styles per size
 Capture shoots five sizes: the seed sizes 390×844, 768×1024, 1440×900 (the clone is built from these) and the
 held-out 1280×720 and 1920×1080 (scored, never used to build). It also reads inline styles at extra sizes inside each
 of the site's breakpoint ranges, and saves every script that ran (`reference/scripts/`). If the page is blank or
-blocked, capture through your own Chrome over CDP (`--cdp`); never get around a bot check.
+blocked, capture through your own Chrome over CDP (`--cdp`); never get around a bot check. If capture warns that the
+page redirected (a region or language variant), tell the user which page was captured, or capture again with
+`--locale` or the final URL.
 
 ## 2. Understand
 
@@ -100,13 +102,15 @@ What the seed gives you, and what it leaves to you:
   regions your script builds invisible meanwhile; `tcBoot.hold()` / `tcBoot.release()` for an intro that waits.
 
 Then `clone/script.js`, scene by scene from `notes.md` Behaviours: find the rule in `reference/scripts/`, port it,
-compute everything from the viewport. When your script drives an element the seed's player also drives, hand it
-over: remove its `data-tc-reveal` / `data-tc-class` mark at the top of `script.js`. After each build round,
+compute everything from the viewport. When your script drives an element (or a whole section), take it first:
+`tcOwn('<selector>')` at the top of `script.js`. The recorded players then never touch it or anything inside it again,
+and the transforms GSAP had written on it (`data-tc-gsap`) are cleared, so your animation starts from the page as it
+was before any script ran, as the site's did. After each build round,
 `npx trueclone owned <name>` lists the sections your script rebuilds (hide those until boot if the original hides them).
 
 `clone/patches/` (applied on every seed, or alone in a second with `npx trueclone seed <name> --patches`):
 `head-*.html` before `</head>`, `*.css` linked after the site's stylesheets, `body-*.html` before `script.js`
-(vendored libraries, a hand-over prelude), `*.js` deferred before `script.js`. Vendor libraries at the site's versions.
+(vendored libraries), `*.js` deferred before `script.js`. Vendor libraries at the site's versions.
 
 Copy the reference's CSS mechanism, not its look: `npx trueclone rules <name> "<selector>"` (add `--clone` for yours).
 Canvases are scored: rebuild the drawing from the site's scene code with its parameters (exact mode) or as your own

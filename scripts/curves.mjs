@@ -14,7 +14,7 @@
 //        node scripts/curves.mjs <name> --draft      (writes motion-map.draft.json from reference/motion.<vp>.json)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -278,7 +278,7 @@ for (const [i, e] of map.entries()) {
   report.entries.push({ name: e.name, mode: e.scroll ? 'scroll' : 'time', score: +(props.reduce((n, p) => n + p.score, 0) / props.length).toFixed(1), props, x: a.map((s) => s.x) });
 }
 report.score = +(report.entries.reduce((n, e) => n + e.score, 0) / Math.max(1, report.entries.length)).toFixed(1);
-const out = path.join(root, 'compare', `curves.${vp.name}.json`);
+const out = path.join(root, COMPARE, `curves.${vp.name}.json`);
 await fs.mkdir(path.dirname(out), { recursive: true });
 await fs.writeFile(out, JSON.stringify(report, null, 2));
 

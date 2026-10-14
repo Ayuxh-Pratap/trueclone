@@ -4,7 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PNG } from 'pngjs';
-import { SCORED, parseArgs } from './lib.mjs';
+import { SCORED, parseArgs, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [target, h] = pos;
@@ -19,7 +19,7 @@ else {
   // a site name: the reference's full-page shots (or the clone's last layout shots with --clone)
   const root = path.resolve('sites', target);
   const sizes = flags.size ? [flags.size] : SCORED.map((v) => v.name);
-  files = sizes.map((s) => (flags.clone ? path.join(root, 'compare', `${s}.mask.clone.png`) : path.join(root, 'reference', `${s}.png`)));
+  files = sizes.map((s) => (flags.clone ? path.join(root, COMPARE, `${s}.mask.clone.png`) : path.join(root, 'reference', `${s}.png`)));
   if (!h) tileH = 0; // one tile per screen of that size
 }
 for (const file of files) {

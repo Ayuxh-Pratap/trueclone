@@ -12,7 +12,7 @@
 // usage: node scripts/review.mjs <name> [--size wide|laptop|desktop|tablet|mobile] [--url <clone url>]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, matchPct, PNG } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, matchPct, PNG, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -27,7 +27,7 @@ const vp = SCORED.find((v) => v.name === (flags.size || 'wide'));
 if (!vp) { console.error(`unknown size ${flags.size}: ${SCORED.map((v) => v.name).join(', ')}`); process.exit(1); }
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
 const cloneUrl = server ? `${server.url}index.html` : flags.url;
-const outDir = path.join(root, 'compare', 'review', vp.name);
+const outDir = path.join(root, COMPARE, 'review', vp.name);
 await fs.rm(outDir, { recursive: true, force: true });
 await fs.mkdir(outDir, { recursive: true });
 

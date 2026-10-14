@@ -16,7 +16,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from './lib.mjs';
+import { parseArgs, COMPARE } from './lib.mjs';
 
 // steps are the sibling scripts of this file, wherever the package is installed; sites/ is in the current folder
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -60,7 +60,10 @@ if (!steps.length) {
 // options) is not re-measured; its last result is reported again. --fresh re-measures everything. Scoring another
 // build (--url) is always measured, since its files are not the clone's.
 const root = path.resolve('sites', name);
-const capturedAt = await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').then((s) => JSON.parse(s).capturedAt).catch(() => null);
+const metaJson = await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').then(JSON.parse).catch(() => ({}));
+const capturedAt = metaJson.capturedAt || null;
+// every step asks the live page in the capture's language and region (lib.mjs LOCALE)
+const stepEnv = { ...process.env, ...(metaJson.locale ? { TC_LOCALE: metaJson.locale } : {}) };
 async function cloneHash() {
   const h = crypto.createHash('sha1');
   const walk = async (dir) => {
@@ -81,7 +84,7 @@ async function cloneHash() {
   }
   return h.digest('hex');
 }
-const stampsFile = path.join(root, 'compare', '.stamps.json');
+const stampsFile = path.join(root, COMPARE, '.stamps.json');
 const stamps = url ? {} : await fs.readFile(stampsFile, 'utf8').then(JSON.parse).catch(() => ({}));
 const inputs = url ? null : { hash: await cloneHash(), capturedAt, args: null };
 // the step's own code is an input too: a changed check must re-measure, never report its old number
@@ -93,7 +96,7 @@ const reusable = (step) => !step.live && !url && !flags.fresh && !flags['refresh
 const runStep = (step) => new Promise((resolve) => {
   const started = Date.now();
   const [file, ...args] = step.args;
-  const child = spawn(process.execPath, [path.join(HERE, path.basename(file)), ...args], { cwd: process.cwd() });
+  const child = spawn(process.execPath, [path.join(HERE, path.basename(file)), ...args], { cwd: process.cwd(), env: stepEnv });
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
@@ -138,10 +141,10 @@ summary.sort((x, y) => steps.findIndex((st) => st.label === x.step) - steps.find
 const totalMin = +((Date.now() - t0) / 60000).toFixed(1);
 console.log(`\n${flags.quick ? 'quick' : 'full'} score for ${name}${url ? ` (${url})` : ''} in ${totalMin} min`);
 console.table(summary.map((s) => ({ step: s.step, status: s.status, 's': s.seconds, result: Object.entries(s).find(([k]) => k.endsWith('%') || k.endsWith('px'))?.[1] })));
-await fs.mkdir(path.join(root, 'compare'), { recursive: true });
+await fs.mkdir(path.join(root, COMPARE), { recursive: true });
 if (!url) await fs.writeFile(stampsFile, JSON.stringify(stamps, null, 2));
 // where the time went, for REPORT.md and for choosing what to re-run
-await fs.writeFile(path.join(root, 'compare', 'score-times.json'), JSON.stringify({ at: new Date().toISOString(), kind: flags.quick ? 'quick' : 'full', only, viewport: vpOnly, url, totalMin, steps: Object.fromEntries(summary.map((s) => [s.step, { status: s.status, seconds: s.seconds }])) }, null, 2));
+await fs.writeFile(path.join(root, COMPARE, 'score-times.json'), JSON.stringify({ at: new Date().toISOString(), kind: flags.quick ? 'quick' : 'full', only, viewport: vpOnly, url, totalMin, steps: Object.fromEntries(summary.map((s) => [s.step, { status: s.status, seconds: s.seconds }])) }, null, 2));
 // REPORT.md: every score against its target, what to fix first, and what was not copied
 const report = await runStep({ args: ['report.mjs', name] });
 console.log(report.out.trim());

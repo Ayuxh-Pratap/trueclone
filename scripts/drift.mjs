@@ -6,7 +6,7 @@
 // usage: node scripts/drift.mjs <name> [--viewport desktop|all]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, settle, sectionsOf } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, settle, sectionsOf, COMPARE } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -49,7 +49,7 @@ try {
   if (!flags.cdp) await browser.close();
 }
 const stale = viewports.some((v) => v.stale);
-await fs.mkdir(path.join(root, 'compare'), { recursive: true });
-await fs.writeFile(path.join(root, 'compare', 'drift.json'), JSON.stringify({ at: new Date().toISOString(), capturedAt: meta.capturedAt, stale, viewports }, null, 2));
+await fs.mkdir(path.join(root, COMPARE), { recursive: true });
+await fs.writeFile(path.join(root, COMPARE, 'drift.json'), JSON.stringify({ at: new Date().toISOString(), capturedAt: meta.capturedAt, stale, viewports }, null, 2));
 if (stale) console.warn(`WARNING reference drift: the live page has changed since the capture of ${meta.capturedAt}; detail, hovers, curves, interactions and load now measure a page the clone was never a copy of. Re-capture (trueclone capture, then states, reveals, seed --force) before trusting them.`);
 else console.log(`drift: none since ${meta.capturedAt}`);

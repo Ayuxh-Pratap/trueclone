@@ -24,6 +24,10 @@ export const HELD_OUT = [
   { name: 'wide', width: 1920, height: 1080, heldOut: true },
 ];
 export const SCORED = [...VIEWPORTS, ...HELD_OUT];
+// Where a score run writes (sites/<name>/<COMPARE>/, <REPORT_FILE>): the HTML clone's by default; `next --verify` sets
+// compare-next / REPORT.next.md for the app, so the two never share or move each other's files.
+export const COMPARE = process.env.TC_COMPARE || 'compare';
+export const REPORT_FILE = process.env.TC_REPORT || 'REPORT.md';
 
 // Jump every animation/transition to its end state so screenshots are deterministic.
 const FREEZE_CSS = `*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;
@@ -60,11 +64,16 @@ export async function openBrowser(cdp) {
   return chromium.launch();
 }
 
+// One locale for every page, so a site that picks its variant by language or region (stripe.com -> /in) shows the
+// same one to the capture and to every check. `capture --locale` sets it; score passes it on (TC_LOCALE).
+export const LOCALE = process.env.TC_LOCALE || 'en-US';
 export async function newPage(browser, vp, extra = {}) {
   const context = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: 1,
     reducedMotion: 'reduce',
+    locale: LOCALE,
+    extraHTTPHeaders: { 'accept-language': `${LOCALE},${LOCALE.split('-')[0]};q=0.9` },
     ...extra,
   });
   const page = await context.newPage();
@@ -267,9 +276,11 @@ export function serve(dir, port = 0) {
       if (file !== dir && !file.startsWith(dir + path.sep)) { res.writeHead(403).end(); return; }
       try {
         await fs.access(file);
-        const headers = { 'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' };
+        // a stylesheet saved without an extension by an older capture (/wss/fonts?…) is still a stylesheet
+        const type = MIME[path.extname(file).toLowerCase()] || (/[\\/]css[\\/][^\\/.]+$/.test(file) ? MIME['.css'] : 'application/octet-stream');
+        const headers = { 'content-type': type };
         const accept = String(req.headers['accept-encoding'] || '');
-        const enc = COMPRESSIBLE.test(file) ? (/\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null) : null;
+        const enc = COMPRESSIBLE.test(file) || type === MIME[".css"] ? (/\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null) : null;
         if (enc) {
           res.writeHead(200, { ...headers, 'content-encoding': enc, vary: 'accept-encoding' });
           createReadStream(file).pipe(enc === 'br' ? zlib.createBrotliCompress({ params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } }) : zlib.createGzip({ level: 6 })).pipe(res);

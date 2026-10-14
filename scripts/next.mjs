@@ -13,9 +13,10 @@
 // usage: node scripts/next.mjs <name> [--install] [--build] [--verify [--quick]] [--port 3100]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { parse, serialize } from 'parse5';
+import { transform as transformCss } from 'lightningcss';
 import { fileURLToPath as toPath } from 'node:url';
 import { parseArgs } from './lib.mjs';
 
@@ -91,10 +92,18 @@ function jsxAttrs(node, inSvg) {
     // url(assets/…) in an inline style resolves against the page in the clone; the app serves assets at /assets
     if (a.name === 'style') { usesStyle = true; parts.push(`style={${JSON.stringify(styleObject(a.value.replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`)))} as CSSProperties}`); continue; }
     // SVG elements have no typed boolean props (hidden), so they go through the spread too
-    if (BOOL.has(a.name) && (a.value === '' || a.value === a.name)) { parts.push(inSvg ? `{...{ ${JSON.stringify(a.name)}: true }}` : RENAME[a.name] || a.name); continue; }
+    // in HTML a boolean attribute is on whatever its value (disabled="true", even disabled="false"); hidden="until-found"
+    // is the one with a meaning of its own
+    if (a.name === 'hidden' && a.value === 'until-found') { parts.push(`{...({ hidden: "until-found" } as object)}`); continue; }
+    if (BOOL.has(a.name)) { parts.push(inSvg ? `{...{ ${JSON.stringify(a.name)}: true }}` : RENAME[a.name] || a.name); continue; }
     let n = RENAME[a.name] || a.name;
+    // namespaced names are not JSX: in SVG, React spells xlink:href / xml:space as xlinkHref / xmlSpace; anywhere
+    // else (xmlns on <html>, xml:lang, xmlns:og) the browser ignores them in HTML anyway
+    if (n.includes(':') || n === 'xmlns') {
+      if (inSvg && /^(xlink|xml):[a-z]+$/.test(n)) n = n.replace(/:([a-z])/, (m, c) => c.toUpperCase());
+      else continue;
+    }
     if (!RENAME[a.name] && inSvg && !n.startsWith('data-') && !n.startsWith('aria-')) n = camel(n);
-    if (n === 'xmlns:xlink') continue;
     // an empty src/srcset/poster makes the browser request the page itself (React logs an error for each); an
     // empty href means "this page", which # also does without the request
     if (['src', 'srcSet', 'poster'].includes(n) && a.value === '') continue;
@@ -102,6 +111,13 @@ function jsxAttrs(node, inSvg) {
     const v = ['src', 'href', 'poster', 'srcSet'].includes(n) ? fixUrl(a.value) : a.value;
     // React types these as numbers: tabIndex="0" fails type-checking, tabIndex={0} is the same attribute
     if (['tabIndex', 'colSpan', 'rowSpan', 'maxLength', 'minLength', 'span', 'size', 'cols', 'rows'].includes(n) && /^-?\d+$/.test(v)) { parts.push(`${n}={${v}}`); continue; }
+    // and these ARIA properties too (aria-valuenow="3" fails type-checking; the number is the same attribute)
+    if (/^aria-(value(min|max|now)|level|posinset|setsize|(col|row)(count|index|span))$/.test(n)) {
+      // a non-number there (aria-valuenow="NaN" before a script sets it) is still the page's attribute: written
+      // through an untyped spread so the markup stays exactly the original's
+      parts.push(/^-?\d+(\.\d+)?$/.test(v) ? `${n}={${v}}` : `{...({ ${JSON.stringify(n)}: ${JSON.stringify(v)} } as object)}`);
+      continue;
+    }
     parts.push(attrString(n, v));
   }
   return parts.length ? ' ' + parts.join(' ') : '';
@@ -109,8 +125,8 @@ function jsxAttrs(node, inSvg) {
 
 // JSX trims and collapses whitespace that HTML renders, so text is written to keep exactly what the browser showed:
 // verbatim where white-space is preserved (code samples), elsewhere with its edge spaces as {" "}
-const BLOCK = new Set(['address', 'article', 'aside', 'blockquote', 'body', 'dd', 'details', 'dialog', 'div', 'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hr', 'html', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'summary', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul']);
 const SPACE = '{" "}';
+const TABLE_PARTS = new Set(['table', 'thead', 'tbody', 'tfoot', 'tr', 'colgroup', 'select', 'optgroup', 'html', 'head', 'frameset']);
 const keepsWhitespace = (node) => ['pre', 'textarea', 'listing', 'xmp'].includes(node.tagName)
   || (node.attrs || []).some((a) => (a.name === 'class' && /(^|\s)whitespace-(pre|break-spaces)/.test(a.value)) || (a.name === 'style' && /white-space:\s*(pre|break-spaces)/.test(a.value)));
 const textJsx = (s) => (/[{}<>&"']/.test(s) ? `{${JSON.stringify(s)}}` : s);
@@ -121,11 +137,15 @@ function toJsx(node, depth, inSvg = false, inPre = false) {
   if (node.nodeName === '#text') {
     if (inPre) return `{${JSON.stringify(node.value)}}`;
     if (!node.value.trim()) {
-      // whitespace between two inline things renders as one space; next to a block, or at an edge, it renders nothing
+      // Whitespace between two siblings is kept as one space wherever the HTML had it: whether it renders depends on
+      // the CSS (between two divs it shows if they are inline-block, as split words are), and where it does not
+      // render, the browser drops it the same way. Only table structure and edges never get one (React rejects text
+      // inside <tr>/<tbody>, and a space at a block's edge never renders).
       const sibs = node.parentNode?.childNodes || [];
       const i = sibs.indexOf(node);
       const prev = sibs[i - 1], next = sibs[i + 1];
-      return prev && next && !BLOCK.has(prev.tagName) && !BLOCK.has(next.tagName) ? SPACE : '';
+      if (TABLE_PARTS.has(node.parentNode?.tagName)) return '';
+      return prev && next && prev.nodeName !== '#comment' && next.nodeName !== '#comment' ? SPACE : '';
     }
     const text = node.value.replace(/\s+/g, ' ');
     return `${/^\s/.test(text) ? SPACE : ''}${textJsx(text.trim())}${/\s$/.test(text) ? SPACE : ''}`;
@@ -361,6 +381,39 @@ console.log(`generated ${path.relative(process.cwd(), out)} (${seeded ? 'seeded 
 //   wrappers around them stay in the page with their classes; other body children are components of their own;
 // - trueclone's players and script.js are served from public/ and run in order after hydration, with the data
 //   blocks they read (script type="application/json") rendered in the page.
+// A browser drops a declaration (or a rule) it cannot parse and keeps the rest of the sheet; Next's CSS parser
+// (Lightning CSS, the version Next ships) fails the whole build instead. The site's CSS is parsed strictly the way Next
+// will, and each piece that fails is removed, exactly what the browser already ignores, until the sheet parses.
+function browserParsed(css, file) {
+  const dropped = [];
+  for (let tries = 0; tries < 200; tries++) {
+    let loc;
+    try { transformCss({ filename: file, code: Buffer.from(css), errorRecovery: false }); return { css, dropped }; }
+    catch (e) { loc = e.loc; if (!loc) return { css, dropped }; }
+    let at = 0;
+    for (let line = 1; line < loc.line; line++) at = css.indexOf('\n', at) + 1;
+    at = Math.min(css.length - 1, at + Math.max(0, loc.column - 1));
+    const prev = Math.max(css.lastIndexOf(';', at), css.lastIndexOf('{', at), css.lastIndexOf('}', at));
+    const segment = css.slice(prev + 1, at);
+    if (css[prev] !== '}' && segment.includes(':') && !/[{]/.test(segment)) {
+      // a declaration: from after the previous ; or { to its own ; (or up to the closing })
+      let end = at, depth = 0;
+      for (; end < css.length; end++) { const ch = css[end]; if (ch === '(') depth++; else if (ch === ')') depth--; else if ((ch === ';' && depth <= 0) || ch === '}') break; }
+      dropped.push(css.slice(prev + 1, end).trim());
+      css = css.slice(0, prev + 1) + css.slice(css[end] === ';' ? end + 1 : end);
+    } else {
+      // a rule whose selector fails: the selector through its matching }
+      const open = css.indexOf('{', at);
+      if (open < 0) return { css, dropped };
+      let end = open, depth = 0;
+      for (; end < css.length; end++) { if (css[end] === '{') depth++; else if (css[end] === '}' && --depth === 0) break; }
+      dropped.push(css.slice(prev + 1, open).trim());
+      css = css.slice(0, prev + 1) + css.slice(end + 1);
+    }
+  }
+  return { css, dropped };
+}
+
 async function seededApp() {
   const attrsOf = (n) => Object.fromEntries((n.attrs || []).map((a) => [a.name, a.value]));
   // styles
@@ -401,9 +454,14 @@ async function seededApp() {
       file = `inline-${++inline}.css`;
     }
     if (css === null) continue;
+    // an import needs the .css extension to be parsed as CSS (a capture may have saved /wss/fonts?… as "…-fonts")
+    if (!/\.css$/i.test(file)) file += '.css';
     // stylesheets lived in clone/css/ (assets at ../assets/), inline blocks in the page (assets at assets/)
     css = css.replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`);
     css = await carryImports(css, fromDir);
+    const clean = browserParsed(css, file);
+    if (clean.dropped.length) console.log(`  ${file}: ${clean.dropped.length} invalid declaration(s)/rule(s) the browser ignores, left out for the Next CSS parser (${clean.dropped.slice(0, 2).map((d) => JSON.stringify(d.slice(0, 60))).join(', ')})`);
+    css = clean.css;
     for (const m of css.matchAll(/@layer\s+([\w-]+(?:\s*,\s*[\w-]+)*)\s*[;{]/g)) for (const l of m[1].split(',').map((x) => x.trim())) if (!layerOrder.includes(l)) layerOrder.push(l);
     usesTailwind ||= /--tw-|tailwindcss v\d/.test(css);
     await fs.writeFile(path.join(out, 'styles', 'site', file), css);
@@ -625,38 +683,47 @@ const run = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
 });
 if (flags.install || flags.build || flags.verify) await run('npm', ['install', '--no-audit', '--no-fund']);
 if (flags.build || flags.verify) await run('npx', ['next', 'build']);
-// A server left running on the port would keep serving the OLD build (or a half-deleted one after a rebuild)
-// and the scores would describe the wrong thing. Always verify on a port that is actually free.
+// A server left running on the port would keep serving the OLD build (or a half-deleted one after a rebuild), and
+// another app on the machine can hold the port on another interface (0.0.0.0 while we probe 127.0.0.1): the scores
+// would describe the wrong thing. The port must be free on every interface, and the page served must be this app.
+const freeOn = (p, host) => new Promise((resolve) => { const t = net.createServer().once('error', () => resolve(false)).once('listening', () => t.close(() => resolve(true))).listen(p, host); });
 const freePort = async (start) => {
   for (let p = start; p < start + 50; p++) {
-    const ok = await new Promise((resolve) => { const t = net.createServer().once('error', () => resolve(false)).once('listening', () => t.close(() => resolve(true))).listen(p, '127.0.0.1'); });
-    if (ok) return p;
+    if ((await freeOn(p, '127.0.0.1')) && (await freeOn(p, '0.0.0.0')) && (await freeOn(p, '::').catch(() => true))) return p;
   }
   throw new Error('no free port');
 };
 if (flags.verify) {
   const verifyPort = await freePort(port);
   if (verifyPort !== port) console.warn(`port ${port} is busy (another server?) - verifying on ${verifyPort}`);
-  const server = spawnCmd('npx', ['next', 'start', '-p', String(verifyPort)], { cwd: out, stdio: 'ignore' });
+  // the app identifies itself: a token in public/ that only this build serves
+  const token = `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  await fs.mkdir(path.join(out, 'public'), { recursive: true });
+  await fs.writeFile(path.join(out, 'public', 'trueclone-app.txt'), token);
+  const server = spawnCmd('npx', ['next', 'start', '-p', String(verifyPort)], { cwd: out, stdio: ['ignore', 'pipe', 'pipe'] });
+  let log = '';
+  server.stdout.on('data', (d) => { log += d; });
+  server.stderr.on('data', (d) => { log += d; });
   const url = `http://127.0.0.1:${verifyPort}/`;
-  for (let i = 0; i < 60; i++) { try { if ((await fetch(url)).ok) break; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 1000)); }
+  let ours = false;
+  for (let i = 0; i < 60 && !ours; i++) {
+    try { ours = (await (await fetch(`${url}trueclone-app.txt`)).text()).trim() === token; } catch { /* starting */ }
+    if (!ours) await new Promise((r) => setTimeout(r, 1000));
+  }
+  // synchronous: the process may exit right after, and an async taskkill can lose the race (a server left behind)
+  const stop = () => (process.platform === 'win32' ? spawnSync('taskkill', ['/pid', String(server.pid), '/T', '/F'], { stdio: 'ignore' }) : server.kill());
+  if (!ours) {
+    stop();
+    console.error(`the Next.js app did not come up as itself on ${url} (not scored). Server output:\n${log.split('\n').slice(-15).join('\n')}`);
+    process.exit(1);
+  }
   const lab = path.resolve('.');
-  const score = (args) => run('node', args, { cwd: lab });
-  // The app is scored with the same checks, into compare-next/ and REPORT.next.md: the HTML clone's compare/ and
-  // REPORT.md are moved aside first and put back after, so its scores are never overwritten by the app's.
-  const exists = (p) => fs.stat(p).then(() => true, () => false);
-  const keep = [[path.join(root, 'compare'), path.join(root, '.compare-html')], [path.join(root, 'REPORT.md'), path.join(root, '.REPORT-html.md')]];
-  for (const [from, to] of keep) { await fs.rm(to, { recursive: true, force: true }); if (await exists(from)) await fs.rename(from, to); }
+  // Same checks, same entry point as the HTML clone, written straight to compare-next/ and REPORT.next.md (lib.mjs
+  // COMPARE / REPORT_FILE): the HTML clone's compare/ and REPORT.md are never touched or moved.
   try {
-    // same scoring entry point as the HTML clone: time limit per step, summary at the end
-    await score([path.join(path.dirname(toPath(import.meta.url)), 'score.mjs'), name, '--url', url, ...(flags.quick ? ['--quick'] : [])]);
+    await run('node', [path.join(path.dirname(toPath(import.meta.url)), 'score.mjs'), name, '--url', url, ...(flags.quick ? ['--quick'] : [])], { cwd: lab, env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md' } });
   } finally {
-    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(server.pid), '/T', '/F']);
-    else server.kill();
-    await fs.rm(path.join(root, 'compare-next'), { recursive: true, force: true });
-    if (await exists(path.join(root, 'compare'))) await fs.rename(path.join(root, 'compare'), path.join(root, 'compare-next'));
-    if (await exists(path.join(root, 'REPORT.md'))) await fs.rename(path.join(root, 'REPORT.md'), path.join(root, 'REPORT.next.md'));
-    for (const [from, to] of keep) if (await exists(to)) await fs.rename(to, from);
+    stop();
     console.log(`Next.js app scores: ${path.relative(process.cwd(), path.join(root, 'REPORT.next.md'))} (details in compare-next/); the HTML clone's REPORT.md is unchanged`);
   }
 }
