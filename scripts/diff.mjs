@@ -3,7 +3,7 @@
 // Without --url it serves sites/<name>/clone/ itself on a free local port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, mask, serve, pad, crop, match, PNG } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, crop, match, PNG } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -25,7 +25,9 @@ const target = typeof flags.url === 'string' ? flags.url : server.url;
 const browser = await openBrowser(flags.cdp);
 const report = { name, mode: structure ? 'structure' : 'visual', source: meta.url, clone: target, at: new Date().toISOString(), viewports: [] };
 try {
-  for (const vp of VIEWPORTS) {
+  for (const vp of SCORED) {
+    // a capture made before held-out sizes existed has no reference for them: skipped, not failed
+    if (!(await fs.stat(path.join(ref, `${vp.name}${suffix}.png`)).then(() => true, () => false))) { console.log(`${vp.name}: no reference capture at ${vp.width}x${vp.height} (re-capture to score it)`); continue; }
     const { context, page } = await newPage(browser, vp);
     await page.goto(target, { waitUntil: 'load', timeout: 60000 });
     await settle(page);

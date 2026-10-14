@@ -7,7 +7,7 @@
 //   { "name": "quote reveal", "ref": ".is-quote .reveal-line", "clone": ".is-quote .split-line",
 //     "props": ["ty"], "time": { "before": 0, "at": 700, "ms": 1400, "every": 100 } }
 //
-// selector@n picks the n-th match (default 0). Props: opacity, tx, ty, sx, sy, rot, top, left, width, height, saturate.
+// selector@n picks the n-th match (default 0); path:<recorded path> picks an element the reveals recorder saw. Props: opacity, tx, ty, sx, sy, rot, top, left, width, height, saturate.
 // Viewport-independent ranges: "scroll": { "of": { "ref": "...", "clone": "..." }, "start": "top bottom", "end": "bottom top", "steps": 10 }
 // resolve each side's own scroll positions, so one map scores desktop, tablet and mobile (--viewport tablet).
 // usage: node scripts/curves.mjs <name> [--viewport desktop] [--only "<name substring>"]
@@ -29,7 +29,7 @@ const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop'));
 
 // ---------- Draft a map from the motion inventory ----------
 if (flags.draft) {
-  const motion = JSON.parse(await fs.readFile(path.join(ref, `motion.${vp.name}.json`), 'utf8'));
+  const motion = JSON.parse(await fs.readFile(path.join(ref, `motion.${vp.name}.json`), 'utf8').catch(() => '{"triggers":[],"onScroll":[]}'));
   const propsFor = (vars) => {
     const out = new Set();
     for (const k of Object.keys(vars || {})) {
@@ -69,9 +69,27 @@ if (flags.draft) {
     const y = tw.firedAt[0];
     entries.push({ name: `reveal ${sel}`, ref: sel, clone: 'TODO', props: propsFor({ ...leaf.vars, ...(leaf.vars.startAt || {}) }), time: { before: Math.max(0, y - vp.height), at: y, ms: Math.ceil((tw.duration + 0.4) * 10) * 100, every: 100 } });
   }
+  // Scroll-linked curves the recorder sampled (any library, or none the inventory can read): one entry per element,
+  // over the scroll range it was seen moving at this size
+  const recorded = JSON.parse(await fs.readFile(path.join(ref, `reveals.${vp.name}.json`), 'utf8').catch(() => '{}')).scrubs || [];
+  let fromScrubs = 0;
+  for (const s of recorded) {
+    const samples = (s.samples || []).filter((x) => x && Number.isFinite(x.y));
+    if (samples.length < 2 || seen.has(`path:${s.path}`)) continue;
+    const moved = (k) => Math.max(...samples.map((x) => x[k] ?? 0)) - Math.min(...samples.map((x) => x[k] ?? 0));
+    const props = [];
+    if (moved('o') > 0.02) props.push('opacity');
+    if (moved('tx') > 1) props.push('tx');
+    if (moved('ty') > 1) props.push('ty');
+    if (moved('s') > 0.01) props.push('sx', 'sy');
+    if (!props.length) continue;
+    seen.add(`path:${s.path}`);
+    fromScrubs++;
+    entries.push({ name: `scrub ${s.cls || s.path}`, ref: `path:${s.path}`, clone: 'TODO', props, viewports: [vp.name], scroll: { from: samples[0].y, to: samples.at(-1).y, steps: Math.min(12, Math.max(4, samples.length - 1)) } });
+  }
   const out = path.join(root, 'motion-map.draft.json');
   await fs.writeFile(out, JSON.stringify(entries, null, 2));
-  console.log(`${entries.length} entries -> ${path.relative(process.cwd(), out)}. Fill in the clone selectors, then save as motion-map.json.`);
+  console.log(`${entries.length} entries (${fromScrubs} from recorded scroll curves) -> ${path.relative(process.cwd(), out)}. Fill in the clone selectors, then save as motion-map.json.`);
   process.exit(0);
 }
 
@@ -86,9 +104,28 @@ let map = JSON.parse(mapText);
 if (typeof flags.only === 'string') map = map.filter((e) => e.name.includes(flags.only));
 map = map.filter((e) => e.clone && e.clone !== 'TODO' && (!e.viewports || e.viewports.includes(vp.name)));
 
+// `path:section:3>div:2` is a recorded element path (from trueclone reveals: tag:position among the children that
+// are not script/style/meta, 1-based, from <body>); anything else is a CSS selector with an optional @n.
+// Installed on every page as window.__tcFind.
+function installFind() {
+  window.__tcFind = (selector) => {
+    if (selector.startsWith('path:')) {
+      const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+      let n = document.body;
+      for (const part of selector.slice(5).split('>')) {
+        const [tag, i] = part.split(':');
+        n = n && [...n.children].filter((c) => !SKIP.has(c.tagName))[Number(i) - 1];
+        if (!n || n.tagName.toLowerCase() !== tag) return null;
+      }
+      return n;
+    }
+    const [sel, idx] = selector.split('@');
+    return document.querySelectorAll(sel)[Number(idx || 0)] || null;
+  };
+}
+
 function sampleInPage([selector, props]) {
-  const [sel, idx] = selector.split('@');
-  const el = document.querySelectorAll(sel)[Number(idx || 0)];
+  const el = window.__tcFind(selector);
   if (!el) return null;
   const s = getComputedStyle(el);
   const m = new DOMMatrixReadOnly(s.transform === 'none' ? undefined : s.transform);
@@ -132,6 +169,7 @@ async function run(url, side, entries, onEntry) {
   };
   try {
     const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
+    await page.addInitScript(installFind);
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
     await page.mouse.move(5, vp.height - 5);
     await waitStill(page, { timeout: 15000, interval: 200 });
@@ -139,8 +177,7 @@ async function run(url, side, entries, onEntry) {
     // Scroll entries: resolve every range first (at the top, before anything is pinned), then visit all sample
     // positions of all curves in one downward pass, so the page glides short distances and never rewinds.
     const resolve = (of, spec) => page.evaluate(([sel, s]) => {
-      const [selector, idx] = sel.split('@');
-      const el = document.querySelectorAll(selector)[Number(idx || 0)];
+      const el = window.__tcFind(sel);
       if (!el) return 0;
       const r = el.getBoundingClientRect();
       const top = r.top + scrollY;

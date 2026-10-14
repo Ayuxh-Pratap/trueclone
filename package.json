@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@google/design.md": "^0.4.0",
+    "js-beautify": "2.0.3",
     "parse5": "^8.0.1",
     "pixelmatch": "^7.2.0",
     "playwright": "^1.64.0",

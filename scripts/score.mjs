@@ -84,7 +84,10 @@ async function cloneHash() {
 const stampsFile = path.join(root, 'compare', '.stamps.json');
 const stamps = url ? {} : await fs.readFile(stampsFile, 'utf8').then(JSON.parse).catch(() => ({}));
 const inputs = url ? null : { hash: await cloneHash(), capturedAt, args: null };
-const stampKey = (step) => JSON.stringify({ hash: inputs?.hash, capturedAt, args: step.args });
+// the step's own code is an input too: a changed check must re-measure, never report its old number
+const codeHash = async (file) => crypto.createHash('sha1').update(await fs.readFile(path.join(HERE, path.basename(file)), 'utf8').catch(() => '')).update(await fs.readFile(path.join(HERE, 'lib.mjs'), 'utf8').catch(() => '')).digest('hex').slice(0, 12);
+const codeHashes = Object.fromEntries(await Promise.all(steps.map(async (st) => [st.label, await codeHash(st.args[0])])));
+const stampKey = (step) => JSON.stringify({ hash: inputs?.hash, capturedAt, args: step.args, code: codeHashes[step.label] });
 const reusable = (step) => !step.live && !url && !flags.fresh && !flags['refresh-ref'] && stamps[step.label]?.key === stampKey(step) && stamps[step.label].values !== undefined;
 
 const runStep = (step) => new Promise((resolve) => {

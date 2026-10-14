@@ -4,6 +4,7 @@
 //
 // usage: node scripts/report.mjs <name>
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from './lib.mjs';
 
@@ -22,10 +23,14 @@ if (!meta) {
 }
 
 // Targets a clone has to meet (the same ones the skill gives the agent).
-const T = { layout: 98, statesGap: 5, motion: 95, detail: 95, hovers: 90, load: 95 };
+const T = { layout: 98, states: 95, canvas: 90, motion: 95, detail: 95, hovers: 90, load: 95 };
+// an accepted difference never covers a value below this, and needs evidence (a file it names that exists)
+const ACCEPT_FLOOR = 95;
 const mark = (ok, acceptedNote) => (ok === null ? '–' : ok ? 'pass' : acceptedNote ? `accepted (${acceptedNote})` : '**below target**');
 const pct = (v) => (v === undefined || v === null ? '–' : `${v}%`);
-const VPS = ['desktop', 'tablet', 'mobile'];
+// the seed sizes, then the held-out sizes (captured and scored, never used to build the clone)
+const VPS = ['desktop', 'tablet', 'mobile', 'laptop', 'wide'];
+const HELD = new Set(['laptop', 'wide']);
 
 const layout = await read('compare/report.mask.json');
 const visual = await read('compare/report.json');
@@ -46,8 +51,23 @@ const notesSection = (title) => {
   return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').split('\n').map((l) => l.trim()).filter((l) => /^[-*]\s+\S/.test(l)).map((l) => l.replace(/^[-*]\s+/, '')) : [];
 };
 const accepted = notesSection('Accepted differences');
+// review: the frames trueclone review wrote, and the verdict the agent gave each in notes.md
+const reviewVerdicts = notesSection('Review');
+const reviewFrames = [];
+for (const size of ['wide', 'laptop', 'desktop', 'tablet', 'mobile']) {
+  const fr = await read(`compare/review/${size}/frames.json`);
+  for (const x of fr?.frames || []) {
+    const v = reviewVerdicts.find((l) => l.startsWith(`${x.id} ${size}:`) || l.startsWith(`${x.id} ${size} :`));
+    reviewFrames.push({ size, id: x.id, pct: x.pct, verdict: v ? v.slice(v.indexOf(':') + 1).trim() : null });
+  }
+}
+const reviewOpen = reviewFrames.filter((x) => !x.verdict || !/^same\b/i.test(x.verdict));
 const findings = notesSection('Findings');
-const acceptedFor = (check, vp) => accepted.filter((a) => new RegExp(`\\b${check}\\b`, 'i').test(a) && (!vp || new RegExp(`\\b${vp}\\b`, 'i').test(a) || !/\b(desktop|tablet|mobile)\b/i.test(a)));
+// an entry needs `evidence: <file>` naming a file in the site folder (a crop, a measurement): a reason without proof
+// is a gap, not a decision
+const hasEvidence = (a) => { const m = /evidence:\s*([^\s;,)]+)/i.exec(a); return Boolean(m && fsSync.existsSync(path.resolve(root, m[1]))); };
+const acceptedFor = (check, vp) => accepted.filter((a) => hasEvidence(a) && new RegExp(`\\b${check}\\b`, 'i').test(a) && (!vp || new RegExp(`\\b${vp}\\b`, 'i').test(a) || !/\b(desktop|tablet|mobile|laptop|wide)\b/i.test(a)));
+const unproven = accepted.filter((a) => !hasEvidence(a));
 
 const byVp = (rep, key = 'match') => Object.fromEntries((rep?.viewports || []).map((v) => [v.viewport, v[key] ?? v.score]));
 const L = byVp(layout), V = byVp(visual), S = byVp(states), D = byVp(detail, 'score');
@@ -60,7 +80,8 @@ const row = (check, values, test, note = '') => {
   // below target, but every failing width has an accepted entry in notes.md: the decision is recorded, not hidden
   const key = check.split(' ')[0].toLowerCase();
   const failing = typeof test === 'function' ? present(values).filter((v) => !test(values[v], v)) : ok === false ? present(values) : [];
-  const covered = failing.length && failing.every((v) => acceptedFor(key, v).length);
+  // never below the floor: an accepted difference explains the last few points, not a broken page
+  const covered = failing.length && failing.every((v) => (typeof values[v] !== 'number' || values[v] >= ACCEPT_FLOOR) && acceptedFor(key, v).length);
   const stale = drift?.stale && ['detail', 'hovers', 'motion', 'load', 'interactions'].includes(key) ? ' **stale capture**' : '';
   rows.push(`| ${check} | ${VPS.map((v) => pct(values[v])).join(' | ')} | ${mark(ok, covered ? acceptedFor(key)[0].slice(0, 60) : null)}${stale} | ${note} |`);
 };
@@ -68,17 +89,23 @@ const present = (vals) => VPS.filter((v) => vals[v] !== undefined && vals[v] !==
 const all = (vals, test) => (present(vals).length ? present(vals).every((v) => test(vals[v], v)) : null);
 row(`Layout (structure)`, L, (x) => x >= T.layout, `target ≥ ${T.layout}%; text and media masked`);
 if (meta.mode === 'exact') row('Layout (real pixels)', V, (x) => x >= T.layout, 'exact mode: same text and media');
-row('Scroll states', S, (x, v) => L[v] === undefined || x >= L[v] - T.statesGap, `within ${T.statesGap} points of layout`);
+row('Scroll states', S, (x) => x >= T.states, `target ≥ ${T.states}%`);
+const CV = byVp(states, 'canvas');
+if (present(CV).length) row('Canvases', CV, (x) => x >= T.canvas, `target ≥ ${T.canvas}%; what each scene draws, compared in the scroll-state frames (colours and coverage)`);
 row('Motion curves', C, (x) => x >= T.motion, present(C).length ? `target ≥ ${T.motion}%` : 'no motion map (no scroll or time animation to score)');
 row('Detail (styles)', D, (x) => x >= T.detail, `target ≥ ${T.detail}%; font, size, weight, line height, colour, boxes`);
 row('Hovers', { desktop: hovers?.score }, hovers ? hovers.score >= T.hovers : null, `target ≥ ${T.hovers}% of the reference hover effects`);
 const LD = byVp(load, 'score');
 const tts = (side) => VPS.map((v) => load?.viewports.find((x) => x.viewport === v)).filter(Boolean).map((x) => (x[side]?.settledAt === null ? '>4000' : x[side]?.settledAt)).filter((x) => x !== undefined);
 row('Load sequence', LD, (x) => x >= T.load, present(LD).length ? `target ≥ ${T.load}%; how settled each side is at 0.25 to 4 s, cold cache, same network (settled at: reference ${tts('ref').map((x) => `${x}ms`).join(' / ') || '–'}, clone ${tts('clone').map((x) => `${x}ms`).join(' / ') || '–'})` : 'not measured (trueclone load <name>)');
+if (reviewFrames.length) {
+  const sizes = [...new Set(reviewFrames.map((x) => x.size))];
+  rows.push(`| Review (by eye) | ${VPS.map((v) => (sizes.includes(v) ? `${reviewFrames.filter((x) => x.size === v && x.verdict && /^same\b/i.test(x.verdict)).length}/${reviewFrames.filter((x) => x.size === v).length}` : '–')).join(' | ')} | ${reviewOpen.length ? '**below target**' : 'pass'} | frames signed off "same" in notes.md (trueclone review) |`);
+} else rows.push(`| Review (by eye) | – | – | – | – | – | **below target** | not done: run trueclone review <name> and give every frame a verdict in notes.md |`);
 const scenarios = interact?.scenarios || [];
 const failed = scenarios.filter((s) => s.expect && !s.expect.pass);
 row('Interactions', { desktop: scenarios.length ? +(scenarios.reduce((n, s) => n + (s.score || 0), 0) / scenarios.length).toFixed(2) : undefined }, scenarios.length ? failed.length === 0 : null,
-  scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change something on both sides` : 'no interactions.json');
+  scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change on both sides and end in the reference's state (≥ 95)` : 'no interactions.json');
 
 const failing = rows.filter((r) => r.includes('below target')).length;
 const acceptedCount = rows.filter((r) => r.includes('| accepted (')).length;
@@ -88,7 +115,9 @@ const verdict = (failing ? `${failing} check(s) below target` : 'every scored ch
 const weak = [];
 for (const v of VPS) for (const s of (layout?.viewports.find((x) => x.viewport === v)?.worstSections || []).slice(0, 2)) if (s.match < 99) weak.push(`- Layout ${v}: section "${String(s.label).slice(0, 50)}" at y ${s.y} is ${s.match}%`);
 for (const v of VPS) for (const e of (curves[v]?.entries || []).filter((x) => x.score < 90).slice(0, 3)) weak.push(`- Motion ${v}: "${e.name}" ${e.score}%${e.note ? ` (${e.note})` : ''}`);
-for (const s of failed) weak.push(`- Interaction "${s.name}": the expected change happened on ${s.expect.ref ? 'the reference' : 'neither side'}${s.expect.clone ? '' : ', not on the clone'}`);
+for (const s of failed) weak.push(s.expect.ref !== null && !(s.expect.ref && s.expect.clone)
+  ? `- Interaction "${s.name}": the expected change happened on ${s.expect.ref ? 'the reference' : 'neither side'}${s.expect.clone ? '' : ', not on the clone'}`
+  : `- Interaction "${s.name}": the clone ends in a different state (${s.score}% like the reference's)`);
 for (const v of (load?.viewports || []).filter((x) => x.score < T.load)) {
   const worst = Object.entries(v.gap || {}).sort((a, b) => b[1] - a[1])[0];
   if (worst) weak.push(`- Load ${v.viewport}: at ${worst[0]}ms the clone is ${v.clone.curve[worst[0]]}% settled, the reference ${v.ref.curve[worst[0]]}% (settled at ${v.clone.settledAt ?? '>4000'}ms vs ${v.ref.settledAt ?? '>4000'}ms)`);
@@ -123,15 +152,18 @@ const md = `# trueclone report: ${name}
 | Scored | ${layout?.at || '–'}${layout?.clone && !/127\.0\.0\.1:\d+\/$/.test(layout.clone) ? ` against ${layout.clone}` : ''} |
 | Verdict | **${verdict}** |
 ${times ? `| Scoring time | ${times.totalMin} min (${times.kind}${times.only ? `, only ${times.only.join(',')}` : ''}): ${Object.entries(times.steps).filter(([, s]) => s.seconds).map(([k, s]) => `${k} ${s.seconds}s`).join(', ')}${Object.values(times.steps).some((s) => /kept/.test(s.status)) ? '; unchanged checks kept from their last run' : ''} |` : ''}
-${(detail?.viewports || []).some((v) => v.unstable) || hovers?.unstable || (load?.viewports || []).some((v) => v.unstable) ? `| Not scored | ${(detail?.viewports || []).filter((v) => v.unstable).map((v) => `${v.unstable} detail probe${v.unstable > 1 ? 's' : ''} (${v.viewport})`).concat(hovers?.unstable ? [`${hovers.unstable} hover${hovers.unstable > 1 ? 's' : ''}`] : [], (load?.viewports || []).filter((v) => v.unstable).map((v) => `load ${v.viewport} (±${v.noise} between two runs)`)).join(', ')}: unstable on the reference or the clone itself (random motion, timing), excluded from the scores above |` : ''}
+${(detail?.viewports || []).some((v) => v.unstable) || hovers?.unstable || (load?.viewports || []).some((v) => v.unstable) ? `| Not scored | ${(detail?.viewports || []).filter((v) => v.unstable).map((v) => `${v.unstable} detail probe${v.unstable > 1 ? 's' : ''} (${v.viewport})`).concat(hovers?.unstable ? [`${hovers.unstable} hover${hovers.unstable > 1 ? 's' : ''}`] : [], (load?.viewports || []).filter((v) => v.unstable).map((v) => `load ${v.viewport} (±${v.ref?.noise ?? v.noise} between two runs)`)).join(', ')}: unstable on the reference itself (random motion, timing), excluded from the scores above |` : ''}
+${(load?.viewports || []).some((v) => v.cloneUnstable) ? `| Clone loads inconsistently | ${load.viewports.filter((v) => v.cloneUnstable).map((v) => `${v.viewport} (±${v.clone.noise} between two runs)`).join(', ')}: the clone's own load differs from one run to the next; scored by its worse run, since a visitor can get either |` : ''}
 
 ## Scores
 
-| Check | Desktop | Tablet | Mobile | Status | Notes |
-|---|---|---|---|---|---|
+| Check | Desktop 1440 | Tablet 768 | Mobile 390 | Laptop 1280 ° | Wide 1920 ° | Status | Notes |
+|---|---|---|---|---|---|---|---|
 ${rows.join('\n')}
 
-${drift?.stale ? `## Stale capture\n\nThe live page differs from the capture of ${meta.capturedAt}: ${drift.viewports.filter((v) => v.stale).map((v) => `${v.viewport} ${v.livePageHeight}px tall vs ${v.capturedPageHeight}px captured, ${v.liveSections} vs ${v.capturedSections} sections`).join('; ')}. Layout and states score against the captured screenshots; detail, hovers, motion, interactions and load measure the live page and are marked stale above. Re-capture (\`trueclone capture\`, then \`states\`, \`reveals\`, \`seed --force\`) before reading them.\n\n` : ''}${accepted.length ? `## Accepted differences\n\nRecorded in notes.md with a reason; a check below target that is covered here is marked "accepted" in the table.\n\n${accepted.map((a) => `- ${a}`).join('\n')}\n\n` : ''}${weak.length ? `## Fix first\n\n${weak.join('\n')}\n` : '## Fix first\n\nNothing below 99% on layout, 90% on motion or failing.\n'}
+° held out: captured and scored, never used to build the clone. A clone right at the seed sizes and wrong here is fitted to those sizes, not a copy of the site.
+${unproven.length ? `\n${unproven.length} accepted difference(s) in notes.md name no evidence file and are not applied: ${unproven.map((a) => `"${a.slice(0, 50)}…"`).join('; ')}\n` : ''}
+${drift?.stale ? `## Stale capture\n\nThe live page differs from the capture of ${meta.capturedAt}: ${drift.viewports.filter((v) => v.stale).map((v) => `${v.viewport} ${v.livePageHeight}px tall vs ${v.capturedPageHeight}px captured, ${v.liveSections} vs ${v.capturedSections} sections`).join('; ')}. Layout and states score against the captured screenshots; detail, hovers, motion, interactions and load measure the live page and are marked stale above. Re-capture (\`trueclone capture\`, then \`states\`, \`reveals\`, \`seed --force\`) before reading them.\n\n` : ''}${accepted.length ? `## Accepted differences\n\nRecorded in notes.md with a reason; a check below target that is covered here is marked "accepted" in the table.\n\n${accepted.map((a) => `- ${a}`).join('\n')}\n\n` : ''}${reviewOpen.length ? `## Review: open frames\n\n${reviewOpen.slice(0, 40).map((x) => `- ${x.id} ${x.size}: ${x.verdict || 'no verdict yet'} (compare/review/${x.size}/${x.id}.png)`).join('\n')}\n\n` : ''}${weak.length ? `## Fix first\n\n${weak.join('\n')}\n` : '## Fix first\n\nNothing below 99% on layout, 90% on motion or failing.\n'}
 ${findings.length ? `## Findings (tool defects met on this site)\n\n${findings.map((f) => `- ${f}`).join('\n')}\n\n` : ''}## Motion found on the reference
 
 ${motionInv ? `Libraries: ${libs.length ? libs.join(', ') : 'none (no GSAP, Lenis, Swiper or similar)'}. ScrollTriggers: ${motionInv.triggers?.length ?? 0}. Tweens created while scrolling: ${motionInv.onScroll?.length ?? 0}. CSS animations: ${(motionInv.css || []).length}.` : 'Not inventoried yet (trueclone motion <name>).'}
@@ -142,5 +174,7 @@ ${motionInv ? `Libraries: ${libs.length ? libs.join(', ') : 'none (no GSAP, Leni
 - **Tracking, analytics and bot protection** are left out on purpose${tracking.length ? `: ${[...new Set(tracking.map((c) => { try { const u = new URL(c.url); return `${u.host}${u.pathname.split('/').slice(0, 3).join('/')}`; } catch { return host(c.url); } }))].join(', ')}` : ''}.
 ${data.length ? `- **Data and API calls** the reference makes (${uniq(data).length}), which the clone does not call; their captured responses are in reference/desktop.har:\n${uniq(data).slice(0, 15).map((c) => `  - \`${c.method} ${c.url.split('?')[0].slice(0, 110)}\` → ${c.status} ${c.type.split(';')[0]}`).join('\n')}` : '- **Data and API calls**: none seen during the capture (static content).'}
 `;
-await fs.writeFile(path.join(root, 'REPORT.md'), md);
+// rows left out of the summary table (an empty optional row) must not leave a blank line that splits it
+const [head, ...rest] = md.split('\n## Scores');
+await fs.writeFile(path.join(root, 'REPORT.md'), [head.replace(/(\|[^\n]*)\n(?:\n)+(?=\|)/g, '$1\n'), ...rest].join('\n## Scores'));
 console.log(`${verdict} -> ${path.relative(process.cwd(), path.join(root, 'REPORT.md'))}`);

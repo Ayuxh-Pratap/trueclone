@@ -205,6 +205,10 @@ async function record(vp) {
     await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
     await page.mouse.move(5, vp.height - 5);
     await waitStill(page, { timeout: 15000, interval: 200 });
+    // Only what scrolling does: with pointer events off, whatever scrolls under the resting pointer is never hovered,
+    // so a card that opens on hover is not recorded as opened by the scroll. (Wheel input still reaches the page.)
+    await page.addStyleTag({ content: '*, *::before, *::after { pointer-events: none !important; }' });
+    await page.mouse.move(vp.width - 2, Math.round(vp.height / 2));
     const count = await page.evaluate(watchInPage);
     // Class changes caused by scrolling (a header that gets its backdrop, an "is-visible" toggle): watched with a
     // MutationObserver. Anything that changes while the page sits idle (timers, carousels) is ignored.

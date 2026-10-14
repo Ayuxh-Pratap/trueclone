@@ -6,7 +6,7 @@
 // usage: node scripts/drift.mjs <name> [--viewport desktop|all]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, sectionsOf } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, settle, sectionsOf } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -24,19 +24,26 @@ try {
   for (const vp of vps) {
     const captured = meta.viewports?.find((v) => v.viewport === vp.name);
     if (!captured) continue;
-    const { context, page } = await newPage(browser, vp);
-    try {
-      await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
-      await settle(page, meta.hide || []);
-      const livePageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
-      const liveSections = (await sectionsOf(page)).length;
-      // 1% (at least 40px) absorbs font hinting and a rotating line of text; a new section or a block that moved is above that
-      const stale = Math.abs(livePageHeight - captured.pageHeight) > Math.max(40, captured.pageHeight * 0.01) || liveSections !== captured.sections;
-      viewports.push({ viewport: vp.name, livePageHeight, capturedPageHeight: captured.pageHeight, liveSections, capturedSections: captured.sections, stale });
-      console.log(`${vp.name}: live ${livePageHeight}px / ${liveSections} sections, captured ${captured.pageHeight}px / ${captured.sections} sections${stale ? '  <- changed since the capture' : '  (same)'}`);
-    } finally {
-      await context.close();
-    }
+    const sample = async () => {
+      const { context, page } = await newPage(browser, vp);
+      try {
+        await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
+        await settle(page, meta.hide || []);
+        return { h: await page.evaluate(() => document.documentElement.scrollHeight), n: (await sectionsOf(page)).length };
+      } finally {
+        await context.close();
+      }
+    };
+    // 1% (at least 40px) absorbs font hinting and a rotating line of text; a new section or a block that moved is above that
+    const differs = (s) => Math.abs(s.h - captured.pageHeight) > Math.max(40, captured.pageHeight * 0.01) || s.n !== captured.sections;
+    // a page that renders differently from one load to the next (a random block, a late embed) is not a changed site:
+    // a difference counts only when a second load shows it too
+    let s = await sample();
+    let confirmed = false;
+    if (differs(s)) { const again = await sample(); confirmed = differs(again); if (!confirmed) s = again; }
+    const stale = confirmed;
+    viewports.push({ viewport: vp.name, livePageHeight: s.h, capturedPageHeight: captured.pageHeight, liveSections: s.n, capturedSections: captured.sections, stale });
+    console.log(`${vp.name}: live ${s.h}px / ${s.n} sections, captured ${captured.pageHeight}px / ${captured.sections} sections${stale ? '  <- changed since the capture (seen on two loads)' : '  (same)'}`);
   }
 } finally {
   if (!flags.cdp) await browser.close();

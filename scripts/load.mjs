@@ -9,7 +9,7 @@
 //   -> sites/<name>/compare/load.json, frames in compare/load/ and reference/load/
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, PNG, withTimeout } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, PNG, withTimeout } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -81,14 +81,18 @@ try {
     const clone = await twice(cloneUrl || `${server.url}index.html`, path.join(root, 'compare', 'load'), vp);
     const gap = Object.fromEntries(TIMES.map((t) => [t, +Math.abs(ref.curve[t] - clone.curve[t]).toFixed(2)]));
     const noise = +Math.max(ref.noise, clone.noise).toFixed(2);
-    // a side that does not agree with itself (an intro that starts a second later in one run) cannot be scored
-    // against anything: the width is reported as unstable, like a probe, instead of as a number
-    const unstable = noise > NOISE_LIMIT;
-    const score = unstable ? null : +(100 - TIMES.reduce((s, t) => s + gap[t], 0) / TIMES.length).toFixed(2);
-    viewports.push({ viewport: vp.name, score, unstable, noise, gap, ref, clone });
+    const match = (curve) => +(100 - TIMES.reduce((s, t) => s + Math.abs(ref.curve[t] - curve[t]), 0) / TIMES.length).toFixed(2);
+    // Only the reference not agreeing with itself (an intro that starts a second later in one run) leaves nothing to
+    // score against: that width is reported as unstable, like a probe. A clone that loads differently from one run to
+    // the next is a defect, not noise: it is scored by its worse run (a visitor may get that one).
+    const unstable = ref.noise > NOISE_LIMIT;
+    const cloneUnstable = !unstable && clone.noise > NOISE_LIMIT;
+    const score = unstable ? null : cloneUnstable ? Math.min(...clone.runs.map((r) => match(r.curve))) : match(clone.curve);
+    viewports.push({ viewport: vp.name, score, unstable, cloneUnstable, noise, gap, ref, clone });
+    const curves = `curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${clone.runs.map((r) => TIMES.map((t) => r.curve[t]).join('/')).join(' | ')}`;
     console.log(unstable
-      ? `${vp.name}: load unstable (noise ±${noise} between two runs of the ${ref.noise > clone.noise ? 'reference' : 'clone'} itself; not scored; curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${TIMES.map((t) => clone.curve[t]).join('/')})`
-      : `${vp.name}: load match ${score}% (noise ±${noise}; settled: reference ${ref.settledAt ?? '>4000'}ms, clone ${clone.settledAt ?? '>4000'}ms; curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${TIMES.map((t) => clone.curve[t]).join('/')})`);
+      ? `${vp.name}: load unstable (the reference differs by ±${ref.noise} between two runs of itself; not scored; ${curves})`
+      : `${vp.name}: load match ${score}%${cloneUnstable ? ` (the clone loads differently each time, ±${clone.noise}: scored by its worse run)` : ` (noise ±${noise})`}; settled: reference ${ref.settledAt ?? '>4000'}ms, clone ${clone.settledAt ?? '>4000'}ms; ${curves}`);
   }
 } finally {
   if (!flags.cdp) await browser.close();

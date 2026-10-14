@@ -11,6 +11,10 @@
 //    "compare": "structure" }]                                                     // or "visual"
 // Step kinds: move [x,y] (fractions of the viewport), hover [x,y], path [[x,y],...], drag {from,to}, down/up [x,y],
 // click {ref,clone} selector or [x,y], key "Escape", wait ms, shot "label".
+// Points are [x, y] fractions of the viewport (0-1); move and hover also take an element: "selector@n" or { ref, clone }.
+// "selector@n" in at/click/expectChange picks the n-th match, counting from 0 (mind hidden duplicates: a mobile menu
+// button is often the first match). A scenario passes when the change happens on both sides and the shots after it
+// match the reference's (≥ 95).
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -19,7 +23,7 @@ import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, w
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
 if (!name) {
-  console.error('usage: npm run interact -- <name> [--only text] | --draft');
+  console.error('usage: trueclone interact <name> [--only "<scenario text>"] | trueclone interact <name> --draft   (scenario format: the comment at the top of scripts/interact.mjs, and SKILL.md)');
   process.exit(1);
 }
 const root = path.resolve('sites', name);
@@ -94,6 +98,14 @@ async function runSide(url, side, list) {
         await wheelTo(page, sc.at?.offset || 0, vp);
       }
       await waitStill(page, { timeout: 3000 });
+      // the first frame only once the screen itself has stopped changing (a slow intro fade outlasts the page-level
+      // wait, and a "before" caught halfway through it is compared against forever): two shots in a row the same
+      for (let t0 = Date.now(), last = null; Date.now() - t0 < 6000;) {
+        const buf = await page.screenshot();
+        if (last && (buf.equals(last) || matchPct(PNG.sync.read(last), PNG.sync.read(buf)).pct >= 99.8)) break;
+        last = buf;
+        await page.waitForTimeout(250);
+      }
       const px = ([x, y]) => [Math.round(x * vp.width), Math.round(y * vp.height)];
       const expectSel = sc.expectChange?.[side];
       const before = expectSel ? await stateOf(page, expectSel) : null;
@@ -109,7 +121,18 @@ async function runSide(url, side, list) {
       };
       await shot('before');
       for (const st of sc.steps) {
-        if (st.move || st.hover) await page.mouse.move(...px(st.move || st.hover), { steps: 15 });
+        if (st.move || st.hover) {
+          // a point [x, y], or an element to put the pointer on: "selector@n" or { ref, clone }
+          const t = st.move || st.hover;
+          const sel = Array.isArray(t) ? null : typeof t === 'string' ? t : t[side];
+          if (!sel) await page.mouse.move(...px(t), { steps: 15 });
+          else {
+            const [s, idx] = sel.split('@');
+            const box = await page.locator(s).nth(Number(idx || 0)).boundingBox().catch(() => null);
+            if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 15 });
+            else results.push({ name: sc.name, error: `hover ${sel}: no such element on the ${side === 'ref' ? 'reference' : 'clone'}` });
+          }
+        }
         else if (st.path) for (const p of st.path) await page.mouse.move(...px(p), { steps: 20 });
         else if (st.drag) {
           await page.mouse.move(...px(st.drag.from), { steps: 5 });
@@ -146,7 +169,7 @@ const server = typeof flags.url === 'string' ? null : await serve(path.join(root
 const cloneUrl = server ? server.url : flags.url;
 // Reference results are cached per scenario (reference side + viewport + capture time) as long as the shot
 // files still exist; only new or edited scenarios touch the live site. --refresh-ref re-measures all.
-const refKey = (sc) => ({ tool: 'interact', name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
+const refKey = (sc) => ({ tool: 'interact', v: 2, name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
 const refRes = [];
 const missing = [];
 for (const sc of scenarios) {
@@ -164,6 +187,7 @@ const cloneRes = await runSide(cloneUrl, 'clone', scenarios);
 server?.close();
 
 const report = { name, at: new Date().toISOString(), scenarios: [] };
+const END_STATE_MIN = 95; // the shots after the action must match this well
 for (const sc of scenarios) {
   const a = refRes.find((r) => r.name === sc.name && r.shots), b = cloneRes.find((r) => r.name === sc.name && r.shots);
   const errors = [...refRes, ...cloneRes].filter((r) => r.name === sc.name && r.error).map((r) => r.error);
@@ -174,7 +198,12 @@ for (const sc of scenarios) {
   }
   const labels = Object.keys(shots).filter((l) => l !== 'before');
   const score = labels.length ? +(labels.reduce((n, l) => n + shots[l], 0) / labels.length).toFixed(2) : null;
-  const expect = sc.expectChange ? { ref: a?.changed, clone: b?.changed, pass: a?.changed === true && b?.changed === true } : null;
+  // a scenario passes when the change happens on both sides AND the clone ends up where the reference does: a wrong
+  // panel opening is a change too
+  const endOk = score !== null && score >= END_STATE_MIN;
+  const expect = sc.expectChange
+    ? { ref: a?.changed, clone: b?.changed, endState: score, pass: a?.changed === true && b?.changed === true && endOk }
+    : { ref: null, clone: null, endState: score, pass: endOk };
   report.scenarios.push({ name: sc.name, score, shots, expect, errors });
 }
 await fs.writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -182,7 +211,8 @@ console.table(report.scenarios.map((s) => ({
   scenario: s.name,
   'match %': s.score,
   shots: Object.entries(s.shots).map(([k, v]) => `${k} ${v}`).join('  '),
-  'changes (ref/clone)': s.expect ? `${s.expect.ref ? 'yes' : 'NO'} / ${s.expect.clone ? 'yes' : 'NO'}${s.expect.pass ? '' : '  FAIL'}` : '-',
+  'changes (ref/clone)': s.expect.ref === null ? '-' : `${s.expect.ref ? 'yes' : 'NO'} / ${s.expect.clone ? 'yes' : 'NO'}`,
+  'end state': `${s.score ?? '-'}${s.expect.pass ? '' : '  FAIL'}`,
   errors: s.errors.join('; ') || '',
 })));
 console.log(`-> ${path.relative(process.cwd(), path.join(outDir, 'report.json'))}`);

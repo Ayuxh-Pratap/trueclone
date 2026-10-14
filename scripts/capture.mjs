@@ -5,7 +5,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { VIEWPORTS, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask } from './lib.mjs';
+import { startScriptEvidence } from './scripts-evidence.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [url, nameArg] = pos;
@@ -93,10 +94,13 @@ const manifest = [];
 const summary = [];
 const rootFontSize = {};
 const inlineStyles = {};
+const scriptQueries = new Set(); // media queries the page's scripts asked (matchMedia), at any size
 try {
-  for (const vp of VIEWPORTS) {
+  // the seed sizes and the held-out sizes: the held-out ones are shot and measured for scoring, nothing else
+  for (const vp of SCORED) {
     const desktop = vp.name === 'desktop';
     const { context, page } = await newPage(browser, vp, desktop ? { recordHar: { path: path.join(ref, 'desktop.har'), content: 'omit' } } : {});
+    await page.addInitScript(recordMediaQueries);
     if (desktop) {
       page.on('response', async (res) => {
         const rawType = res.request().resourceType();
@@ -115,6 +119,8 @@ try {
         } catch { /* redirects, data: urls, aborted */ }
       });
     }
+    // desktop: the page's own scripts and what ran, saved as evidence (reference/scripts/)
+    const finishEvidence = desktop ? await startScriptEvidence(page, url).catch(() => null) : null;
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
     // Components that mount only while in view (a lazy wordmark, an embed) are often unmounted again by the time
     // the DOM is saved. Watch from load: an element that was empty, got content while scrolled into view and is empty
@@ -138,6 +144,16 @@ try {
       }).observe(document.body, { subtree: true, childList: true });
     });
     await settle(page, hide);
+    // inline styles at this size, by element path: scripts size and place things from the viewport (a grid's computed
+    // cells, a pin's distance), and the rendered HTML only keeps one size's values. With the extra sizes read below,
+    // the seed tells a function of the viewport from a constant. Read here, settled and before any screenshot, in the
+    // same state as the extra sizes (a full-page shot mounts content and fires reveals).
+    if (!vp.heldOut) inlineStyles[`${vp.width}x${vp.height}`] = await page.evaluate(readInlineStyles);
+    for (const q of await page.evaluate(() => window.__tcMediaQueries || []).catch(() => [])) scriptQueries.add(q);
+    if (finishEvidence) {
+      const ev = await finishEvidence(path.join(ref, 'scripts')).catch((e) => { console.warn(`WARNING scripts not saved: ${e.message}`); return null; });
+      if (ev) console.log(`scripts: ${ev.scripts} saved to reference/scripts/ (${ev.ran} ran during load and scroll), ${ev.listeners} event-listener handlers located (INDEX.md)`);
+    }
     // A full-page screenshot brings the whole page into view at once, which mounts view-mounted components and starts
     // their reveals: shoot until two shots agree, so the reference shows a settled page, not a fade caught at 0%.
     let shot = await page.screenshot({ fullPage: true });
@@ -151,26 +167,6 @@ try {
     await fs.writeFile(path.join(ref, `${vp.name}.png`), shot);
     const sections = await sectionsOf(page);
     await fs.writeFile(path.join(ref, `${vp.name}.sections.json`), JSON.stringify(sections, null, 2));
-    // inline styles at this width, by element path: scripts size and place things per width (a grid's computed
-    // height, a card's offset), and the rendered HTML only keeps the desktop values. The seed turns what differs
-    // between widths into media-query rules.
-    inlineStyles[vp.name] = await page.evaluate(() => {
-      const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
-      const pathOf = (el) => {
-        const parts = [];
-        for (let n = el; n && n !== document.body; n = n.parentElement) {
-          const sibs = [...n.parentElement.children].filter((c) => !SKIP.has(c.tagName));
-          parts.unshift(`${n.tagName.toLowerCase()}:${sibs.indexOf(n) + 1}`);
-        }
-        return parts.join('>');
-      };
-      const out = {};
-      for (const el of document.body.querySelectorAll('[style]')) {
-        if (SKIP.has(el.tagName) || (el.closest('svg') && el.tagName !== 'svg')) continue;
-        out[pathOf(el)] = el.getAttribute('style');
-      }
-      return out;
-    });
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     rootFontSize[vp.name] = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
     if (desktop) {
@@ -218,7 +214,7 @@ try {
     }
     await mask(page);
     await page.screenshot({ path: path.join(ref, `${vp.name}.mask.png`), fullPage: true });
-    summary.push({ viewport: vp.name, width: vp.width, pageHeight: height, sections: sections.length });
+    summary.push({ viewport: vp.name, width: vp.width, height: vp.height, ...(vp.heldOut ? { heldOut: true } : {}), pageHeight: height, sections: sections.length });
     await context.close(); // flushes the HAR
   }
 } finally {
@@ -226,7 +222,33 @@ try {
 }
 
 await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
-await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify(inlineStyles));
+
+// The site's own breakpoints (its @media width queries) and extra sizes inside every range they make: inline styles
+// read there let the seed fit each value a script set as a function of the viewport (a·vw + b·vh + c) per range, or
+// see that it is none and leave it to the agent. Never the held-out sizes: those stay unseen by anything that builds.
+const breakpoints = await siteBreakpoints(manifest, [...scriptQueries]);
+const fitSizes = sizesForFit(breakpoints);
+if (fitSizes.length) {
+  const queue = [...fitSizes];
+  const browser2 = await openBrowser(flags.cdp);
+  try {
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      for (let s = queue.shift(); s; s = queue.shift()) {
+        const { context, page } = await newPage(browser2, { name: `fit${s.width}`, width: s.width, height: s.height });
+        try {
+          await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+          await settle(page, hide);
+          inlineStyles[`${s.width}x${s.height}`] = await page.evaluate(readInlineStyles);
+        } catch (e) { console.warn(`WARNING inline styles at ${s.width}x${s.height} not read: ${e.message.split('\n')[0]}`); }
+        finally { await context.close(); }
+      }
+    }));
+  } finally {
+    if (!flags.cdp) await browser2.close();
+  }
+}
+await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
+console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
 await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 console.table(summary);
@@ -363,4 +385,94 @@ async function fetchMissing(urls, manifest, pageUrl) {
   };
   await Promise.all(Array.from({ length: 6 }, worker));
   return added;
+}
+
+// Inline styles and classes of every styled element, by element path, with the size actually laid out (clientWidth
+// excludes a classic scrollbar; scripts measure that, not the window).
+function readInlineStyles() {
+  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  const pathOf = (el) => {
+    const parts = [];
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      const sibs = [...n.parentElement.children].filter((c) => !SKIP.has(c.tagName));
+      parts.unshift(`${n.tagName.toLowerCase()}:${sibs.indexOf(n) + 1}`);
+    }
+    return parts.join('>');
+  };
+  const styles = {};
+  for (const el of document.body.querySelectorAll('[style]')) {
+    if (SKIP.has(el.tagName) || (el.closest('svg') && el.tagName !== 'svg')) continue;
+    styles[pathOf(el)] = [el.getAttribute('style'), String(el.getAttribute('class') || '')];
+  }
+  return { w: document.documentElement.clientWidth, h: innerHeight, styles };
+}
+
+// Every media query the page's scripts ask (GSAP matchMedia, Webflow, a component's own breakpoint): what a script
+// does can switch at a width no stylesheet mentions.
+function recordMediaQueries() {
+  const seen = (window.__tcMediaQueries = []);
+  const original = window.matchMedia;
+  if (!original) return;
+  window.matchMedia = function matchMedia(q) {
+    if (typeof q === 'string' && /width/.test(q) && !seen.includes(q)) seen.push(q);
+    return original.call(this, q);
+  };
+}
+
+// The width breakpoints the site's stylesheets use at least twice (min-width: 992px is a boundary at 991), and every
+// width its scripts ask about (always kept: a script's breakpoint is behaviour).
+async function siteBreakpoints(manifest, scriptQueries = []) {
+  const count = new Map();
+  for (const q of scriptQueries) {
+    for (const m of q.matchAll(/(min|max)-width\s*:\s*([\d.]+)(px|em|rem)/g)) {
+      const px = Number(m[2]) * (m[3] === 'px' ? 1 : 16);
+      const edge = Math.round(m[1] === 'min' ? px - 1 : px);
+      if (edge >= 300 && edge <= 2600) count.set(edge, (count.get(edge) || 0) + 100);
+    }
+  }
+  const texts = [];
+  for (const m of manifest.filter((x) => x.type === 'stylesheet')) texts.push(await fs.readFile(path.join(ref, m.file), 'utf8').catch(() => ''));
+  const rendered = await fs.readFile(path.join(ref, 'rendered.html'), 'utf8').catch(() => '');
+  for (const m of rendered.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)) texts.push(m[1]);
+  for (const t of texts) {
+    for (const q of t.matchAll(/@media[^{]*/g)) {
+      for (const m of q[0].matchAll(/(min|max)-width\s*:\s*([\d.]+)(px|em|rem)/g)) {
+        const px = Number(m[2]) * (m[3] === 'px' ? 1 : 16);
+        const edge = Math.round(m[1] === 'min' ? px - 1 : px);
+        if (edge >= 300 && edge <= 2600) count.set(edge, (count.get(edge) || 0) + 1);
+      }
+    }
+  }
+  // breakpoints within 2px of each other are one (991 from max-width, 991 from min-width: 992)
+  const edges = [...count].filter(([, n]) => n >= 2).sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [e, n] of edges) { const last = merged[merged.length - 1]; if (last && e - last.e <= 2) last.n += n; else merged.push({ e, n }); }
+  return merged.sort((a, b) => b.n - a.n).slice(0, 9).map((x) => x.e).sort((a, b) => a - b);
+}
+
+// Extra sizes for fitting: at least three points in every breakpoint range (counting the seed sizes in it), at
+// different heights, so a value that depends on the width, the height or both can be told apart from a constant.
+function sizesForFit(breakpoints) {
+  const edges = [320, ...breakpoints, 2400];
+  const taken = new Set([...VIEWPORTS, ...HELD_OUT].map((v) => `${v.width}x${v.height}`));
+  const out = [];
+  const heights = [760, 1000, 880];
+  for (let i = 0; i < edges.length - 1; i++) {
+    const lo = i === 0 ? edges[0] : edges[i] + 1, hi = edges[i + 1];
+    if (hi - lo < 8) { // a narrow band (760 and 767 both breakpoints) still has its own rules: sample both edges
+      for (const [w, h] of [[lo, heights[i % 3]], [hi, heights[(i + 1) % 3]]]) if (!taken.has(`${w}x${h}`)) { taken.add(`${w}x${h}`); out.push({ width: w, height: h }); }
+      continue;
+    }
+    const seeds = VIEWPORTS.filter((v) => v.width >= lo && v.width <= hi).length;
+    const want = Math.max(2, 3 - seeds);
+    for (let k = 0; k < want; k++) {
+      const w = Math.round(lo + (hi - lo) * [0.25, 0.75, 0.5][k]);
+      const h = heights[(i + k) % heights.length];
+      if (!taken.has(`${w}x${h}`)) { taken.add(`${w}x${h}`); out.push({ width: w, height: h }); }
+    }
+  }
+  // Two very wide, short screens: most sizes above are taller than 16:9, so a "cover" rule (max(100vw, 177.8vh))
+  // would have one point at most on its width side. Two make it checkable (see fitCover in viewport-fit.mjs).
+  for (const [w, h] of [[2400, 760], [2200, 900]]) if (!taken.has(`${w}x${h}`)) { taken.add(`${w}x${h}`); out.push({ width: w, height: h }); }
+  return out;
 }

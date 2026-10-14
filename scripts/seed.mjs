@@ -13,6 +13,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs, openBrowser, newPage, serve, VIEWPORTS } from './lib.mjs';
+import { planInlineStyles } from './viewport-fit.mjs';
 
 // placeholder vocabulary, wide enough to match most word widths
 const LOREM_TEXT = `lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore
@@ -56,8 +57,6 @@ verbum vereor vero verto verus vester veto vetus via video vinco vinum vir virgo
 voluntas vos votum vox vulnus vultus`;
 const LOREM = LOREM_TEXT.split(/\s+/).filter(Boolean);
 
-// The player's width classes (see PLAYER) as media queries: the same three widths the reference was captured at.
-const WIDTH_MEDIA = { desktop: '(min-width: 1100px)', tablet: '(min-width: 600px) and (max-width: 1099px)', mobile: '(max-width: 599px)' };
 
 // Reveal player shipped with the clone (trueclone's own code): replays each recorded curve with the Web Animations
 // API once the element's top crosses the recorded trigger line; with reduced motion it shows the end state.
@@ -71,7 +70,14 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
   const classData = Array.isArray(raw) ? [] : raw.classes || [];
   const scrubData = Array.isArray(raw) ? [] : raw.scrubs || [];
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const vpName = innerWidth >= 1100 ? 'desktop' : innerWidth >= 600 ? 'tablet' : 'mobile';
+  // the record for the visitor's width: a recorded size in the same range of the site's own breakpoints (the nearest
+  // one), otherwise the nearest recorded size
+  const bps = raw.breakpoints || [];
+  const rangeOf = (w) => bps.filter((b) => w > b).length;
+  const seedSizes = raw.sizes || [{ name: 'mobile', width: 390 }, { name: 'tablet', width: 768 }, { name: 'desktop', width: 1440 }];
+  const W = document.documentElement.clientWidth;
+  const sameRange = seedSizes.filter((x) => rangeOf(x.width) === rangeOf(W));
+  const vpName = (sameRange.length ? sameRange : seedSizes).reduce((a, b) => (Math.abs(b.width - W) < Math.abs(a.width - W) ? b : a)).name;
   const pick = (entry) => (entry && (entry.desktop || entry.tablet || entry.mobile) ? entry[vpName] || entry.desktop || entry.tablet || entry.mobile : entry);
 
   // class changes are state, not motion: they apply with reduced motion too
@@ -189,9 +195,20 @@ if (!(await fs.stat(path.join(mirror, 'index.html')).then(() => true, () => fals
   process.exit(1);
 }
 const clone = path.join(root, 'clone');
+const t0 = Date.now();
+const step = (msg) => console.log(`seed ${String(Math.round((Date.now() - t0) / 1000)).padStart(4)}s  ${msg}`);
+// --patches: re-apply clone/patches/ onto the last seed output in a second, without seeding again
+if (flags.patches) {
+  const base = await fs.readFile(path.join(clone, '.seed-base.html'), 'utf8').catch(() => null);
+  if (base === null) { console.error(`no seed output to patch in ${path.relative(process.cwd(), clone)}: run trueclone seed ${name} first`); process.exit(1); }
+  const { html: patched, applied } = await applyPatches(base);
+  await fs.writeFile(path.join(clone, 'index.html'), patched);
+  console.log(`patches re-applied onto the last seed (no re-seed): ${applied.join(', ') || 'none in clone/patches/'}`);
+  process.exit(0);
+}
 const exists = await fs.stat(path.join(clone, 'index.html')).then(() => true, () => false);
 if (exists && !flags.force) {
-  console.error(`${path.relative(process.cwd(), clone)} already has an index.html; add --force to overwrite it`);
+  console.error(`${path.relative(process.cwd(), clone)} already has an index.html: add --force to seed again (your script.js, patches/ and notes.md are kept), or --patches to only re-apply clone/patches/`);
   process.exit(1);
 }
 await fs.mkdir(path.join(clone, 'css'), { recursive: true });
@@ -231,6 +248,7 @@ for (const file of await fs.readdir(path.join(mirror, 'css')).catch(() => [])) {
   if (!exact) out = out.replace(/url\(\s*(['"]?)(?!data:)([^'")]+)\1\s*\)/g, (all, q, u) => (isFont(u) || u.trim().startsWith('#') ? all : `url("../${PLACEHOLDER_BG}")`));
   await fs.writeFile(path.join(clone, 'css', file), out);
 }
+step(`stylesheets copied (${exact ? 'exact' : 'template'} mode)`);
 let html = await fs.readFile(path.join(mirror, 'index.html'), 'utf8');
 html = await rewrite(html, '../', '', !exact);
 await fs.writeFile(path.join(clone, 'index.html'), html);
@@ -260,13 +278,17 @@ const byPath = (key) => {
   return [...m.values()];
 };
 const recorded = byPath('reveals');
-const scrubbed = byPath('scrubs');
+// Scroll-linked curves (parallax, scrubbed fades) are recorded px at three sizes: replaying them would be right at those
+// sizes only. They stay in reference/reveals.<size>.json as evidence; script.js reproduces the rule behind them.
+const recordedScrubs = byPath('scrubs');
+const scrubbed = [];
 const classChanges = primary?.classes || [];
 // Widget states recorded on the reference (trueclone widgets): tabs, menus. Template mode only for now: the snapshots
 // are placeholdered like the page; exact-mode snapshots would still point at the site's media.
 const widgetRec = exact ? null : JSON.parse(await fs.readFile(path.join(ref, 'widgets.desktop.json'), 'utf8').catch(() => 'null'));
 const widgetGroups = widgetRec?.groups || [];
 let marked = 0, classMarked = 0, scrubMarked = 0, widgets = null, runtime = null;
+step('browser pass: reveal marks, widgets, runtime clean-up' + (exact ? '' : ', placeholder text and media'));
 ({ html, marked, classMarked, scrubMarked, widgets, runtime } = await browserPass(!exact, recorded, classChanges, widgetGroups, scrubbed));
 if (!exact) html = html.split(REF_ASSETS).join('__tc_ref__').replace(/__tc_ref__[^"')\s]+/g, PLACEHOLDER);
 if (widgets?.groups.length) {
@@ -279,7 +301,9 @@ if (marked || classMarked || scrubMarked) {
   const perWidth = (r, shape) => Object.fromEntries(['desktop', 'tablet', 'mobile'].filter((v) => r[v]).map((v) => [v, shape(r[v])]));
   const data = JSON.stringify({
     reveals: recorded.map((r) => perWidth(r, ({ trigger, duration, frames, to, from }) => ({ trigger, duration, frames, to, from }))),
-    scrubs: scrubbed.map((r) => perWidth(r, (x) => ({ key: x.key, samples: x.samples }))),
+    scrubs: [],
+    breakpoints: JSON.parse(await fs.readFile(path.join(ref, 'inline-styles.json'), 'utf8').catch(() => '{}')).breakpoints || [],
+    sizes: VIEWPORTS.map((v) => ({ name: v.name, width: v.width })),
     classes: classChanges.map(({ from, to, back, sticky, reverts, threshold, trigger }) => ({ from, to, back, sticky, reverts, threshold, trigger })),
   });
   html = html.replace(/<\/body>/i, `<script type="application/json" id="tc-reveals">${data}</script>\n<script src="trueclone-reveals.js" defer></script>\n</body>`);
@@ -292,22 +316,12 @@ html = html.replace(/<html\b([^>]*)>/i, (all, attrs) => (/\bclass=/.test(attrs) 
 html = html.replace(/<\/head>/i, '<style id="tc-boot-styles">/* trueclone seed: boot contract */@keyframes tc-boot-failsafe{to{visibility:visible}}html.tc-boot [data-tc-boot-hide]{visibility:hidden;animation:tc-boot-failsafe 0s 3s forwards}</style>\n</head>');
 // the clone's own behaviour script, loaded once the DOM is parsed
 if (!/<script[^>]+src="script\.js"/.test(html)) html = html.replace(/<\/body>/i, '<script src="script.js" defer></script>\n</body>');
-// Patches: what a clone needs on top of the seed lives in clone/patches/ and is applied here on every seed, so the
-// generated index.html is never edited by hand and a re-seed never loses a fix. In name order:
-//   head-*.html  inserted before </head>        (meta, extra stylesheet links)
-//   *.css        linked before </head>          (after the site's stylesheets, so they win ties)
-//   body-*.html  inserted before the clone's own <script src="script.js"> (vendor libraries, a hand-over prelude)
-//   *.js         <script src defer> before script.js (runs after the players, before script.js)
-const patchDir = path.join(clone, 'patches');
-const patches = (await fs.readdir(patchDir).catch(() => [])).filter((f) => /\.(html|css|js)$/i.test(f)).sort();
-const beforeScript = (s) => (/<script[^>]+src="script\.js"/.test(html) ? html.replace(/<script[^>]+src="script\.js"[^>]*><\/script>/i, (tag) => `${s}\n${tag}`) : html.replace(/<\/body>/i, `${s}\n</body>`));
-for (const f of patches) {
-  if (/^head-.*\.html$/i.test(f)) html = html.replace(/<\/head>/i, `${await fs.readFile(path.join(patchDir, f), 'utf8')}\n</head>`);
-  else if (/\.css$/i.test(f)) html = html.replace(/<\/head>/i, `<link rel="stylesheet" href="patches/${f}">\n</head>`);
-  else if (/\.html$/i.test(f)) html = beforeScript(await fs.readFile(path.join(patchDir, f), 'utf8'));
-  else if (/\.js$/i.test(f)) html = beforeScript(`<script src="patches/${f}" defer></script>`);
-}
+// the seed's own output, kept so `seed --patches` can re-apply clone/patches/ onto it in a second
+await fs.writeFile(path.join(clone, '.seed-base.html'), html);
+const { html: patchedHtml, applied: patches } = await applyPatches(html);
+html = patchedHtml;
 await fs.writeFile(path.join(clone, 'index.html'), html);
+step('index.html written');
 
 // notes.md: the agent's record, with the sections the report reads back (Findings, Accepted differences). Written once.
 const notesFile = path.join(root, 'notes.md');
@@ -350,11 +364,12 @@ if (!(await fs.stat(scriptFile).then(() => true, () => false))) {
   await fs.writeFile(scriptFile, `// ${meta.url} - clone behaviour (your own code). Markup and styles come from the mirror${exact ? '' : ' (placeholder content)'}.\n// Rebuild every interaction and reveal from the reference's parameters; verify with npx trueclone score ${name}.\n`);
 }
 console.log(`seeded ${path.relative(process.cwd(), clone)} from the mirror (${exact ? 'exact: the site\'s own content' : 'template: placeholder text and media'}): index.html, ${(await fs.readdir(path.join(clone, 'css'))).length} stylesheet(s), ${copied.size} asset(s)${exact ? '' : ' (fonts only)'}`);
-if (recorded.length || classChanges.length || scrubbed.length) console.log(`replayed by trueclone-reveals.js: ${marked}/${recorded.length} scroll reveals, ${scrubMarked}/${scrubbed.length} scroll-linked curves, ${classMarked}/${classChanges.length} scroll class changes (${Object.keys(recs).join(', ') || 'no'} widths recorded)${marked < recorded.length || classMarked < classChanges.length || scrubMarked < scrubbed.length ? ' (the rest did not resolve to an element in the mirror)' : ''}`);
+if (recorded.length || classChanges.length) console.log(`replayed by trueclone-reveals.js: ${marked}/${recorded.length} one-shot scroll reveals, ${classMarked}/${classChanges.length} scroll class changes (${Object.keys(recs).join(', ') || 'no'} sizes recorded)${marked < recorded.length || classMarked < classChanges.length ? ' (the rest did not resolve to an element in the mirror)' : ''}`);
+if (recordedScrubs.length) console.log(`not replayed: ${recordedScrubs.length} scroll-linked curve(s) (parallax, scrubbed fades): evidence in reference/reveals.<size>.json; script.js reproduces the rule behind them`);
 if (runtime) {
-  const pins = runtime.pins.map((p) => `${p.el} pinned for ${p.distance}px`).join(', ');
+  const pins = runtime.pins.map((p) => `${p.el} pinned for ${p.distance}px${p.axis ? ' (sideways: left to script.js)' : ''}`).join(', ');
   console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"`);
-  if (runtime.widthStyled) console.log(`per-width inline styles: ${runtime.widthStyled} element(s) sized or placed differently by the site's scripts at tablet/mobile, now media-query rules (data-tc-w)`);
+  if (runtime.viewport) console.log(`viewport values: ${runtime.viewport.fitted} value(s) a script computes from the screen size carried as functions of it (read at ${runtime.viewport.sizes} sizes, site breakpoints ${runtime.viewport.breakpoints.join('/') || 'none'})${runtime.viewport.dropped ? `; ${runtime.viewport.dropped} fit no such function and are left to script.js (data-tc-script-owned, reference/script-owned.json)` : ''}`);
   if (runtime.hidden) console.log(`boot contract: ${runtime.hidden} element(s) hidden until the clone's scripts have run (data-tc-boot-hide)`);
 }
 if (widgetGroups.length) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
@@ -375,6 +390,7 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
     // placing it into its region (so it is laid out and measured for real) and reading it back
     let widgets = null;
     if (groups.length) {
+      step(`widgets: ${groups.length} recorded, placing each state`);
       const ok = await page.evaluate(markWidgetsInPage, groups);
       await page.evaluate(`window.__tcPlaceholders = ${placeholdersInPage.toString()}`);
       widgets = { groups: [], states: 0 };
@@ -397,7 +413,11 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       }
       widgets.groups = Array.from(widgets.groups, (x) => x || null);
     }
-    if (template) await page.evaluate(placeholdersInPage, [LOREM, null]);
+    if (template) {
+      step('template placeholders: measuring every text run (the longest part on a big page)');
+      await page.evaluate(placeholdersInPage, [LOREM, null]);
+      step('placeholders done');
+    }
     // last, because the recorded paths above were taken on the live page, pin-spacers included
     const runtime = await page.evaluate(cleanRuntimeInPage);
     // regions the clone's script builds at boot, hidden until it has run (see the boot contract below)
@@ -405,8 +425,14 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       ? await page.evaluate((sels) => { let n = 0; for (const s of sels) for (const el of document.querySelectorAll(s)) { el.setAttribute('data-tc-boot-hide', ''); n++; } return n; }, flags['hide-until-boot'].split(',').map((s) => s.trim()).filter(Boolean))
       : 0;
     // inline styles that differ between widths (script-computed sizes and offsets) become media-query rules
+    // inline styles a script set: functions of the viewport where they are, left to script.js where they aren't
     const inlineStyles = JSON.parse(await fs.readFile(path.join(ref, 'inline-styles.json'), 'utf8').catch(() => 'null'));
-    runtime.widthStyled = inlineStyles ? await page.evaluate(widthStylesInPage, [inlineStyles, WIDTH_MEDIA]) : 0;
+    if (inlineStyles) {
+      const { plan, owned, fitted, sizes, breakpoints } = planInlineStyles(inlineStyles, VIEWPORTS);
+      const applied = await page.evaluate(applyInlineStylePlanInPage, plan);
+      runtime.viewport = { fitted, sizes, breakpoints, elements: applied.elements, dropped: applied.dropped };
+      await fs.writeFile(path.join(ref, 'script-owned.json'), JSON.stringify({ note: 'inline values a script computes that are not a function of the screen size: script.js must compute them, as the site does', owned: owned.filter((o) => applied.droppedPaths.includes(o.path)) }, null, 2));
+    }
     // getHTML keeps the declarative shadow roots the capture serialised (outerHTML would drop them); it is the inner
     // HTML, so the <html> tag and its attributes (font classes, dark mode, lang) are written back around it
     const out = await page.evaluate(() => {
@@ -536,13 +562,12 @@ function markRevealsInPage([reveals, classes, scrubs = []]) {
   return [count, classCount, scrubCount];
 }
 
-// Inline styles the capture read at every width, by element path. A declaration with the same value at every width
-// stays inline; one that differs (a height a script computed from the container, an offset, a custom property)
-// moves into a media-query rule per width, so each width gets exactly what the site showed there. The rule's
-// selector is stacked to the precedence an inline style had over the stylesheets, without !important, so a value
-// script.js writes inline later still wins. Motion properties of elements the reveal player drives, and the pin
-// geometry the seed removed, are left out.
-function widthStylesInPage([styles, media]) {
+// The plan from viewport-fit.mjs, applied to the page: fitted values replace the captured constants inline; per-range
+// values become media rules whose selector is stacked to the precedence an inline style had over the stylesheets
+// (without !important, so a value script.js writes inline later still wins); values no function fits are removed and
+// left to script.js. A pin spacer's distance becomes its --tc-pin. Motion properties of elements the reveal player
+// drives, and the pin geometry the seed removed, are left alone.
+function applyInlineStylePlanInPage(plan) {
   const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
   const resolve = (p) => {
     let el = document.body;
@@ -554,69 +579,58 @@ function widthStylesInPage([styles, media]) {
     }
     return el;
   };
-  const decls = (text) => {
-    const map = new Map();
-    for (const d of String(text || '').split(/;(?![^(]*\))/)) {
-      const i = d.indexOf(':');
-      if (i < 0) continue;
-      const k = d.slice(0, i).trim(), v = d.slice(i + 1).trim().replace(/\s*!important$/i, '');
-      if (k) map.set(k, v);
-    }
-    return map;
-  };
   const MOTION = new Set(['transform', 'translate', 'rotate', 'scale', 'opacity', 'filter']);
   const PIN = new Set(['translate', 'rotate', 'scale', 'inset', 'top', 'left', 'right', 'bottom', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'max-width', 'width', 'max-height', 'height', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'box-sizing', 'position', 'transform', 'flex-basis']);
-  const widths = Object.keys(styles).filter((w) => media[w]);
-  const paths = new Set(widths.flatMap((w) => Object.keys(styles[w])));
+  // the bottom (or right) length of a padding shorthand, calc() kept whole
+  const splitTop = (v) => { const out = []; let depth = 0, cur = ''; for (const ch of String(v)) { if (ch === '(') depth++; if (ch === ')') depth--; if (ch === ' ' && !depth) { if (cur) out.push(cur); cur = ''; } else cur += ch; } if (cur) out.push(cur); return out; };
+  const pinOf = (prop, v) => { if (prop === 'padding-bottom') return v; if (prop !== 'padding') return null; const t = splitTop(v); return t[2] ?? t[0]; };
   const rules = [];
   const sel = (i) => `[data-tc-w="${i}"]`.repeat(8); // (0,8,0): above any ordinary author rule, below inline
-  let count = 0;
-  for (const p of paths) {
-    const per = Object.fromEntries(widths.map((w) => [w, decls(styles[w][p])]));
-    const all = new Set(widths.flatMap((w) => [...per[w].keys()]));
-    const differs = [...all].filter((k) => widths.some((w) => per[w].get(k) !== per[widths[0]].get(k)));
-    if (!differs.length) continue;
+  let count = 0, dropped = 0;
+  const droppedPaths = [];
+  for (const [p, entry] of Object.entries(plan)) {
     const el = resolve(p);
     if (!el) continue;
-    // a pin spacer keeps only its pin distance per width (the site computes it from the viewport height); GSAP writes
-    // it as the padding shorthand (padding: 0px 0px 5600px)
-    const spacer = el.hasAttribute('data-tc-pin-spacer');
-    if (spacer) {
-      const horizontal = /^padding-right|^padding:\s*0(px)?\s+[1-9]/.test(styles[widths[0]][p] || '');
-      const distance = (m) => { if (m.has(horizontal ? 'padding-right' : 'padding-bottom')) return parseFloat(m.get(horizontal ? 'padding-right' : 'padding-bottom')); const v = (m.get('padding') || '').trim().split(/\s+/); return parseFloat(horizontal ? v[1] ?? v[0] : v[2] ?? v[0]) || 0; };
-      const d = Object.fromEntries(widths.map((w) => [w, Math.round(distance(per[w]))]));
-      if (widths.every((w) => d[w] === d[widths[0]])) continue;
-      const i = count++;
-      el.setAttribute('data-tc-w', String(i));
-      for (const w of widths) {
-        el.firstElementChild?.setAttribute(`data-tc-pin-${w}`, String(d[w]));
-        rules.push(`@media ${media[w]} { ${sel(i)} { ${horizontal ? 'padding-right' : 'padding-bottom'}: ${d[w]}px } }`);
-      }
+    const i = count;
+    let used = false;
+    if (el.hasAttribute('data-tc-pin-spacer')) {
+      // the spacer's padding was the pin distance: it is the tail's height now (--tc-pin)
+      for (const [k, v] of Object.entries(entry.inline)) { const d = v && pinOf(k, v); if (d) { el.style.setProperty('--tc-pin', d); used = true; } }
+      for (const r of entry.rules) { const d = pinOf(r.prop, r.value); if (d) { rules.push(`@media ${r.media} { ${sel(i)} { --tc-pin: ${d} } }`); used = true; } }
+      if (used) { el.setAttribute('data-tc-w', String(i)); count++; }
       continue;
     }
     const skip = (k) => (el.hasAttribute('data-tc-runtime') && (PIN.has(k) || k === 'width' || k === 'height')) || ((el.hasAttribute('data-tc-reveal') || el.hasAttribute('data-tc-scrub')) && MOTION.has(k));
-    const moved = differs.filter((k) => !skip(k));
-    if (!moved.length) continue;
-    const i = count++;
-    el.setAttribute('data-tc-w', String(i));
-    // the inline attribute keeps what is the same everywhere (as the desktop mirror had it)
-    const current = decls(el.getAttribute('style'));
-    for (const k of moved) current.delete(k);
-    const inline = [...current].map(([k, v]) => `${k}: ${v}`).join('; ');
-    if (inline) el.setAttribute('style', inline); else el.removeAttribute('style');
-    for (const w of widths) {
-      const body = moved.filter((k) => per[w].has(k)).map((k) => `${k}: ${per[w].get(k)}`).join('; ');
-      if (body) rules.push(`@media ${media[w]} { ${sel(i)} { ${body} } }`);
+    for (const [k, v] of Object.entries(entry.inline)) {
+      if (skip(k)) continue;
+      el.style.removeProperty(k);
+      if (v !== null) el.style.setProperty(k, v);
+      used = true;
     }
+    const mine = entry.rules.filter((r) => !skip(r.prop));
+    for (const r of mine) rules.push(`@media ${r.media} { ${sel(i)} { ${r.prop}: ${r.value} } }`);
+    const lost = entry.dropped.filter((k) => !skip(k));
+    if (lost.length) { dropped += lost.length; droppedPaths.push(p); el.setAttribute('data-tc-script-owned', lost.join(' ')); }
+    if (mine.length) { el.setAttribute('data-tc-w', String(i)); count++; }
+    if (!el.getAttribute('style')) el.removeAttribute('style');
+    if (used || mine.length || lost.length) { /* counted */ }
   }
-  if (rules.length) {
-    const style = document.createElement('style');
-    style.id = 'tc-width-styles';
-    style.textContent = `/* trueclone seed: inline styles the site's scripts set per width (captured at desktop, tablet and mobile) */\n${rules.join('\n')}\n`;
-    document.head.appendChild(style);
+  document.getElementById('tc-width-styles')?.remove();
+  const style = document.createElement('style');
+  style.id = 'tc-width-styles';
+  // --tc-vw: 1% of the layout width with a classic scrollbar left out, as the site's scripts measure it; the
+  // tc-vw script below keeps it exact, and 1vw stands in without it
+  style.textContent = `/* trueclone seed: values the site's scripts compute from the screen size, as functions of it (viewport-fit) */\n:root { --tc-vw: 1vw }\n[data-tc-pin-tail] { height: var(--tc-pin, 0px) }\n${rules.join('\n')}\n`;
+  document.head.appendChild(style);
+  if (!document.getElementById('tc-vw')) {
+    const s = document.createElement('script');
+    s.id = 'tc-vw';
+    s.textContent = "(()=>{const r=document.documentElement,set=()=>r.style.setProperty('--tc-vw',r.clientWidth/100+'px');set();new ResizeObserver(set).observe(r)})();";
+    document.head.appendChild(s);
   }
-  return count;
+  return { elements: Object.keys(plan).length, rules: rules.length, dropped, droppedPaths };
 }
+
 
 // The mirror is a snapshot taken after the site's scripts ran, so it carries what they left in the DOM: GSAP's
 // pin-spacer wrappers and the pin's inline geometry (fixed desktop pixels that break every other width), and canvas
@@ -637,14 +651,27 @@ function cleanRuntimeInPage() {
     const distance = Math.round(parseFloat(horizontal ? spacer.style.paddingRight : spacer.style.paddingBottom) || 0);
     if (!pinned) { spacer.replaceWith(...spacer.childNodes); continue; }
     for (const p of PIN_PROPS) pinned.style.removeProperty(p);
-    pinned.style.position = 'sticky';
-    pinned.style.top = '0px';
     pinned.setAttribute('data-tc-runtime', 'pin');
     pinned.setAttribute('data-tc-pin', String(distance));
     const keep = [...spacer.style].filter((p) => SPACER_KEEP.has(p)).map((p) => `${p}: ${spacer.style.getPropertyValue(p)}`);
     spacer.removeAttribute('class');
-    spacer.setAttribute('style', `${keep.join('; ')}${keep.length ? '; ' : ''}${horizontal ? 'padding-right' : 'padding-bottom'}: ${distance}px`);
     spacer.setAttribute('data-tc-pin-spacer', String(distance));
+    if (horizontal) {
+      // a sideways pin (a horizontal scroller) is script territory: the spacer keeps its layout role, script.js pins
+      spacer.setAttribute('style', keep.join('; '));
+      log.pins.push({ el: label(pinned), distance, axis: 'x' });
+      continue;
+    }
+    // A sticky element travels within its parent's content box, never into its padding: the spacer holds the pinned
+    // element and a tail block as tall as the pin distance (--tc-pin, a function of the viewport when the site's is),
+    // so the element stays stuck for exactly that long and then scrolls away, like the original.
+    pinned.style.position = 'sticky';
+    pinned.style.top = '0px';
+    spacer.setAttribute('style', `${keep.join('; ')}${keep.length ? '; ' : ''}--tc-pin: ${distance}px`);
+    const tail = document.createElement('div');
+    tail.setAttribute('data-tc-pin-tail', '');
+    tail.setAttribute('aria-hidden', 'true');
+    pinned.after(tail);
     log.pins.push({ el: label(pinned), distance });
   }
   // a canvas keeps its buffer size: with only a CSS width, the height follows the buffer's aspect ratio, and the
@@ -669,41 +696,67 @@ function placeholdersInPage([lorem, rootSel]) {
   // Widths come from layout, not canvas: the reference words are measured with Ranges on the live text, candidates
   // in an isolated box that copies the text style (contain: layout, so measuring never re-lays out the page). All
   // reads happen before any text is written.
-  const meter = document.createElement('span');
+  //
+  // Speed (a big page has tens of thousands of runs): an element's font is read from its computed style once, and
+  // every word list is measured in one layout per font (one block per word), never one forced layout per word.
+  const meter = document.createElement('div');
   meter.style.cssText = 'position:absolute;left:-99999px;top:0;white-space:pre;contain:layout style paint;visibility:hidden';
   document.body.appendChild(meter);
   const PROPS = ['fontStyle', 'fontWeight', 'fontSize', 'fontFamily', 'fontStretch', 'fontVariant', 'fontFeatureSettings', 'fontKerning', 'letterSpacing', 'wordSpacing', 'textTransform'];
-  let current = null;
-  const cache = new Map();
-  const widthIn = (s, word) => {
-    const key = PROPS.map((p) => s[p]).join('|');
-    let words = cache.get(key);
-    if (!words) cache.set(key, (words = new Map()));
-    if (!words.has(word)) {
-      if (current !== key) { for (const p of PROPS) meter.style[p] = s[p]; current = key; }
-      meter.textContent = word;
-      words.set(word, meter.getBoundingClientRect().width);
+  // key -> { key, vals, words: Map(word -> width), lists: Map(casing -> {words, widths, sorted}) }; kept on the page
+  // across calls (every widget state is shaped by its own call)
+  const fonts = window.__tcFonts || (window.__tcFonts = new Map());
+  const fontOf = (s) => {
+    const vals = PROPS.map((p) => s[p]);
+    const key = vals.join('|');
+    if (!fonts.has(key)) fonts.set(key, { key, vals, words: new Map(), lists: new Map() });
+    return fonts.get(key);
+  };
+  const measure = (f, list) => { // widths of many words in this font, one layout for all of them
+    const todo = [...new Set(list)].filter((w) => !f.words.has(w));
+    if (todo.length) {
+      meter.textContent = '';
+      PROPS.forEach((p, i) => { meter.style[p] = f.vals[i]; });
+      const frag = document.createDocumentFragment();
+      const blocks = todo.map((w) => { const b = document.createElement('div'); b.style.cssText = 'width:max-content'; b.textContent = w; frag.appendChild(b); return b; });
+      meter.appendChild(frag);
+      blocks.forEach((b, i) => f.words.set(todo[i], b.getBoundingClientRect().width));
+      meter.textContent = '';
     }
-    return words.get(word);
+    return list.map((w) => f.words.get(w));
+  };
+  const widthIn = (f, word) => (f.words.has(word) ? f.words.get(word) : measure(f, [word])[0]);
+  const casings = {
+    caps: (w) => w.toUpperCase(),
+    cap: (w) => w[0].toUpperCase() + w.slice(1),
+    plain: (w) => w,
+  };
+  const listFor = (f, casing) => { // the vocabulary in one casing: words, widths, and the same sorted by width
+    if (!f.lists.has(casing)) {
+      const words = lorem.map(casings[casing]);
+      const widths = measure(f, words);
+      const sorted = words.map((w, i) => [widths[i], w, lorem[i]]).sort((a, b) => a[0] - b[0]);
+      f.lists.set(casing, { words, widths, sorted });
+    }
+    return f.lists.get(casing);
   };
   const RUN = /([\p{L}\p{N}]+)/u;
-  const pick = (s, run, refWidth, state) => {
+  const pick = (f, run, refWidth, state) => {
     if (/^\p{N}+$/u.test(run)) return /^(19|20)\d\d$/.test(run) ? run : run.replace(/\d/g, (d) => String((Number(d) + 3) % 10));
     const caps = run.length > 1 && run === run.toUpperCase() && /\p{L}/u.test(run);
     const cap = !caps && /\p{Lu}/u.test(run[0]);
-    const cased = (w) => (caps ? w.toUpperCase() : cap ? w[0].toUpperCase() + w.slice(1) : w);
+    const { words, widths, sorted } = listFor(f, caps ? 'caps' : cap ? 'cap' : 'plain');
     const target = refWidth + state.drift;
     let best = null, bestGap = Infinity;
     state.seed = (state.seed * 31 + run.length) % 9973;
-    for (let i = 0; i < lorem.length; i++) {
-      const w = cased(lorem[(i + state.seed) % lorem.length]);
-      const gap = Math.abs(widthIn(s, w) - target);
-      if (gap < bestGap) { best = w; bestGap = gap; }
+    for (let i = 0; i < words.length; i++) {
+      const k = (i + state.seed) % words.length;
+      const gap = Math.abs(widths[k] - target);
+      if (gap < bestGap) { best = words[k]; bestGap = gap; }
     }
     // No single word close enough (a 2px miss moves a line break): try two lorem words joined into one. Still one
     // word, so the break opportunities stay the reference's, but there are ~10^5 widths to choose from.
     if (bestGap > 0.75 && target > 30) {
-      const sorted = lorem.map((w) => [widthIn(s, cased(w)), w]).sort((a, b) => a[0] - b[0]);
       const tail = (w) => (caps ? w.toUpperCase() : w); // only the first part carries the capital
       const tries = [];
       for (const [wa, a] of sorted) {
@@ -711,22 +764,23 @@ function placeholdersInPage([lorem, rootSel]) {
         if (need < 6) break;
         let lo = 0, hi = sorted.length - 1;
         while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid][0] < need) lo = mid + 1; else hi = mid; }
-        for (const k of [lo - 1, lo]) if (sorted[k]) tries.push([Math.abs(wa + sorted[k][0] - target), cased(a) + tail(sorted[k][1])]);
+        for (const k of [lo - 1, lo]) if (sorted[k]) tries.push([Math.abs(wa + sorted[k][0] - target), a + tail(sorted[k][2])]);
       }
       tries.sort((x, y) => x[0] - y[0]);
-      for (const [, word] of tries.slice(0, 12)) { // estimates; measure the real compound (kerning at the join)
-        const gap = Math.abs(widthIn(s, word) - target);
-        if (gap < bestGap) { best = word; bestGap = gap; }
-      }
+      const top = tries.slice(0, 12).map((t) => t[1]); // estimates; measure the real compounds (kerning at the join)
+      measure(f, top).forEach((w, i) => {
+        const gap = Math.abs(w - target);
+        if (gap < bestGap) { best = top[i]; bestGap = gap; }
+      });
     }
-    state.drift = target - widthIn(s, best);
+    state.drift = target - widthIn(f, best);
     return best;
   };
   // for attributes (alt, aria-label...): no layout to match, the element's own font is enough
   const shaper = (el) => {
-    const s = getComputedStyle(el || document.body);
+    const f = fontOf(getComputedStyle(el || document.body));
     const state = { drift: 0, seed: 7 };
-    return (text) => text.split(RUN).map((run) => (RUN.test(run) && !/^[^\p{L}\p{N}]*$/u.test(run) ? pick(s, run, widthIn(s, run), state) : run)).join('');
+    return (text) => text.split(RUN).map((run) => (RUN.test(run) && !/^[^\p{L}\p{N}]*$/u.test(run) ? pick(f, run, widthIn(f, run), state) : run)).join('');
   };
 
   // text nodes: measure every original letter run first (reads only)
@@ -747,7 +801,7 @@ function placeholdersInPage([lorem, rootSel]) {
       const rects = [...r.getClientRects()];
       return rects.reduce((sum, x) => sum + x.width, 0) || null; // a run hidden by display:none measures 0
     });
-    plan.push({ n, parts, widths, style: getComputedStyle(n.parentElement) });
+    plan.push({ n, parts, widths, font: fontOf(getComputedStyle(n.parentElement)) });
   }
   // then choose the words (writes go to the isolated box only), then write all the text
   const states = new Map();
@@ -756,7 +810,7 @@ function placeholdersInPage([lorem, rootSel]) {
     states.set(item.n.parentElement, state);
     item.text = item.parts.map((part, i) => {
       if (!/[\p{L}\p{N}]/u.test(part)) return part;
-      return pick(item.style, part, item.widths[i] ?? widthIn(item.style, part), state);
+      return pick(item.font, part, item.widths[i] ?? widthIn(item.font, part), state);
     }).join('');
   }
   for (const item of plan) item.n.textContent = item.text;
@@ -801,4 +855,23 @@ function placeholdersInPage([lorem, rootSel]) {
   document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"], meta[name="description"], meta[name="keywords"], meta[name="author"], meta[name="application-name"], meta[name="generator"], meta[name="apple-mobile-web-app-title"], link[rel="author"], link[rel="preconnect"], link[rel="dns-prefetch"], link[rel="preload"][as="image"], link[rel="prefetch"], link[rel~="icon"], link[rel="apple-touch-icon"], link[rel="manifest"], link[rel="canonical"], link[rel="alternate"], script[type="application/ld+json"]').forEach((m) => m.remove());
   document.title = shaper(null)(document.title);
   return document.documentElement.outerHTML;
+}
+
+// Patches: what a clone needs on top of the seed lives in clone/patches/ and is applied on every seed (and alone with
+// `seed --patches`), so the generated index.html is never edited by hand and a re-seed never loses a fix. In name order:
+//   head-*.html  inserted before </head>        (meta, preloads, extra stylesheet links)
+//   *.css        linked before </head>          (after the site's stylesheets, so they win ties)
+//   body-*.html  inserted before the clone's own <script src="script.js"> (vendor libraries, a hand-over prelude)
+//   *.js         <script src defer> before script.js (runs after the players, before script.js)
+async function applyPatches(html) {
+  const patchDir = path.join(root, 'clone', 'patches');
+  const applied = (await fs.readdir(patchDir).catch(() => [])).filter((f) => /\.(html|css|js)$/i.test(f)).sort();
+  const beforeScript = (s) => (/<script[^>]+src="script\.js"/.test(html) ? html.replace(/<script[^>]+src="script\.js"[^>]*><\/script>/i, (tag) => `${s}\n${tag}`) : html.replace(/<\/body>/i, `${s}\n</body>`));
+  for (const f of applied) {
+    if (/^head-.*\.html$/i.test(f)) html = html.replace(/<\/head>/i, `${await fs.readFile(path.join(patchDir, f), 'utf8')}\n</head>`);
+    else if (/\.css$/i.test(f)) html = html.replace(/<\/head>/i, `<link rel="stylesheet" href="patches/${f}">\n</head>`);
+    else if (/\.html$/i.test(f)) html = beforeScript(await fs.readFile(path.join(patchDir, f), 'utf8'));
+    else if (/\.js$/i.test(f)) html = beforeScript(`<script src="patches/${f}" defer></script>`);
+  }
+  return { html, applied };
 }

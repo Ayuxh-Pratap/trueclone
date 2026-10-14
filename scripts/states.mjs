@@ -7,7 +7,7 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, PNG } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -22,7 +22,13 @@ const cloneMode = Boolean(flags.clone);
 const structure = Boolean(flags.structure);
 const stepFrac = Number(flags.step || 0.5);
 const wanted = typeof flags.viewports === 'string' ? flags.viewports.split(',') : null;
-const viewports = VIEWPORTS.filter((v) => !wanted || wanted.includes(v.name));
+const viewportsAll = SCORED.filter((v) => !wanted || wanted.includes(v.name));
+// the clone is only replayed where the reference has states (a capture older than the held-out sizes has none there)
+const viewports = [];
+for (const v of viewportsAll) {
+  if (flags.clone && !(await fs.stat(path.join(ref, 'states', `${v.name}.json`)).then(() => true, () => false))) { console.log(`${v.name}: no reference states (run trueclone states ${name}); skipped`); continue; }
+  viewports.push(v);
+}
 const outRoot = path.join(cloneMode ? path.join(root, 'compare') : ref, 'states');
 
 const server = cloneMode && typeof flags.clone !== 'string' ? await serve(path.join(root, 'clone')) : null;
@@ -75,7 +81,13 @@ try {
       await page.screenshot({ path: path.join(dir, `${file}.mask.png`) });
       await maskToggle(page, false);
       if (!cloneMode) samples.push(await page.evaluate(statesInPage));
-      steps.push({ i, y: actual, target: y, settled: still.settled, settleMs: still.ms });
+      // the canvases in view (scenes a script draws): masked out of the structure score, so compared on their own
+      const canvases = await page.evaluate(() => [...document.querySelectorAll('canvas')].map((c) => {
+        const r = c.getBoundingClientRect(), s = getComputedStyle(c);
+        if (r.width < 40 || r.height < 40 || r.bottom <= 0 || r.top >= innerHeight || s.visibility === 'hidden' || +s.opacity < 0.05) return null;
+        return [Math.max(0, r.left), Math.max(0, r.top), Math.min(innerWidth, r.right), Math.min(innerHeight, r.bottom)].map(Math.round);
+      }).filter((r) => r && r[2] - r[0] >= 40 && r[3] - r[1] >= 40));
+      steps.push({ i, y: actual, target: y, settled: still.settled, settleMs: still.ms, canvases });
     }
     await context.close();
 
@@ -89,7 +101,27 @@ try {
         scored.push({ ...s, match: matchPct(a, b).pct });
       }
       const avg = +(scored.reduce((n, s) => n + s.match, 0) / scored.length).toFixed(2);
-      return { viewport: vp.name, match: avg, worst: [...scored].sort((a, b) => a.match - b.match).slice(0, 5), steps: scored };
+      // canvases: the reference's canvas regions at each step, compared by what is drawn (real pixels, not the mask)
+      const refSteps = JSON.parse(await fs.readFile(path.join(ref, 'states', `${vp.name}.json`), 'utf8')).steps;
+      const canvasScores = [];
+      for (const s of steps) {
+        const regions = refSteps[s.i]?.canvases;
+        if (!regions?.length) continue;
+        const f = `${String(s.i).padStart(2, '0')}.png`;
+        const a = PNG.sync.read(await fs.readFile(path.join(ref, 'states', vp.name, f)));
+        const b = PNG.sync.read(await fs.readFile(path.join(dir, f)));
+        for (const [x0, y0, x1, y1] of regions) {
+          const w = Math.min(x1, a.width, b.width) - x0, h = Math.min(y1, a.height, b.height) - y0;
+          if (w < 40 || h < 40) continue;
+          const ca = new PNG({ width: w, height: h }), cb = new PNG({ width: w, height: h });
+          PNG.bitblt(a, ca, x0, y0, w, h, 0, 0);
+          PNG.bitblt(b, cb, x0, y0, w, h, 0, 0);
+          canvasScores.push({ i: s.i, y: s.y, region: [x0, y0, x1, y1], similarity: canvasSimilarity(ca, cb) });
+        }
+      }
+      const hasCanvasData = refSteps.some((s) => Array.isArray(s.canvases));
+      const canvas = canvasScores.length ? +(canvasScores.reduce((n, c) => n + c.similarity, 0) / canvasScores.length).toFixed(2) : null;
+      return { viewport: vp.name, match: avg, worst: [...scored].sort((a, b) => a.match - b.match).slice(0, 5), steps: scored, canvas, canvasWorst: [...canvasScores].sort((a, b) => a.similarity - b.similarity).slice(0, 5), ...(hasCanvasData ? {} : { canvasNote: 'reference states predate the canvas check: re-run trueclone states' }) };
     } else {
       const summary = summarize(steps, samples, vp, initial);
       await fs.writeFile(path.join(outRoot, `${vp.name}.json`), JSON.stringify({ viewport: vp, steps, samples }));
@@ -105,7 +137,8 @@ try {
 await fs.writeFile(path.join(outRoot, cloneMode ? `report${structure ? '.mask' : ''}.json` : 'report.json'), JSON.stringify(report, null, 2));
 if (cloneMode) {
   console.log(`state match (${report.mode}) - average over scroll steps`);
-  console.table(report.viewports.map((v) => ({ viewport: v.viewport, 'match %': v.match, worst: v.worst.map((s) => `#${s.i} y${s.y} ${s.match}%`).join('  ') })));
+  console.table(report.viewports.map((v) => ({ viewport: v.viewport, 'match %': v.match, 'canvas %': v.canvas ?? '-', worst: v.worst.map((s) => `#${s.i} y${s.y} ${s.match}%`).join('  ') })));
+  for (const v of report.viewports) if (v.canvasNote) console.log(`${v.viewport}: ${v.canvasNote}`);
 } else {
   console.table(report.viewports);
 }

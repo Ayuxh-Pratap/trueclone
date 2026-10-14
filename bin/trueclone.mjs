@@ -19,27 +19,28 @@ const require = createRequire(import.meta.url);
 const { name, version } = JSON.parse(await fs.readFile(path.join(PKG, 'package.json'), 'utf8'));
 
 const STEPS = {
-  capture: ['capture.mjs', 'capture a live page: screenshots at 390/768/1440, sections, tokens, rendered HTML, assets'],
-  seed: ['seed.mjs', 'exact mode: start clone/ from the script-free mirror (markup, text, styles, media)'],
+  capture: ['capture.mjs', 'capture a live page at 5 sizes (3 to build from, 2 held out), its scripts, assets, rendered HTML, inline values at extra sizes'],
+  seed: ['seed.mjs', 'clone/ from the script-free mirror: structure, viewport functions, pins, reveals (--patches: re-apply clone/patches/ only)'],
   design: ['design.mjs', 'design-tokens.json -> DESIGN.md (linted), shadcn globals.css, clone/tokens.css'],
   motion: ['motion.mjs', 'motion inventory from the live runtime (GSAP/ScrollTrigger, Lenis, Swiper, CSS animations)'],
-  understand: ['understand.mjs', 'code evidence with REA: which scripts ran, each element\'s handler with its source, endpoints, source maps -> reference/code.md'],
+  understand: ['understand.mjs', 'optional, rarely needed: REA code evidence -> reference/code.md (capture already saves every script, ranked, in reference/scripts/)'],
   reveals: ['reveals.mjs', 'record one-shot scroll reveals frame by frame, so seed can replay them (any library)'],
   widgets: ['widgets.mjs', 'record every tab and menu state by clicking it, so seed can replay them (template mode)'],
-  states: ['states.mjs', 'live scroll states; --clone scores the rebuild step by step'],
+  states: ['states.mjs', 'live scroll states at every scored size; --clone scores the rebuild step by step (canvases too)'],
   curves: ['curves.mjs', 'motion score: sampled property curves, reference vs clone (motion-map.json)'],
   interact: ['interact.mjs', 'interaction tests: click/hover/drag/key scenarios on both sides (interactions.json)'],
   detail: ['detail.mjs', 'style diff at matching points: font, size, weight, line height, colour, background, radius'],
-  hovers: ['hovers.mjs', 'hover every interactive element on both sides and compare what changes'],
+  hovers: ['hovers.mjs', 'hover every control and every element with a hover listener on both sides; the outcome must match'],
   load: ['load.mjs', 'load sequence: how settled each side is 0.25/0.5/1/2/4 s after navigation, cold cache, same network'],
   drift: ['drift.mjs', 'has the live page changed since the capture? (page height and sections per width vs meta.json)'],
   owned: ['owned.mjs', 'which sections of the clone script.js rebuilds at boot (load with scripts blocked vs running)'],
   rules: ['rules.mjs', 'every CSS rule matching an element on the reference (+ ::before/::after, @media); --clone for the clone'],
+  review: ['review.mjs', 'reference and clone side by side at a held-out size: load, every section, hover; verdicts go in notes.md'],
   explain: ['explain.mjs', 'one place on the page: what layout, states, detail and hovers saw there, plus a reference|clone|diff crop'],
   textshape: ['textshape.mjs', 'template mode: placeholder words with the reference word widths, so lines break the same'],
   diff: ['diff.mjs', 'full-page pixel diff per viewport and section (--structure masks text and media)'],
   spec: ['spec.mjs', 'measured boxes and styles of the live page (--clone for the rebuild)'],
-  tiles: ['tiles.mjs', 'cut a tall screenshot into readable tiles'],
+  tiles: ['tiles.mjs', 'the full-page shots cut into one tile per screen: tiles <name> [--size wide] [--clone], or tiles <file.png>'],
   next: ['next.mjs', 'Next.js + Tailwind v4 + shadcn app from the verified clone; --verify scores it'],
   score: ['score.mjs', 'every score in parallel groups, time limit per step, writes REPORT.md'],
   report: ['report.mjs', 'REPORT.md from the latest scores: every number, every gap, what cannot be copied'],
@@ -56,14 +57,14 @@ const run = (file, args) => new Promise((resolve) => {
 });
 
 function help() {
-  console.log(`trueclone ${version}: a working twin of a website, proven by scores
+  console.log(`trueclone ${version}: the exact same website, at every screen size
 
 usage
-  npx @trueclone/cli init            set up this folder for your coding agent (installs trueclone)
+  npx @trueclone/cli init            set up this folder for your coding agent (installs trueclone; --with-rea adds REA as MCP)
   trueclone <url> [name]             capture + design-system draft (template mode)
   trueclone <step> <name> [options]  run one step
-  trueclone rea <args>               bundled REA (Reverse Engineer Anything)
-  trueclone doctor                   check Node, browsers and REA
+  trueclone rea <args>               bundled REA (Reverse Engineer Anything), for the rare deep case
+  trueclone doctor                   check Node and browsers
 
 steps
 ${Object.entries(STEPS).map(([k, [, d]]) => `  ${k.padEnd(10)} ${d}`).join('\n')}
@@ -85,11 +86,15 @@ async function init() {
   let agents = (await exists(agentsFile)) ? await fs.readFile(agentsFile, 'utf8') : '';
   agents = agents.includes('<!-- trueclone:start -->') ? agents.replace(/<!-- trueclone:start -->[\s\S]*?<!-- trueclone:end -->\n?/, block) : `${agents}${agents && !agents.endsWith('\n\n') ? '\n' : ''}${block}`;
   await fs.writeFile(agentsFile, agents);
-  // 3. REA as an MCP server for agents that speak MCP (Claude Code reads .mcp.json)
-  const mcpFile = path.join(cwd, '.mcp.json');
-  const mcp = (await exists(mcpFile)) ? JSON.parse(await fs.readFile(mcpFile, 'utf8')) : {};
-  mcp.mcpServers = { ...(mcp.mcpServers || {}), rea: { command: 'npx', args: ['-y', `${name}@${version}`, 'rea', 'mcp'] } };
-  await fs.writeFile(mcpFile, `${JSON.stringify(mcp, null, 2)}\n`);
+  // 3. REA as an MCP server only on request (--with-rea): the standard flow reads the site's own scripts from the
+  // capture; REA is for the rare deep case and stays reachable as `npx trueclone rea` either way
+  const withRea = process.argv.includes('--with-rea');
+  if (withRea) {
+    const mcpFile = path.join(cwd, '.mcp.json');
+    const mcp = (await exists(mcpFile)) ? JSON.parse(await fs.readFile(mcpFile, 'utf8')) : {};
+    mcp.mcpServers = { ...(mcp.mcpServers || {}), rea: { command: 'npx', args: ['-y', `${name}@${version}`, 'rea', 'mcp'] } };
+    await fs.writeFile(mcpFile, `${JSON.stringify(mcp, null, 2)}\n`);
+  }
   // 4. captures, clones and browser profiles stay local
   const ignoreFile = path.join(cwd, '.gitignore');
   let ignore = (await exists(ignoreFile)) ? await fs.readFile(ignoreFile, 'utf8') : '';
@@ -108,8 +113,7 @@ async function init() {
   console.log(`trueclone set up in ${cwd}
   .claude/skills/trueclone/SKILL.md   the workflow your agent follows
   AGENTS.md                           points Codex, Cursor and others at the skill
-  .mcp.json                           REA as an MCP server
-  .gitignore                          sites/ stays local
+${withRea ? '  .mcp.json                           REA as an MCP server\n' : ''}  .gitignore                          sites/ stays local
   package.json                        ${installed}
 next: npx trueclone doctor, then ask your agent "clone <url> with trueclone"`);
 }
@@ -125,8 +129,8 @@ async function doctor() {
     try { const b = await chromium.launch(opts); await b.close(); console.log(`ok   ${label}`); }
     catch { console.log(`warn ${label} not found${opts.channel ? ': install Google Chrome' : ': npx playwright install chromium'}`); }
   }
-  try { require.resolve('rea-agents/package.json'); console.log('ok   REA bundled (trueclone rea doctor checks its decompilers)'); }
-  catch { console.log('warn REA not installed'); ok = false; }
+  try { require.resolve('rea-agents/package.json'); console.log('ok   REA bundled, for the rare deep case (trueclone rea doctor checks its decompilers)'); }
+  catch { console.log('warn REA not installed (optional)'); }
   process.exitCode = ok ? 0 : 1;
 }
 

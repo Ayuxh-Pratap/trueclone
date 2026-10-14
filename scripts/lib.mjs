@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import http from 'node:http';
+import zlib from 'node:zlib';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
@@ -10,11 +11,19 @@ import pixelmatch from 'pixelmatch';
 
 export { PNG };
 
+// The seed sizes: the clone is built from what the reference shows at these.
 export const VIEWPORTS = [
   { name: 'mobile', width: 390, height: 844 },
   { name: 'tablet', width: 768, height: 1024 },
   { name: 'desktop', width: 1440, height: 900 },
 ];
+// Held-out sizes: captured and scored, never read by anything that builds the clone. A clone that is right at the seed
+// sizes and wrong here is fitted to the sizes it was built from, not a copy of the site.
+export const HELD_OUT = [
+  { name: 'laptop', width: 1280, height: 720, heldOut: true },
+  { name: 'wide', width: 1920, height: 1080, heldOut: true },
+];
+export const SCORED = [...VIEWPORTS, ...HELD_OUT];
 
 // Jump every animation/transition to its end state so screenshots are deterministic.
 const FREEZE_CSS = `*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;
@@ -133,19 +142,38 @@ canvas{background:#888!important;filter:contrast(0) brightness(1.066)!important}
 // would undo an inline override, so the mask is a stylesheet rule on a marker attribute, which inline styles lose
 // to), gradient text (background-clip: text paints the glyphs with its background, so a transparent colour still
 // shows the letters) and photo backgrounds on ::before/::after. `off` removes the markers.
+// A script that rebuilds or restyles media after the mask went on (a resize during a full-page shot rebuilds a grid)
+// would leave the new elements unmasked on one side only; an observer marks them as they appear, on both sides.
 function maskExtrasInPage(enable) {
   const marks = ['data-lab-bgi', 'data-lab-cliptext', 'data-lab-bgb', 'data-lab-bga'];
   if (!enable) {
+    window.__labMaskObserver?.disconnect();
+    window.__labMaskObserver = null;
     for (const m of marks) for (const el of document.querySelectorAll(`[${m}]`)) el.removeAttribute(m);
     return;
   }
-  for (const el of document.querySelectorAll('*')) {
+  const markOne = (el) => {
     const s = getComputedStyle(el);
     if (s.backgroundImage.includes('url(')) el.setAttribute('data-lab-bgi', '');
     if (s.backgroundClip === 'text' || s.webkitBackgroundClip === 'text') el.setAttribute('data-lab-cliptext', '');
     if (getComputedStyle(el, '::before').backgroundImage.includes('url(')) el.setAttribute('data-lab-bgb', '');
     if (getComputedStyle(el, '::after').backgroundImage.includes('url(')) el.setAttribute('data-lab-bga', '');
-  }
+  };
+  for (const el of document.querySelectorAll('*')) markOne(el);
+  window.__labMaskObserver?.disconnect();
+  window.__labMaskObserver = new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === 'attributes') {
+        if (!(r.target instanceof Element) || marks.includes(r.attributeName)) continue;
+        markOne(r.target);
+        // a custom property or url() set on an ancestor (--hero-img) reaches its descendants' backgrounds
+        if (/url\(|--/.test(r.target.getAttribute('style') || '')) for (const el of r.target.querySelectorAll('*')) markOne(el);
+        continue;
+      }
+      for (const n of r.addedNodes) if (n instanceof Element) { markOne(n); for (const el of n.querySelectorAll('*')) markOne(el); }
+    }
+  });
+  window.__labMaskObserver.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] });
 }
 
 export async function mask(page) {
@@ -226,17 +254,29 @@ const MIME = {
 };
 
 // Port 0 = a free port picked by the OS, so several scoring tools can run side by side; use server.url.
+// Serves a clone the way a host would: text compressed (brotli or gzip, as the browser asks), so the load check
+// compares the clone with a CDN-served original on equal terms.
+const COMPRESSIBLE = /\.(html?|css|m?js|json|svg|txt|xml|map)$/i;
 export function serve(dir, port = 0) {
+  dir = path.resolve(dir); // forward or back slashes, relative or not: one form, so the containment check holds
   return new Promise((resolve) => {
     const server = http.createServer(async (req, res) => {
       let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
       if (p.endsWith('/')) p += 'index.html';
       const file = path.join(dir, p);
-      if (!file.startsWith(dir)) { res.writeHead(403).end(); return; }
+      if (file !== dir && !file.startsWith(dir + path.sep)) { res.writeHead(403).end(); return; }
       try {
         await fs.access(file);
-        res.writeHead(200, { 'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
-        createReadStream(file).pipe(res);
+        const headers = { 'content-type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' };
+        const accept = String(req.headers['accept-encoding'] || '');
+        const enc = COMPRESSIBLE.test(file) ? (/\bbr\b/.test(accept) ? 'br' : /\bgzip\b/.test(accept) ? 'gzip' : null) : null;
+        if (enc) {
+          res.writeHead(200, { ...headers, 'content-encoding': enc, vary: 'accept-encoding' });
+          createReadStream(file).pipe(enc === 'br' ? zlib.createBrotliCompress({ params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } }) : zlib.createGzip({ level: 6 })).pipe(res);
+        } else {
+          res.writeHead(200, headers);
+          createReadStream(file).pipe(res);
+        }
       } catch { res.writeHead(404).end(); }
     });
     server.listen(port, '127.0.0.1', () => { server.url = `http://127.0.0.1:${server.address().port}/`; resolve(server); });
@@ -260,6 +300,30 @@ export function crop(png, y, h) {
 }
 
 export const match = (a, b, diff) => pixelmatch(a.data, b.data, diff ? diff.data : null, a.width, a.height, { threshold: 0.1, includeAA: false });
+
+// How alike two canvas regions look, 0-100: what a scene draws rarely matches pixel for pixel (time, physics, random
+// seeds), so it is compared by what is drawn rather than where: the colour distribution (64 bins) and how much of the
+// region is covered by drawing at all (pixels away from the region's dominant colour). An empty or wrong canvas scores
+// low; the same scene a frame apart scores high.
+export function canvasSimilarity(a, b) {
+  const stats = (img) => {
+    const hist = new Float64Array(64);
+    const n = img.width * img.height;
+    for (let i = 0; i < n; i++) hist[((img.data[i * 4] >> 6) << 4) | ((img.data[i * 4 + 1] >> 6) << 2) | (img.data[i * 4 + 2] >> 6)]++;
+    let mode = 0;
+    for (let k = 1; k < 64; k++) if (hist[k] > hist[mode]) mode = k;
+    const [mr, mg, mb] = [(mode >> 4) * 64 + 32, ((mode >> 2) & 3) * 64 + 32, (mode & 3) * 64 + 32];
+    let ink = 0;
+    for (let i = 0; i < n; i++) if (Math.abs(img.data[i * 4] - mr) + Math.abs(img.data[i * 4 + 1] - mg) + Math.abs(img.data[i * 4 + 2] - mb) > 96) ink++;
+    for (let k = 0; k < 64; k++) hist[k] /= n || 1;
+    return { hist, ink: ink / (n || 1) };
+  };
+  const A = stats(a), B = stats(b);
+  let inter = 0;
+  for (let k = 0; k < 64; k++) inter += Math.min(A.hist[k], B.hist[k]);
+  const cover = 1 - Math.abs(A.ink - B.ink) / Math.max(A.ink, B.ink, 0.05);
+  return +(100 * (0.5 * inter + 0.5 * cover)).toFixed(2);
+}
 
 export function matchPct(pngA, pngB, withDiff = false) {
   const w = Math.max(pngA.width, pngB.width), h = Math.max(pngA.height, pngB.height);
