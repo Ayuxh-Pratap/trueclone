@@ -247,12 +247,28 @@ try {
   if (!flags.cdp) await browser.close();
 }
 
+// three.js bundled into the site's own code may expose nothing at the moment of the inventory (no window.THREE, no
+// __THREE__ yet, no data-engine): its revision is in the scripts that ran (reference/scripts/), next to the
+// WebGLRenderer it defines: REVISION = "160", or __THREE__ = <a name> = "160" once minified
+if (!result.libs.three) {
+  for (const f of await fs.readdir(path.join(ref, 'scripts')).catch(() => [])) {
+    if (!f.endsWith('.js') || f.endsWith('.pretty.js')) continue;
+    const code = await fs.readFile(path.join(ref, 'scripts', f), 'utf8').catch(() => '');
+    if (!/\bWebGLRenderer\b/.test(code)) continue;
+    let rev = /\bREVISION\s*[:=]\s*["'`](\d{2,3})/.exec(code)?.[1] || /__THREE__\s*=\s*["'`](\d{2,3})/.exec(code)?.[1];
+    const alias = !rev && /__THREE__\s*=\s*([\w$]+)/.exec(code)?.[1];
+    if (alias) rev = new RegExp(`(?:^|[^\\w$.])${alias.replace(/\$/g, '\\$')}\\s*=\\s*["'\`](\\d{2,3})["'\`]`).exec(code)?.[1];
+    if (rev) { result.libs.three = rev; result.libs.threeAt = `reference/scripts/${f}`; break; }
+  }
+}
 const out = path.join(ref, `motion.${vp.name}.json`);
 await fs.writeFile(out, JSON.stringify(result, null, 2));
 
 // Human-readable digest, grouped by section, for building the clone.
+// the libraries, by name and version: a list of runtimes (gsaps, engines) or where one was found (…At) is not one
+const libList = Object.entries(result.libs).filter(([k, v]) => v && !Array.isArray(v) && !/At$/.test(k)).map(([k, v]) => (v === true ? k : `${k} ${v}`));
 const lines = [`# Motion inventory: ${meta.url} (${vp.name} ${vp.width}x${vp.height})`, '',
-  `Libraries: ${Object.entries(result.libs).filter(([, v]) => v).map(([k, v]) => (v === true ? k : `${k} ${v}`)).join(', ')}`,
+  `Libraries: ${libList.join(', ') || 'none found'}${result.libs.gsaps?.length > 1 ? ` (${result.libs.gsaps.length} GSAP copies on the page; the busiest at ${result.libs.gsapAt})` : ''}${result.libs.engines?.length ? `; canvas engines: ${result.libs.engines.join(', ')}` : ''}${result.libs.threeAt ? `; three.js r${result.libs.three}, bundled in ${result.libs.threeAt}` : ''}`,
   `Intro: settled after ${(result.intro.ms / 1000).toFixed(1)} s${result.intro.settled ? '' : ' (did not fully settle)'}; ${result.intro.continuousElements} continuously animating elements.`,
   `Lenis: ${result.lenis.length ? JSON.stringify(result.lenis) : 'not constructed through the global'}`, ''];
 const tweenLine = (t, indent = '') => {

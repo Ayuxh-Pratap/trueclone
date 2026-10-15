@@ -90,6 +90,68 @@ navigation itself.
 | 6.6 | **Separate pages seeded**: each route's mirror seeded into `clone/<route>/index.html`, internal links kept relative | a two-page site clones with both pages |
 | 6.7 | **status, brief and review know routes**: the worst route first; a brief per route section; review frames per route | an agent walks every route without being told |
 
+
+## Phase 7. Close every loop (from docs/analysis-0.5-rc2-runs.md)
+
+| # | Item | Done when |
+|---|---|---|
+| 7.1 | status always makes progress: states routed by their worst frames, canvases their own step with a porting recipe, a done or accepted step never repeated, review reachable once layout passes, random regions and routes measured twice and set aside, a worst-frame gate | no run dead-ends; varsity's 17% hero frames are the first thing named |
+| 7.2 | Capture is complete: hide list and cookies on every reference page (and overlay detection), assets at every size and route with every media reference resolved, data-URI-safe CSS, real swipes and captured routes only, clip-path recorded, curves attributed by position, unroll on y only | allbirds checks see the page, not the popup; heybhaskar needs no hand-fetched image |
+| 7.3 | The seed hands over no traps: an always-present runtime (tcOwn, tcBoot), state vs motion transforms, owned regions never rewritten, taken-over reveals settled, Flip-like class changes named in the brief, @import untouched, opaque placeholders | allbirds accordions and menus work as written; varsity stories named as a Flip |
+| 7.4 | Next.js equals the clone: site CSS as raw links, templates, base and every file carried, title/body left to the script, one route per separate page, both reports regenerated | all three Next apps build and equal their clones |
+| 7.5 | Instruments: rules on every size, serve --help, Back settles, hovers skip inert targets and count a missing reaction as 0, real library detection | |
+| 7.6 | The model is checked, not trusted: coverage gate (recorded curves and scripts that ran are cited or owned), status runs a section's scenarios right after its behaviour is written, skill recipes for canvases, carousels, accordions | Sonnet ports what it is pointed at and proves it works |
+
+### Phase 7 checklist (ticked as each lands and is verified)
+
+**7.4 Next.js equals the clone** (first: the cursor, the case studies and the allbirds build)
+- [x] D1 site stylesheets served unprocessed (`<link>` from `public/`), so no CSS pipeline merges or rejects anything
+- [x] D2 `<template>` elements kept (raw HTML), `<base>` carried, every clone file copied to `public/`
+- [x] D3 `<title>` and body classes left to the page script (no hydration reset)
+- [x] D4 **separate-page sites: one Next route per page** (`app/<route>/page.tsx`, shared layout)
+- [x] D5 REPORT.md and REPORT.next.md both regenerated after verdicts
+
+**7.3 The seed hands over no traps**
+- [x] C1 an always-present head runtime (`tcOwn`, `tcBoot`), whether or not a player is written
+- [x] C2 state transforms (a collapsed menu) told from motion transforms; `tcOwn` clears motion only
+- [x] C3 a widget region containing an owned element is never rewritten; single-state groups dropped; pointer-out close only for header menus
+- [x] C4 a reveal taken over by `tcOwn` settles to its end state
+- [x] C5 a scroll class change the site animates (Flip, a transition) named in the brief as a transition
+- [x] C6 template mode never rewrites `@import`
+- [x] C7 opaque placeholders
+
+**7.2 Capture is complete**
+- [x] B1 hide list and cookies (`--cookie`) on every reference page of every step; capture warns about a large fixed overlay
+- [x] B2 assets recorded at every size and on every route; every media reference (srcset sources, `<template>` content, media-like `data-*`) resolved and fetched
+- [x] B3 CSS URL rewriting never touches a `url()` inside a `data:` URI
+- [x] B4 navigation drafted only to captured routes; a swipe needs a drag/pointer listener, not a CSS marquee
+- [x] B5 clip-path recorded in reveals; scroll curves attributed to sections by position
+- [x] B6 unroll on the y axis only; no unroll mark leaks into the clone
+
+**7.1 status always makes progress**
+- [x] A1 scroll states routed by their worst frames (states report), not the layout report
+- [x] A2 a step already done or accepted is never repeated
+- [x] A3 canvases have their own step, with a porting recipe
+- [x] A4 review reachable once layout passes
+- [x] A5 content that differs on the reference itself (random order) measured twice per route and set aside
+- [x] A6 a worst-frame gate: any scroll-state frame below 80 fails, whatever the mean
+
+**7.5 Instruments**
+- [x] E1 `rules` (and every step taking a size) accepts laptop/wide and pixel widths
+- [x] E2 `serve --help` prints help
+- [x] E3 the interaction Back step waits for the page to settle
+- [x] E4 hovers skip invisible/inert targets; a missing reaction scores 0
+- [x] E5 motion reports real libraries; three.js found from canvases and script names; `vendor` offers it
+
+**7.6 The model is checked, not trusted**
+- [x] F1 coverage gate: every recorded scroll curve and every script that ran is cited in Behaviours or owned
+- [x] F2 status runs a section's interaction scenarios right after its behaviour is written ("test what you built")
+- [x] F3 skill recipes: canvases (vendor three.js, port the scene), carousels (vendor the library), accordions; never over-claim
+
+**Proof:** varsity, heybhaskar and allbirds again on Sonnet (the regression set), plus docs.astro.build (separate pages,
+app shell, Next per page). Bar: varsity ≥ 85 by eye, heybhaskar ≥ 95 including Next, allbirds ≥ 90 with every
+behaviour working, every Next app building and equal to its clone.
+
 ## Release gate for 0.5.0
 
 - All three runs finish with no intervention after the prompt, on either model.
@@ -106,4 +168,5 @@ navigation itself.
 | 3 | done: status (one next command from the files, exit 0 only when every gate passes; stale scores re-measured first), brief (a section's handlers file:line + code, motion, script-owned values, scenarios, canvases, scores), vendor (the busiest GSAP: varsity runs Webflow's 3.15 and its own 3.13, the 3.13 drives 13 triggers), serve; skill rewritten around the status loop (12.5 -> 7.7 KB) with the no-check-in rule, also in AGENTS.md; report gates notes (Behaviours must cite file:line: varsity 32 cited passes, an empty one fails), findings read from any heading |
 | 4 | done: review (load frames from each load event, lazy media first, scroll verified and recorded, contact sheets, tool verdicts with evidence close), detail paired by document path, textshape inside horizontal scrollers, stale rows marked and failing (resend: detail, hovers, load measured before its re-seed), siteDir from any folder |
 | 5 | probe regression done: resend unchanged (layout/states 99.7-100, load 97.9-99.2, detail 99.5-99.7 -> 100 by structure; hovers 78.8 real; notes and review gates now open, correctly), nickho unchanged (hand-built: detail falls back to points, same numbers), stripe detail 92.3/70.2/69.2 -> 100/88.2/85.5 with 0 unpaired probes (the rest are real box-size gaps at tablet/mobile); varsity end to end in 13.5 min (capture + every read + seed), status walks it to the briefs, the team brief shows the hover handlers' code; review at 1920 takes every frame at the verified position (2 bottom frames flagged where the seed-only clone is 12px shorter). Next: publish 0.5.0-rc.1, the three test runs one at a time, then the model matrix (Sonnet vs Opus on varsity and stripe) |
+| 7 | built and verified on the dev copies; proof runs (Sonnet, the three sites + docs.astro.build) next. Next = clone: heybhaskar every check and all 8 routes identical (case studies 7.7-60 -> 100; cursor and titles as the clone), allbirds builds (failed) and matches on layout, states, interactions, the nickho pages site gets one route per page (both 98.2-99.9, as the clone). Seed: allbirds accordions open/close (were dead), 4 closed states kept, 3 single-state widget groups dropped, boot released with no player (heybhaskar threw on line 1). Status: varsity routed to its 17% hero frame (was the stories section), a step with no gain in 3 scored tries set aside, review reachable once layout holds, coverage gate (varsity: StoriesSection Flip chunk and the inline scripts never opened), the brief names the stories Flip at its line. Capture: assets at every size and route (nickho 130 -> 150 recorded, 52 -> 27 left to fetch), cookies, y-only unroll recorded in meta. Regression: resend identical on every check (coverage gate new). Open: a large page's Next app settles later than its clone (allbirds load 63-77 vs 75-85: App Router ships the markup twice, 2.2 MB vs 1.0 MB, and the clone's scripts run after hydration); allbirds needs a recapture with --hide for its geo popup (scroll states 14-32 on both sides) |
 | 6 | done: heybhaskar captured as a single-page app with 8 routes, each at 5 sizes (2.4 min); app shells (a fixed sidebar, a pane that scrolls on its own, a sheet over the page) unrolled the same way on both sides, so whole-page measures see the whole page (home 948 -> 2065 px, a case study 948 -> 9202 px) and sections follow the pane's blocks; serve() and the Next app answer every route; layout and states scored per route, a Routes check and table in the report (a seed-only clone fails all 7 other routes, correctly: no routing yet); navigation drafted and scored with the address at every shot (the original replaces its history entry, so Back leaves the site: the clone must do the same); same-site links kept as the clone's routes in both modes (template mode had turned them into #); brief, review and status take --route (Git Bash rewriting of /about undone). Separate pages (6.6): each mirrored at capture and seeded by the same pipeline into clone/<route>/index.html with references rebased (nickho: its privacy page scores 98.2-99.9 layout at all 5 sizes straight from the seed). Open: the Next app for a separate-page site is still one page (a catch-all is only right for a single-page app) |

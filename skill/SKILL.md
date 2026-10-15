@@ -15,9 +15,13 @@ Next.js app generated from it), `notes.md` (your record), `REPORT.md` (the deliv
 ## The loop
 
 ```powershell
-npx trueclone capture <url> [name] [--mode exact --permission "<owner>"] [--hide "<banner selectors>"] [--locale en-US]
+npx trueclone capture <url> [name] [--mode exact --permission "<owner>"] [--hide "<banner selectors>"] [--cookie "consent=1"] [--locale en-US] [--routes 1]
 npx trueclone status <name>
 ```
+
+Capture the right page the first time, once: `--routes 1` when the user wants one page, not the whole site; `--hide`
+for a banner or popup a visitor dismisses (capture warns when a dialog covers the page at load), or `--cookie` with
+the cookie that dismissal sets (a consent or region choice, never a login). Every check after capture applies both.
 
 Then, until it says every gate passes: **do exactly what `status` says, then run `status` again.** It reads the site
 folder and names the one next step as a command, with why and what follows: the reads, the design system, the seed, a
@@ -28,7 +32,14 @@ Next.js app. It exits 0 only when everything passes.
 **Never end your turn, ask "should I continue?", or hand over a progress summary while `status` says work is left.**
 The user asked for the finished clone. The only reason to stop is a real blocker (a login wall, a bot check, a tool
 defect you proved): write it under `## Findings` in notes.md with what you tried, then say so. A long loop is not a
-blocker; a check that is hard is not a blocker.
+blocker; a check that is hard is not a blocker. "Large work" (a three.js scene, a carousel) is the work: see Recipes.
+A step that does not improve after three scored tries is set aside by `status` (it says so) and the next one comes
+up; write what blocks the set-aside step under `## Findings`. When `status` exits 3, every step left is set aside:
+make sure each is in Findings, then hand over.
+
+**Your summary to the user states what the checks and the review show, nothing more.** Not "the accordions work"
+unless the interaction check passes for them; a number you have not re-measured since your last change is not a
+result.
 
 ## The rules
 
@@ -41,14 +52,19 @@ blocker; a check that is hard is not a blocker.
 2. **Every screen size.** Compute from the live viewport the way the site does (`innerWidth`, element boxes, `resize`,
    the site's breakpoints). Never put a pixel value measured at one size into the clone. `data-tc-script-owned`
    elements hold values the site computes that no function of the screen size explains: yours to compute.
-3. **Take over before you drive.** `tcOwn('<selector>')` at the top of `script.js` for anything your script animates
-   or rebuilds: the recorded players never touch it again and GSAP-written transforms (`data-tc-gsap`) are cleared, so
-   your animation starts from the page as it was before any script ran, as the site's did.
-4. **Never edit generated files** (`clone/index.html`, `next/`). Add what the clone needs in `clone/patches/`. A fix
+3. **Take over before you drive.** `tcOwn('<selector>')` at the top of `script.js` for anything your script animates,
+   rebuilds or listens to (it always exists, before any script): the recorded players never touch it, or the region
+   around it, again; GSAP-written motion transforms (`data-tc-gsap=""`) are cleared, so your animation starts from the
+   page as it was before any script ran, as the site's did, while closed states (`data-tc-gsap="state"`, a menu at
+   `scale(1, 0)`) stay; its scroll reveals settle at their end state.
+4. **Test what you built.** After each behaviour, operate it: `status` re-runs the interaction scenarios with every
+   re-score. Your own controls also handle `pointercancel` and `lostpointercapture` (a drag that ends outside the
+   window must not stick to the cursor).
+5. **Never edit generated files** (`clone/index.html`, `next/`). Add what the clone needs in `clone/patches/`. A fix
    that needs generated markup changed is a tool defect: write it in Findings.
-5. **Look, don't just score.** `review` shows reference and clone side by side at every size, sections and hovers; give
+6. **Look, don't just score.** `review` shows reference and clone side by side at every size, sections and hovers; give
    every frame a verdict. A frame that differs is open, whatever the numbers say.
-6. **Exact mode only with permission.** `template` (default) is for anyone's site: placeholder text and media, the
+7. **Exact mode only with permission.** `template` (default) is for anyone's site: placeholder text and media, the
    original's structure and behaviour. `exact` copies the site's own text and media and needs
    `--permission "<who authorised it>"`. Never get past bot checks, logins or paywalls. No tracking scripts; forms
    submit nowhere; `noindex`.
@@ -63,7 +79,9 @@ blocker; a check that is hard is not a blocker.
   `- 07-section-4-hover wide: differs: the panel opens on the wrong card`.
 - **Accepted differences**: `- <check> <size> <where>: <why>; evidence: compare/explain/wide-5200.png`, only for the
   last points of a check already ≥ 95.
-- **Findings**: tool defects, with evidence.
+- **Findings**: tool defects, with evidence; a step `status` set aside, with what blocks it; and each of the site's
+  scripts or scroll curves you do not port, by name, with why (an app, a polyfill, analytics). The report's Coverage
+  check fails while one of the site's busiest scripts, or a recorded curve, is in neither Behaviours nor Findings.
 
 ## Reference
 
@@ -85,11 +103,29 @@ and scroll states are scored per route; navigation is scored (each link: the rig
 Back); `brief --route /about` and `review --route /about` work on one route. An app shell (a fixed sidebar and a pane
 that scrolls on its own) is measured with the pane unrolled, the same way on both sides.
 
-**The checks**: layout, scroll states, canvases, motion curves, detail, hovers, interactions (the capture finds every
-scroller, carousel, tab set, accordion, menu and dialog, `reference/interactions.auto.json`; your `interactions.json`
-adds, overrides by name, or retires one with `{ "name": "…", "skip": "<why>" }`), load, notes and review. Sizes: built
-from 390, 768, 1440; held out (scored, never built from) 1280 and 1920. Unstable probes are measured twice on the
-reference and excluded; do not chase a number inside the noise. If `drift` says the live site changed, re-capture.
+**The checks**: layout, scroll states (the mean and every frame: none below 80%), canvases, motion curves, detail,
+hovers, interactions (the capture finds every scroller, carousel, tab set, accordion, menu and dialog,
+`reference/interactions.auto.json`; your `interactions.json` adds, overrides by name, or retires one with
+`{ "name": "…", "skip": "<why>" }`), load, notes, coverage and review. Sizes: built from 390, 768, 1440; held out
+(scored, never built from) 1280 and 1920. Unstable probes are measured twice on the reference and excluded, and a route
+that differs from itself between two loads (random order) is held to its own match; do not chase a number inside the
+noise. If `drift` says the live site changed, re-capture.
+
+**Recipes** (the work that looks large is ordinary work):
+- *A canvas (three.js, WebGL, 2D)*: `motion` names the engine and its version, `vendor` puts it in `clone/patches/`.
+  Find the scene in the site's script (the brief names the canvas and the scripts there; search the readable copy
+  for `Scene`, `PerspectiveCamera`, `BufferGeometry`, shader strings) and port it: the same camera, geometry, material
+  and colour values, the same animation driven by time and scroll the way the site's is, sized from the canvas box.
+  Score with `--only states`: canvases are compared frame by frame.
+- *A carousel or slider*: when the site uses a library, run it at the site's version (`vendor` does Swiper; another
+  one, such as Splide, Embla or Flickity, goes into `clone/patches/` from the version in its script URL) and initialise
+  it with the site's own options (in its script, at the brief's file:line); never write a drag by hand where the site
+  uses a library. A hand-written one handles pointerdown/move/up, `pointercancel` and
+  `lostpointercapture`, and snaps the way the site's does.
+- *An accordion or disclosure*: `tcOwn` its region first, toggle the same attributes the site toggles (aria-expanded,
+  `hidden`, a class, a height transition) and check it with the interaction score: open, closed, and the next one.
+- *A class change the site animates with GSAP Flip* (the brief says so): port the Flip (record state, change the
+  classes, `Flip.from` with the site's duration and ease), never leave the swap as a jump.
 
 **Tools status points you to**: `brief <name> [<n>] [--viewport]`, `explain <name> <y> --viewport <size>`,
 `score <name> [--only layout,states,interact,…] [--viewport <size>]`, `review <name> --size <size>`,
@@ -97,7 +133,9 @@ reference and excluded; do not chase a number inside the noise. If `drift` says 
 `next <name> --verify`. REA is bundled for the rare part no script reading explains (`npx trueclone rea --help`).
 
 **Next.js**: generated from the HTML clone (one component per section, the clone's scripts run at hydration, the
-site's stylesheets in its cascade-layer order); done when `REPORT.next.md` matches `REPORT.md` within a point.
+site's stylesheets loaded as the browser loads them, `<template>`s and every file of the clone carried; a single-page
+app is served at every address, a site of separate pages gets one route per page); done when `REPORT.next.md` matches
+`REPORT.md` within a point. A difference only the app has is a tool defect: write it in Findings.
 
 ## Honest limits
 

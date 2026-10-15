@@ -1,22 +1,31 @@
 // Capture a live page as the clone's reference: full-page screenshots, sections, design tokens,
 // rendered HTML, CSS/image/font files and a HAR.
-// usage: node scripts/capture.mjs <url> [name] [--hide ".cookie-banner,#popup"] [--cdp [endpoint]] [--mode exact --permission "<owner>"]
+// usage: node scripts/capture.mjs <url> [name] [--hide ".cookie-banner,#popup"] [--cookie "consent=1; region=us"] [--cdp [endpoint]] [--mode exact --permission "<owner>"]
 //        node scripts/capture.mjs <url> <name> --mirror-only   (rebuild reference/mirror from the saved capture)
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 import { detectInPage } from './interactions-auto.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [url, nameArg] = pos;
 if (!url) {
-  console.error('usage: npm run capture -- <url> [name] [--hide "<css selectors>"] [--cdp]');
+  console.error('usage: npm run capture -- <url> [name] [--hide "<css selectors>"] [--cookie "<name=value; ...>"] [--cdp]');
   process.exit(1);
 }
 const name = nameArg || siteName(url);
 const hide = typeof flags.hide === 'string' ? flags.hide.split(',').map((s) => s.trim()).filter(Boolean) : [];
+// --cookie "consent=1; region=us": a choice any visitor makes (a consent banner answered, a region picked), sent with
+// every request to the site by the capture and by every check after it (meta.cookies, lib.mjs). Never a login.
+const cookies = parseCookies(flags.cookie);
+if (cookies.some((c) => /sess|auth|token|login|jwt|sid$/i.test(c.name))) {
+  console.error(`--cookie is for a visitor's choices (consent, region), never a signed-in session: ${cookies.map((c) => c.name).join(', ')}`);
+  process.exit(1);
+}
+// unroll "y": an app shell is unrolled vertically only (lib.mjs); recorded in meta so every check unrolls the clone alike
+setReferenceProfile({ url, hide, cookies, unroll: 'y' });
 // --mode template (default): assets are kept as reference only; the clone uses placeholder content.
 // --mode exact: the clone may reuse the site's own text and media. Only for sites you own or are
 // authorised to copy, so it refuses to run without --permission "<who authorised it>". Output stays in
@@ -43,6 +52,8 @@ function assetName(url, type, contentType = '') {
   return `${hash}-${base}${fix ? want : ''}`;
 }
 const SAVED_TYPES = new Set(['stylesheet', 'image', 'font', 'media']);
+// an address that names a medium by its extension (a data-* attribute holding one is a lazy loader's source)
+const MEDIA_EXT = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico|mp4|webm|mov|m4v)([?#]|$)/i;
 // Exact mode also keeps runtime-fetched media: 3D models, textures, video streams, animation files. Never scripts.
 const EXTRA_MEDIA = /\.(glb|gltf|bin|hdr|exr|ktx2|basis|mp4|webm|mov|m3u8|ts|m4s|lottie|riv|json)(\?|$)/i;
 const keepResponse = (type, url) => SAVED_TYPES.has(type) || (mode === 'exact' && ['fetch', 'xhr', 'other'].includes(type) && EXTRA_MEDIA.test(url));
@@ -134,7 +145,8 @@ try {
     const desktop = vp.name === 'desktop';
     const { context, page } = await newPage(browser, vp, { ...asked, ...(desktop ? { recordHar: { path: path.join(ref, 'desktop.har'), content: 'omit' } } : {}) });
     await page.addInitScript(recordMediaQueries);
-    if (desktop) page.on('response', recordAsset);
+    // at every size: a phone gets its own sources (<picture>, srcset, a mobile-only photo)
+    page.on('response', recordAsset);
     // desktop: the page's own scripts and what ran, saved as evidence (reference/scripts/)
     const finishEvidence = desktop ? await startScriptEvidence(page, url).catch(() => null) : null;
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
@@ -167,6 +179,24 @@ try {
       }).observe(document.body, { subtree: true, childList: true });
     });
     await settle(page, hide);
+    // A popup over the page at load (a cookie wall, a region or newsletter dialog): every check would compare the
+    // clone with it. Fixed, visible, a dialog by its role or its name, and covering a good part of the window.
+    if (desktop) {
+      const overlays = await page.evaluate(() => {
+        const out = [];
+        for (const el of document.body.querySelectorAll('*')) {
+          const s = getComputedStyle(el);
+          if (s.position !== 'fixed' || s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) < 0.1) continue;
+          if (out.some((o) => o.el.contains(el))) continue;
+          const r = el.getBoundingClientRect();
+          const share = (Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0))) / (innerWidth * innerHeight);
+          const named = el.matches('dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]') || /modal|popup|pop-up|overlay|cookie|consent|gdpr|geo|locale|region|country|newsletter|signup/i.test(`${el.id} ${el.className}`);
+          if (share >= 0.3 && named) out.push({ el, share: Math.round(share * 100), sel: el.id ? `#${CSS.escape(el.id)}` : `${el.tagName.toLowerCase()}${[...el.classList].slice(0, 2).map((c) => `.${CSS.escape(c)}`).join('')}` });
+        }
+        return out.map(({ sel, share }) => ({ sel, share }));
+      }).catch(() => []);
+      for (const o of overlays) console.warn(`WARNING \`${o.sel}\` covers ${o.share}% of the window at load (a popup?). If a visitor sees it only until a first choice, capture again with --hide "${o.sel}" (or --cookie "<the choice's cookie>"): otherwise every check compares the clone with it`);
+    }
     // every link on the page, hidden views' included: the site's routes are found from them (and sitemap.xml)
     if (desktop) linkHrefs = await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => []);
     // inline styles at this size, by element path: scripts size and place things from the viewport (a grid's computed
@@ -263,9 +293,10 @@ if (others.length) {
         const dir = path.join(root, r.dir);
         await fs.mkdir(dir, { recursive: true });
         const { context, page } = await newPage(browser3, vp, asked);
-        // a separate page (its own document): its assets and its rendered HTML too, at desktop, for its own mirror
+        // every route's assets at every size (a view of a single-page app loads its own media: a case study's
+        // screenshots); a separate page (its own document) also has its rendered HTML saved, at desktop, for its mirror
         const ownPage = !r.sameDocument && vp.name === 'desktop';
-        if (ownPage) page.on('response', recordAsset);
+        page.on('response', recordAsset);
         try {
           await page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
           await settle(page, hide);
@@ -290,7 +321,20 @@ if (others.length) {
             await page.evaluate((y) => scrollTo(0, y), top);
           }
           await mask(page);
-          await page.screenshot({ path: path.join(dir, `${vp.name}.mask.png`), fullPage: true });
+          const maskShot = await page.screenshot({ path: path.join(dir, `${vp.name}.mask.png`), fullPage: true });
+          // A route that differs from itself (a gallery in random order, a shuffled grid) can never match a clone
+          // better than it matches itself: loaded once more at desktop and compared, its own match is recorded
+          // (meta.routes[].unstable) and the report holds the clone to that, not to a number no copy can reach.
+          if (vp.name === 'desktop') {
+            const again = await newPage(browser3, vp, asked);
+            try {
+              await again.page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
+              await settle(again.page, hide);
+              await mask(again.page);
+              const self = matchPct(PNG.sync.read(maskShot), PNG.sync.read(await again.page.screenshot({ fullPage: true }))).pct;
+              if (self < 99) { r.unstable = { match: self }; console.log(`route ${r.path}: differs from itself between two loads (${self}% at desktop): random content, held to that`); }
+            } catch { /* the second load is a check, not the capture */ } finally { await again.context.close(); }
+          }
         } catch (e) { console.warn(`WARNING route ${r.path} at ${vp.name} not captured: ${e.message.split('\n')[0]}`); }
         finally { await context.close(); }
       }
@@ -301,9 +345,15 @@ if (others.length) {
 }
 // a route's scenarios join the captured page's, except links the captured page already goes to at that size (the
 // same sidebar on every route would otherwise draft the same navigation once per route)
-const homeNav = new Set(autoScenarios.filter((s) => s.navigation).map((s) => `${s.viewport}:${s.name.replace(/^go to (\S+).*/, '$1')}`));
+// Navigation is drafted only to routes this capture has: a link to an uncaptured page would be scored against
+// nothing the clone could have (the agent retired such scenarios by hand)
+const captured = new Set(routeInfo.map((r) => r.path));
+const navTarget = (s) => s.name.replace(/^(?:.*: )?go to (\S+).*/, '$1');
+for (let i = autoScenarios.length - 1; i >= 0; i--) if (autoScenarios[i].navigation && !captured.has(navTarget(autoScenarios[i]))) autoScenarios.splice(i, 1);
+const homeNav = new Set(autoScenarios.filter((s) => s.navigation).map((s) => `${s.viewport}:${navTarget(s)}`));
 for (const s of routeScenarios) {
-  const target = s.navigation ? s.name.replace(/^.*: go to (\S+).*/, '$1') : null;
+  const target = s.navigation ? navTarget(s) : null;
+  if (target && !captured.has(target)) continue;
   if (target && (homeNav.has(`${s.viewport}:${target}`) || target === routePath(home.pathname))) continue;
   if (target) homeNav.add(`${s.viewport}:${target}`);
   autoScenarios.push(s);
@@ -338,7 +388,7 @@ await fs.writeFile(path.join(ref, 'interactions.auto.json'), JSON.stringify(auto
 console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
 // with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.
@@ -401,8 +451,13 @@ async function renderMirror(manifest, url, note, mirror, renderedFile = path.joi
     return path.relative(fromDir, path.join(ref, m.file)).replaceAll('\\', '/');
   };
   const rewriteCssUrls = (css, base, fromDir) => css
-    // url(#id) points inside the document (SVG gradients, filters, masks): never resolve it against the stylesheet
-    .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (all, q, u) => (u.startsWith('data:') || u.trim().startsWith('#') ? all : `url("${local(abs(u, base), fromDir) || abs(u, base) || u}")`))
+    // url(#id) points inside the document (SVG gradients, filters, masks): never resolve it against the stylesheet.
+    // Token by token: a quoted value is read whole, so a data: URI's own url(%23n) (an SVG filter inside it) is part of
+    // it, never a reference of its own
+    .replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^'")\s]*))\s*\)/g, (all, d, s, bare) => {
+      const u = d ?? s ?? bare;
+      return !u || /^\s*data:/i.test(u) || u.trim().startsWith('#') ? all : `url("${local(abs(u, base), fromDir) || abs(u, base) || u}")`;
+    })
     .replace(/@import\s+(['"])([^'"]+)\1/g, (all, q, u) => `@import "${local(abs(u, base), fromDir) || u}"`);
 
   // stylesheets: rewritten copies under mirror/css
@@ -420,16 +475,25 @@ async function renderMirror(manifest, url, note, mirror, renderedFile = path.joi
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '')
     .replace(/<form\b([^>]*?)\saction=("[^"]*"|'[^']*')/gi, '<form$1')
     .replace(/<form\b/gi, '<form action="#"')
+    // a medium the capture did not save is written as its full address, so it counts as missing and is fetched (a
+    // relative one would stay pointing at nothing); a link (href) to another page stays as it is
     .replace(/\s(src|href|poster|data-src)=("|')([^"']+)\2/gi, (all, attr, q, u) => {
-      const l = local(abs(u, url), mirror);
-      return l ? ` ${attr}=${q}${l}${q}` : all;
+      const a = abs(u, url);
+      const l = local(a, mirror);
+      return l ? ` ${attr}=${q}${l}${q}` : attr !== 'href' && a && /^https?:/.test(a) && !/^(data|blob|javascript):/i.test(u.trim()) ? ` ${attr}=${q}${a}${q}` : all;
+    })
+    // media a script reads from a data-* attribute (a lazy loader's data-bg, data-image, data-poster)
+    .replace(/\s(data-[\w-]+)=("|')([^"'\s]+)\2/gi, (all, attr, q, u) => {
+      if (/^data-(src|srcset)$/i.test(attr) || !MEDIA_EXT.test(u)) return all;
+      const a = abs(u, url);
+      return ` ${attr}=${q}${local(a, mirror) || a || u}${q}`;
     })
     // a subresource-integrity hash belongs to the bytes at the original URL; after the rewrite it only makes the
     // browser refuse the local copy (and the whole stylesheet with it)
     .replace(/<link\b[^>]*>/gi, (tag) => tag.replace(/\s(?:integrity|crossorigin)(?:=("[^"]*"|'[^']*'|[^\s>]+))?/gi, ''))
     .replace(/\s(srcset|data-srcset)=("|')([^"']+)\2/gi, (all, attr, q, list) => ` ${attr}=${q}${list.split(',').map((part) => {
       const [u, ...rest] = part.trim().split(/\s+/);
-      return [local(abs(u, url), mirror) || u, ...rest].join(' ');
+      return [local(abs(u, url), mirror) || abs(u, url) || u, ...rest].join(' ');
     }).join(', ')}${q}`)
     .replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (all, attrs, css) => `<style${attrs}>${rewriteCssUrls(css, url, mirror)}</style>`)
     // quotes inside a style attribute are HTML-escaped (url(&quot;…&quot;)): unescape before rewriting, re-escape after
@@ -450,6 +514,7 @@ function findRemoteMedia({ html, css }) {
   const media = (u) => u && /^https?:\/\//.test(u) && !/^https?:\/\/[^/]+\/?$/.test(u) && !/\.(js|mjs|json|html?)(\?|$)/i.test(u);
   const add = (u) => { if (media(u)) urls.add(u.replaceAll('&amp;', '&')); };
   for (const m of html.matchAll(/\s(?:src|poster|data-src)=["']([^"']+)["']/gi)) add(m[1]);
+  for (const m of html.matchAll(/\sdata-[\w-]+=["']([^"'\s]+)["']/gi)) if (MEDIA_EXT.test(m[1])) add(m[1]);
   for (const m of html.matchAll(/\s(?:srcset|data-srcset)=["']([^"']+)["']/gi)) for (const part of m[1].split(',')) add(part.trim().split(/\s+/)[0]);
   for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
     const rel = /\srel=["']?([^"'\s>]+)/i.exec(m[0])?.[1] || '';
@@ -623,7 +688,8 @@ function serializeInPage() {
   doc.querySelector('style[data-lab-freeze]')?.remove();
   // the measuring aids never reach the saved page: the app-shell unroll (lib.mjs unrollInPage)
   doc.querySelector('#tc-unroll')?.remove();
-  for (const el of doc.querySelectorAll('[data-tc-unroll]')) el.removeAttribute('data-tc-unroll');
+  // the root itself too (<html data-tc-unroll>): querySelectorAll searches only below it
+  for (const el of [doc, ...doc.querySelectorAll('[data-tc-unroll]')]) el.removeAttribute('data-tc-unroll');
   console.log(`tc-rich: restored ${restore.length} view-mounted element(s)`);
   return '<!DOCTYPE html>\n' + doc.outerHTML;
 }

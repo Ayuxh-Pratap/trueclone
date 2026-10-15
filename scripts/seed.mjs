@@ -83,22 +83,9 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
   const vpName = (sameRange.length ? sameRange : seedSizes).reduce((a, b) => (Math.abs(b.width - W) < Math.abs(a.width - W) ? b : a)).name;
   const pick = (entry) => (entry && (entry.desktop || entry.tablet || entry.mobile) ? entry[vpName] || entry.desktop || entry.tablet || entry.mobile : entry);
 
-  // Hand-over: script.js takes elements from every player with tcOwn("selector") (or data-tc-own on the element or
-  // an ancestor, or by removing its data-tc-* mark); the players never touch them again.
+  // Hand-over: script.js takes elements from every player with tcOwn("selector") (the head runtime, RUNTIME below;
+  // or data-tc-own on the element or an ancestor, or by removing its data-tc-* mark); the players never touch them again.
   const owned = (el) => Boolean(el.closest('[data-tc-own]'));
-  // Taking an element over also clears the transforms GSAP had written on it and on its GSAP-animated descendants
-  // (data-tc-gsap, marked by the seed): the clone's script starts from the page as it was before any script ran,
-  // as the site's own script did.
-  window.tcOwn = (sel) => {
-    for (const el of document.querySelectorAll(sel)) {
-      el.setAttribute('data-tc-own', '');
-      for (const g of [el, ...el.querySelectorAll('[data-tc-gsap]')]) {
-        if (!g.hasAttribute('data-tc-gsap')) continue;
-        for (const p of ['transform', 'translate', 'rotate', 'scale']) g.style.removeProperty(p);
-        g.removeAttribute('data-tc-gsap');
-      }
-    }
-  };
 
   // class changes are state, not motion: they apply with reduced motion too. Only the recorded difference is applied
   // (the classes added and removed between the two recorded states), so classes anything else sets are kept.
@@ -140,7 +127,8 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
     addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; applyPinned(); }); } }, { passive: true });
     applyPinned();
   }
-  const style = (f) => ({ opacity: f.o, transform: \`translate(\${f.tx}px, \${f.ty}px) scale(\${f.s})\`, filter: f.blur ? \`blur(\${f.blur}px)\` : 'none' });
+  // clip-path where it was recorded (a wipe); records made before it was, without
+  const style = (f) => ({ opacity: f.o, transform: \`translate(\${f.tx}px, \${f.ty}px) scale(\${f.s})\`, filter: f.blur ? \`blur(\${f.blur}px)\` : 'none', ...(f.clip !== undefined ? { clipPath: f.clip } : {}) });
   // scroll-linked curves: the recorded state at the two nearest scroll positions, interpolated. An element that also
   // plays a one-shot reveal follows its curve once the reveal has finished.
   // A curve is keyed by the element's own position in the viewport (key "v": its layout box top, translate taken
@@ -181,12 +169,26 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
   }
   const release = (el) => { const x = scrubs.find((q) => q.el === el); if (x) { x.ready = true; applyScrubs(); } };
   const settle = (el, r) => { Object.assign(el.style, style(r.to)); release(el); };
+  // A reveal taken over (tcOwn, data-tc-own) settles where it ends, never at its start state (opacity 0): its mark and
+  // the inline state the player wrote go, so the page's own CSS applies; where that still differs from the recorded
+  // end (a fade the site's script brought to 1, a resting offset), the end value is set inline.
+  window.__tcSettle = (el) => {
+    const r = pick(data[Number(el.dataset.tcReveal)]);
+    for (const a of el.getAnimations()) a.cancel();
+    el.removeAttribute('data-tc-reveal');
+    for (const p of ['opacity', 'transform', 'filter', 'clip-path']) el.style.removeProperty(p);
+    if (!r || !r.to) return;
+    if (Math.abs(parseFloat(getComputedStyle(el).opacity) - r.to.o) > 0.01) el.style.opacity = String(r.to.o);
+    if (r.to.tx || r.to.ty || (r.to.s ?? 1) !== 1) el.style.transform = style(r.to).transform;
+    if (r.to.blur) el.style.filter = style(r.to).filter;
+  };
   const play = (el, r) => {
     const frames = r.frames.map((f) => ({ ...style(f), offset: r.duration ? Math.min(1, f.t / r.duration) : 1 }));
     const anim = el.animate(frames, { duration: r.duration, fill: 'forwards', easing: 'linear' });
     anim.onfinish = () => { settle(el, r); anim.cancel(); };
   };
   for (const el of document.querySelectorAll('[data-tc-reveal]')) {
+    if (owned(el)) { window.__tcSettle(el); continue; }
     const r = pick(data[Number(el.dataset.tcReveal)]);
     if (!r) { release(el); continue; }
     if (r.from) Object.assign(el.style, style(r.from)); // this width's starting state (the seed inlined the desktop one)
@@ -202,14 +204,33 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
     }, { rootMargin: \`0px 0px -\${((1 - line) * 100).toFixed(1)}% 0px\` });
     io.observe(el);
   }
-  // boot contract: the page shows once every clone script has run (DOMContentLoaded comes after the deferred ones;
-  // the Next app's injector releases after its last script) and every hold is released. script.js holds the boot
-  // while it prepares what a visitor must not see half-built (an intro waiting for its image): tcBoot.hold() at the
-  // top, tcBoot.release() when ready.
-  const boot = window.tcBoot = { holds: 1, hold() { this.holds++; }, release() { if (--this.holds <= 0) requestAnimationFrame(() => document.documentElement.classList.remove('tc-boot')); } };
-  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', () => boot.release()); else if (!window.__tcInjected) boot.release();
 })();
 `;
+
+// The head runtime, in every clone whatever the seed wrote (inline in <head>, so it exists before any script runs):
+// - tcOwn("selector") hands elements to script.js. It marks them (data-tc-own: the players never touch them again),
+//   clears the transforms GSAP had written as motion on them and their descendants (data-tc-gsap="": script.js
+//   starts from the page as it was before any script ran, as the site's own script did; a state transform, such as a
+//   closed menu's scale(1, 0), is data-tc-gsap="state" and stays), and settles their scroll reveals at the end.
+// - tcBoot, the boot contract: <html class="tc-boot"> until every clone script has run (DOMContentLoaded comes after
+//   the deferred ones; the Next app's injector releases after its last script) and every hold is released. script.js
+//   holds the boot while it prepares what a visitor must not see half-built: tcBoot.hold() at the top,
+//   tcBoot.release() when ready.
+const RUNTIME = `(() => {
+  window.tcOwn = (sel) => {
+    for (const el of document.querySelectorAll(sel)) {
+      el.setAttribute('data-tc-own', '');
+      for (const g of [el, ...el.querySelectorAll('[data-tc-gsap]')]) {
+        if (g.getAttribute('data-tc-gsap') !== '') continue;
+        for (const p of ['transform', 'translate', 'rotate', 'scale']) g.style.removeProperty(p);
+        g.removeAttribute('data-tc-gsap');
+      }
+      for (const r of [el, ...el.querySelectorAll('[data-tc-reveal]')]) if (r.hasAttribute('data-tc-reveal')) (window.__tcSettle || ((x) => x.removeAttribute('data-tc-reveal')))(r);
+    }
+  };
+  const boot = window.tcBoot = { holds: 1, hold() { this.holds++; }, release() { if (--this.holds <= 0) requestAnimationFrame(() => document.documentElement.classList.remove('tc-boot')); } };
+  if (!window.__tcInjected) { if (document.readyState === 'loading') addEventListener('DOMContentLoaded', () => boot.release()); else boot.release(); }
+})();`;
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -277,6 +298,12 @@ const pull = async (rel) => {
 // their intrinsic size (an image laid out by its aspect ratio needs it); the pass replaces them with same-size
 // placeholders and a final sweep guarantees no reference path survives.
 const REF_ASSETS = '../reference/assets/';
+// each url() of a stylesheet, token by token: a quoted value is read whole, so a url(%23n) inside a data: URI is never
+// taken for one of its own; @import url() and data: URIs are left as they are
+const cssUrlsOf = (css, fn) => css.replace(/(@import\s+)?url\(\s*(?:"([^"]*)"|'([^']*)'|([^'")\s]*))\s*\)/g, (all, imp, d, q, u) => {
+  const v = d ?? q ?? u;
+  return imp || !v || /^\s*data:/i.test(v) ? all : fn(all, v);
+});
 const rewrite = async (text, prefix, replacement, forPass = false) => {
   // saved asset names are [a-z0-9._-]; `&` ends a path inside a style attribute (url(&quot;../assets/x.webp&quot;))
   const re = new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 'assets/([^"\')\\s&]+)', 'g');
@@ -290,7 +317,9 @@ for (const file of routePage ? [] : await fs.readdir(path.join(mirror, 'css')).c
   // template mode: images the capture never downloaded still point at the site (url("https://…/bg.avif"));
   // every non-font url() becomes a transparent placeholder (CSS backgrounds are mostly decorative: noise, grids,
   // glows), so the clone never loads the site's media. url(#id) points inside the page (SVG paint) and stays.
-  if (!exact) out = out.replace(/url\(\s*(['"]?)(?!data:)([^'")]+)\1\s*\)/g, (all, q, u) => (isFont(u) || u.trim().startsWith('#') ? all : `url("../${PLACEHOLDER_BG}")`));
+  // An @import keeps its stylesheet (a font's CSS), and a data: URI is read whole: an SVG filter's url(%23n) inside it
+  // is part of the image, not a reference.
+  if (!exact) out = cssUrlsOf(out, (all, u) => (isFont(u) || u.trim().startsWith('#') ? all : `url("../${PLACEHOLDER_BG}")`));
   await fs.writeFile(path.join(clone, 'css', file), out);
 }
 step(`stylesheets copied (${exact ? 'exact' : 'template'} mode)`);
@@ -299,9 +328,10 @@ html = await rewrite(html, '../', '', !exact);
 await fs.writeFile(path.join(clone, passFile), html);
 
 if (!exact) {
-  // a neutral box that reads on light and dark pages
+  // a neutral box that reads on light and dark pages, opaque like the image it stands for (text an image covers on
+  // the original stays covered)
   await fs.mkdir(path.join(clone, 'assets'), { recursive: true });
-  await fs.writeFile(path.join(clone, PLACEHOLDER), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" preserveAspectRatio="none"><rect width="16" height="16" fill="#8884"/></svg>\n');
+  await fs.writeFile(path.join(clone, PLACEHOLDER), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" preserveAspectRatio="none"><rect width="16" height="16" fill="#8c8c8c"/></svg>\n');
   await fs.writeFile(path.join(clone, PLACEHOLDER_BG), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"/>\n');
 }
 // Scroll reveals recorded on the reference (trueclone reveals): mark the elements, start them in their recorded
@@ -331,11 +361,17 @@ const classChanges = primary?.classes || [];
 // Widget states recorded on the reference (trueclone widgets): tabs, menus. Template mode only for now: the snapshots
 // are placeholdered like the page; exact-mode snapshots would still point at the site's media.
 const widgetRec = exact || routePage ? null : JSON.parse(await fs.readFile(path.join(ref, 'widgets.desktop.json'), 'utf8').catch(() => 'null'));
-const widgetGroups = widgetRec?.groups || [];
+// a group whose recorded states are all the same (an accordion whose click changed nothing the recorder could see)
+// has nothing to replay: left out, so no trigger is captured by the player for nothing
+const widgetGroups = (widgetRec?.groups || []).filter((g) => g.kind === 'portal' || new Set([...(g.states || []), ...(g.kind === 'expand' ? [g.closed] : [])].filter((s) => s != null)).size > 1);
 let marked = 0, classMarked = 0, scrubMarked = 0, widgets = null, runtime = null;
 step('browser pass: reveal marks, widgets, runtime clean-up' + (exact ? '' : ', placeholder text and media'));
 ({ html, marked, classMarked, scrubMarked, widgets, runtime } = await browserPass(!exact, recorded, classChanges, widgetGroups, scrubbed));
 if (!exact) html = html.split(REF_ASSETS).join('__tc_ref__').replace(/__tc_ref__[^"')\s]+/g, PLACEHOLDER);
+// template mode never loads the site's media: what still points at the network (a <template>'s images, a lazy
+// loader's data-* source, a source the capture could not save) becomes the placeholder too
+const REMOTE_MEDIA = /^(?:https?:)?\/\/[^\s"']+\.(?:png|jpe?g|gif|webp|avif|svg|bmp|ico|mp4|webm|mov|m4v)(?:[?#][^\s"']*)?$/i;
+if (!exact) html = html.replace(/(\s(?:src|poster|srcset|data-[\w-]+))=("|')([^"']+)\2/gi, (all, a, q, v) => (v.split(',').some((part) => REMOTE_MEDIA.test(part.trim().split(/\s+/)[0])) ? `${a}=${q}${PLACEHOLDER}${q}` : all));
 if (widgets?.groups.length) {
   // a plain script (not fetched JSON), so the clone also works opened from disk
   await fs.writeFile(path.join(clone, 'trueclone-widgets.js'), `// trueclone widget player: recorded states of the reference's tabs and menus (trueclone widgets), placeholdered.\nwindow.__tcWidgetData = ${JSON.stringify(widgets)};\n(${widgetPlayer.toString()})();\n`);
@@ -358,7 +394,7 @@ if (marked || classMarked || scrubMarked) {
 // (--hide-until-boot "<selectors>") stay invisible meanwhile, so a visitor never sees their captured, pre-script state;
 // a 3 s failsafe shows everything if no script ever runs.
 html = html.replace(/<html\b([^>]*)>/i, (all, attrs) => (/\bclass=/.test(attrs) ? `<html${attrs.replace(/\bclass=(["'])([^"']*)\1/, (m, q, v) => `class=${q}${v.trim() ? `${v.trim()} ` : ''}tc-boot${q}`)}>` : `<html${attrs} class="tc-boot">`));
-html = html.replace(/<\/head>/i, '<style id="tc-boot-styles">/* trueclone seed: boot contract */@keyframes tc-boot-failsafe{to{visibility:visible}}html.tc-boot [data-tc-boot-hide]{visibility:hidden;animation:tc-boot-failsafe 0s 3s forwards}</style>\n</head>');
+html = html.replace(/<\/head>/i, () => `<style id="tc-boot-styles">/* trueclone seed: boot contract */@keyframes tc-boot-failsafe{to{visibility:visible}}html.tc-boot [data-tc-boot-hide]{visibility:hidden;animation:tc-boot-failsafe 0s 3s forwards}</style>\n<script id="tc-runtime">${RUNTIME}</script>\n</head>`);
 // the clone's own behaviour script, loaded once the DOM is parsed
 if (!/<script[^>]+src="script\.js"/.test(html)) html = html.replace(/<\/body>/i, '<script src="script.js" defer></script>\n</body>');
 // the seed's own output, kept so `seed --patches` can re-apply clone/patches/ onto it in a second
@@ -421,11 +457,12 @@ if (recorded.length || classChanges.length) console.log(`replayed by trueclone-r
 if (recordedScrubs.length) console.log(`not replayed: ${recordedScrubs.length} scroll-linked curve(s) (parallax, scrubbed fades): evidence in reference/reveals.<size>.json; script.js reproduces the rule behind them`);
 if (runtime) {
   const pins = runtime.pins.map((p) => `${p.el} pinned for ${p.distance}px${p.axis ? ' (sideways: left to script.js)' : ''}`).join(', ');
-  console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"${runtime.gsap ? `, ${runtime.gsap} GSAP-written transform(s) marked data-tc-gsap (tcOwn() clears them for script.js)` : ''}`);
+  console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"${runtime.gsap ? `, ${runtime.gsap} GSAP-written transform(s) marked data-tc-gsap (tcOwn() clears them for script.js${runtime.gsapState ? `, except ${runtime.gsapState} closed state(s) marked data-tc-gsap="state", which stay` : ''})` : ''}`);
   if (runtime.viewport) console.log(`viewport values: ${runtime.viewport.fitted} value(s) a script computes from the screen size carried as functions of it (read at ${runtime.viewport.sizes} sizes, site breakpoints ${runtime.viewport.breakpoints.join('/') || 'none'})${runtime.viewport.dropped ? `; ${runtime.viewport.dropped} fit no such function and are left to script.js (data-tc-script-owned, reference/script-owned.json)` : ''}`);
   if (runtime.hidden) console.log(`boot contract: ${runtime.hidden} element(s) hidden until the clone's scripts have run (data-tc-boot-hide)`);
 }
-if (widgetGroups.length) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
+const sameState = (widgetRec?.groups || []).length - widgetGroups.length;
+if (widgetGroups.length || sameState) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.filter(Boolean).length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${sameState ? `; ${sameState} left out (one recorded state: nothing to replay)` : ''}${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
 if (patches.length) console.log(`patches applied from clone/patches/: ${patches.join(', ')}`);
 // every separate page of the site, by the same pipeline (one child run each)
 const ownPages = (meta.routes || []).filter((r) => r.slug && !r.sameDocument && fsSync.existsSync(path.join(mirror, 'routes', `${r.slug}.html`)));
@@ -554,8 +591,9 @@ function markWidgetsInPage(groups) {
 function widgetPlayer() {
   const data = window.__tcWidgetData || { groups: [] };
   const regionOf = (i) => document.querySelector(`[data-tc-scope~="${i}"]`);
-  // a region script.js took over (tcOwn / data-tc-own) is never rewritten by the recorded states
-  const show = (i, html) => { const r = regionOf(i); if (r && !r.closest('[data-tc-own]') && html != null && r.innerHTML !== html) r.innerHTML = html; };
+  // a region script.js took over (tcOwn / data-tc-own), or one holding anything it took over, is never rewritten by
+  // the recorded states: writing the region's markup would drop script.js's elements and their listeners
+  const show = (i, html) => { const r = regionOf(i); if (r && !r.closest('[data-tc-own]') && !r.querySelector('[data-tc-own]') && html != null && r.innerHTML !== html) r.innerHTML = html; };
   const parse = (t) => t.dataset.tcTrigger.split(':').map(Number);
   // a dialog trigger says whether its dialog is open, as the original's does (aria-expanded, and data-state where
   // the component library uses it)
@@ -565,7 +603,8 @@ function widgetPlayer() {
   };
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-tc-trigger]');
-    if (!t) return;
+    // a click script.js already handled (it called preventDefault) is its own
+    if (!t || e.defaultPrevented || t.closest('[data-tc-own]')) return;
     const [i, j] = parse(t);
     const g = data.groups[i];
     if (!g) return;
@@ -596,12 +635,14 @@ function widgetPlayer() {
     const [i, j] = parse(t);
     show(i, data.groups[i].states[j]);
   });
+  // only a menu that opens on hover closes when the pointer leaves it; an accordion in the page stays as clicked
   document.addEventListener('pointerout', (e) => {
     for (const [i, g] of data.groups.entries()) {
       if (!g || g.kind !== 'expand') continue;
       const r = regionOf(i);
       if (!r || !r.contains(e.target) || r.contains(e.relatedTarget)) continue;
-      if (r.querySelector(`[data-tc-trigger^="${i}:"][aria-expanded="true"]`)) show(i, g.closed);
+      const open = r.querySelector(`[data-tc-trigger^="${i}:"][aria-expanded="true"]`);
+      if (open && hoverMenu(open)) show(i, g.closed);
     }
   });
 }
@@ -627,7 +668,7 @@ function markRevealsInPage([reveals, classes, scrubs = []]) {
     if (!el) return;
     const rec = r.desktop || r.tablet || r.mobile || r;
     el.setAttribute('data-tc-reveal', String(i));
-    rules.push(`[data-tc-reveal="${i}"]{opacity:${rec.from.o};transform:translate(${rec.from.tx}px, ${rec.from.ty}px) scale(${rec.from.s})${rec.from.blur ? `;filter:blur(${rec.from.blur}px)` : ''}}`);
+    rules.push(`[data-tc-reveal="${i}"]{opacity:${rec.from.o};transform:translate(${rec.from.tx}px, ${rec.from.ty}px) scale(${rec.from.s})${rec.from.blur ? `;filter:blur(${rec.from.blur}px)` : ''}${rec.from.clip && rec.from.clip !== 'none' ? `;clip-path:${rec.from.clip}` : ''}}`);
     count++;
   });
   if (rules.length) {
@@ -749,6 +790,9 @@ function localLinksInPage(siteHost) {
 
 function cleanRuntimeInPage() {
   const log = { pins: [], canvases: 0, gsap: 0 };
+  // the measuring unroll (lib.mjs) is the instruments', never the page's: a capture made before 0.5 kept its mark
+  document.getElementById('tc-unroll')?.remove();
+  for (const el of [document.documentElement, ...document.querySelectorAll('[data-tc-unroll]')]) el.removeAttribute('data-tc-unroll');
   const label = (el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.classList.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''}`;
   // what ScrollTrigger writes on the pinned element while pinning (its own values live in the stylesheet)
   const PIN_PROPS = ['translate', 'rotate', 'scale', 'inset', 'top', 'left', 'right', 'bottom', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'max-width', 'width', 'max-height', 'height', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'box-sizing', 'position', 'transform', 'flex-basis'];
@@ -794,9 +838,24 @@ function cleanRuntimeInPage() {
   // pixels, so a script.js that animates the element again (xPercent: -50) would centre it twice. Marked (last, after
   // the pin clean-up removed what pinning wrote); tcOwn() clears it, so the clone's script starts from the page as it
   // was before any script ran.
+  // Except a state: a transform that hides the element (a closed menu at scale(1, 0), a drawer moved out of the page or
+  // out of the box that clips it, where it would show without the transform) is how the page looks closed, which the
+  // site's script set at start; clearing it would open the menu over the page. Marked "state", never cleared.
+  const clipOf = (el) => { for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { const s = getComputedStyle(a); if (s.overflowX !== 'visible' || s.overflowY !== 'visible') return a.getBoundingClientRect(); } return null; };
+  const meets = (r, b) => r.right > b.left && r.left < b.right && r.bottom > b.top && r.top < b.bottom;
+  const pageBox = { left: -scrollX, top: -scrollY, right: document.documentElement.scrollWidth - scrollX, bottom: document.documentElement.scrollHeight - scrollY };
   for (const el of document.querySelectorAll('[style*="translate: none"][style*="rotate: none"][style*="scale: none"]')) {
     if (!/(^|;)\s*transform\s*:/.test(el.getAttribute('style'))) continue;
-    el.setAttribute('data-tc-gsap', '');
+    const moved = el.getBoundingClientRect();
+    const t = el.style.transform;
+    el.style.transform = 'none';
+    const home = el.getBoundingClientRect();
+    el.style.transform = t;
+    const clip = clipOf(el);
+    const flat = (moved.width < 0.5 || moved.height < 0.5) && home.width >= 0.5 && home.height >= 0.5;
+    const away = (!meets(moved, pageBox) && meets(home, pageBox)) || (clip && !meets(moved, clip) && meets(home, clip));
+    el.setAttribute('data-tc-gsap', flat || away ? 'state' : '');
+    if (flat || away) log.gsapState = (log.gsapState || 0) + 1;
     log.gsap++;
   }
   return log;
@@ -940,8 +999,8 @@ function placeholdersInPage([lorem, rootSel]) {
     if (el.tagName === 'INPUT' && ['text', 'email', 'search', 'url', 'tel', ''].includes(el.type) && el.value) el.setAttribute('value', shaper(el)(el.value));
   }
 
-  // media: same box, placeholder content
-  const box = (w, h) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w) || 16}" height="${Math.round(h) || 16}" viewBox="0 0 16 16" preserveAspectRatio="none"><rect width="16" height="16" fill="#8884"/></svg>`)}`;
+  // media: same box, placeholder content, opaque like the image (text an image covers stays covered)
+  const box = (w, h) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w) || 16}" height="${Math.round(h) || 16}" viewBox="0 0 16 16" preserveAspectRatio="none"><rect width="16" height="16" fill="#8c8c8c"/></svg>`)}`;
   for (const img of root.querySelectorAll('img')) {
     const r = img.getBoundingClientRect();
     img.setAttribute('src', box(img.naturalWidth || r.width, img.naturalHeight || r.height));

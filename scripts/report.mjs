@@ -6,6 +6,8 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { parseArgs, COMPARE, REPORT_FILE, siteDir } from './lib.mjs';
 
 const { pos } = parseArgs(process.argv.slice(2));
@@ -26,6 +28,8 @@ if (!meta) {
 const T = { layout: 98, states: 95, canvas: 90, motion: 95, detail: 95, hovers: 90, load: 95 };
 // an accepted difference never covers a value below this, and needs evidence (a file it names that exists)
 const ACCEPT_FLOOR = 95;
+// the scroll-states gate on the worst single frame, besides the mean
+const FRAME_FLOOR = 80;
 const mark = (ok, acceptedNote) => (ok === null ? '–' : ok ? 'pass' : acceptedNote ? `accepted (${acceptedNote})` : '**below target**');
 const pct = (v) => (v === undefined || v === null ? '–' : `${v}%`);
 // the seed sizes, then the held-out sizes (captured and scored, never used to build the clone)
@@ -85,11 +89,14 @@ const rows = [];
 // describes a clone that no longer exists, so it is shown as stale and cannot pass (score again).
 const cloneChanged = (() => {
   let t = 0;
-  const walk = (d) => { for (const e of fsSync.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p); } else t = Math.max(t, fsSync.statSync(p).mtimeMs); } };
+  // the app's sources, not what the running server writes into its build folder (.next/cache) or the verify token
+  const walk = (d) => { for (const e of fsSync.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!['node_modules', '.next'].includes(e.name)) walk(p); } else if (e.name !== 'trueclone-app.txt') t = Math.max(t, fsSync.statSync(p).mtimeMs); } };
   try { walk(path.join(root, COMPARE === 'compare' ? 'clone' : 'next')); } catch { /* no clone */ }
   return t;
 })();
 const measuredAt = { layout: layout?.at, scroll: states?.at, canvases: states?.at, detail: detail?.at, hovers: hovers?.at, load: load?.at, interactions: interact?.at, motion: Object.values(curves).map((c) => c?.at).filter(Boolean).sort()[0] };
+// a mean hides a broken frame (a 91% average with frames at 17%): every frame must reach FRAME_FLOOR too
+const worstFrame = (v) => { const w = (states?.viewports || []).find((x) => x.viewport === v)?.worst || []; return w.length ? w.reduce((a, b) => (b.match < a.match ? b : a)) : null; };
 const isStale = (key) => Boolean(measuredAt[key]) && Date.parse(measuredAt[key]) < cloneChanged - 1000;
 const row = (check, values, test, note = '') => {
   const key0 = check.split(' ')[0].toLowerCase();
@@ -99,7 +106,7 @@ const row = (check, values, test, note = '') => {
   const key = check.split(' ')[0].toLowerCase();
   const failing = typeof test === 'function' ? present(values).filter((v) => !test(values[v], v)) : ok === false ? present(values) : [];
   // never below the floor: an accepted difference explains the last few points, not a broken page
-  const covered = failing.length && failing.every((v) => (typeof values[v] !== 'number' || values[v] >= ACCEPT_FLOOR) && acceptedFor(key, v).length);
+  const covered = failing.length && failing.every((v) => (typeof values[v] !== 'number' || values[v] >= ACCEPT_FLOOR) && !(key === 'scroll' && (worstFrame(v)?.match ?? 100) < FRAME_FLOOR) && acceptedFor(key, v).length);
   const stale = drift?.stale && ['detail', 'hovers', 'motion', 'load', 'interactions'].includes(key) ? ' **stale capture**' : '';
   rows.push(`| ${check} | ${VPS.map((v) => pct(values[v])).join(' | ')} | ${mark(ok, covered ? acceptedFor(key)[0].slice(0, 60) : null)}${stale} | ${note} |`);
   // the same verdict, machine-readable (verdict.json), for trueclone status
@@ -110,7 +117,8 @@ const present = (vals) => VPS.filter((v) => vals[v] !== undefined && vals[v] !==
 const all = (vals, test) => (present(vals).length ? present(vals).every((v) => test(vals[v], v)) : null);
 row(`Layout (structure)`, L, (x) => x >= T.layout, `target ≥ ${T.layout}%; text and media masked`);
 if (meta.mode === 'exact') row('Layout (real pixels)', V, (x) => x >= T.layout, 'exact mode: same text and media');
-row('Scroll states', S, (x) => x >= T.states, `target ≥ ${T.states}%`);
+const frameNotes = VPS.map((v) => [v, worstFrame(v)]).filter(([, f]) => f && f.match < FRAME_FLOOR).map(([v, f]) => `${v} y ${f.y}: ${f.match}%`);
+row('Scroll states', S, (x, v) => x >= T.states && !((worstFrame(v)?.match ?? 100) < FRAME_FLOOR), `target ≥ ${T.states}% and no frame below ${FRAME_FLOOR}%${frameNotes.length ? `; frames below: ${frameNotes.slice(0, 4).join(', ')}` : ''}`);
 const CV = byVp(states, 'canvas');
 if (present(CV).length) row('Canvases', CV, (x) => x >= T.canvas, `target ≥ ${T.canvas}%; what each scene draws, compared in the scroll-state frames (colours and coverage)`);
 row('Motion curves', C, (x) => x >= T.motion, present(C).length ? `target ≥ ${T.motion}%` : 'no motion map (no scroll or time animation to score)');
@@ -130,6 +138,26 @@ const siteListeners = ((await read('reference/scripts/scripts.json'))?.listeners
 const notesOk = Boolean(behaviours) && (!siteListeners || cites > 0);
 rows.push(`| Notes (behaviours) | ${cites} cited | – | – | – | – | ${notesOk ? 'pass' : '**below target**'} | ${notesOk ? 'notes.md Behaviours tie each behaviour to the site\'s code' : behaviours ? 'notes.md Behaviours cite no file:line of the site\'s code (trueclone brief lists them per section)' : 'notes.md has no Behaviours yet (trueclone brief <name> <n>, one section at a time)'} |`);
 checks.push({ check: 'Notes (behaviours)', key: 'notes', pass: notesOk, failing: notesOk ? [] : [{ viewport: null, value: cites }] });
+// Coverage: nothing the site does is left out by estimate. Every script of the site's own that ran (not a library,
+// not tracking) is cited by name in Behaviours, or named under Findings with why it is not ported; every scroll curve
+// recorded on the reference is named the same way (by its class) or driven by script.js.
+const LIBRARY = /(^|[\W_])(gsap|tweenmax|flip|scrolltrigger|splittext|customease|jquery|lenis|swiper|three|webflow|lottie|hls|polyfill|modernizr|lodash|react|vue|next|nuxt|webpack|runtime|vendor|framework|chunk)([\W_]|$)/i;
+const covText = `${behaviours}\n${findings.join('\n')}`;
+const scriptJs = await fs.readFile(path.join(root, 'clone', 'script.js'), 'utf8').catch(() => '');
+// the site's own code that does the most: its eight busiest scripts by functions run (a big page also loads a dozen
+// apps, each named in one Findings line if not ported), and every inline script that handles an event
+const evidence = await read('reference/scripts/scripts.json');
+const own = (evidence?.scripts || []).filter((s) => s.functionsRan > 0 && !s.tracking && s.bytes >= 200 && !LIBRARY.test(`${s.file} ${s.url || ''}`));
+const listened = new Set((evidence?.listeners || []).map((l) => String(l.file || '').replace(/\.pretty\.js$/, '.js')));
+const ran = [...new Set([...own.slice().sort((a, b) => b.functionsRan - a.functionsRan).slice(0, 8), ...own.filter((s) => /^inline-/.test(s.file) && listened.has(s.file))])];
+const uncitedScripts = ran.filter((s) => !covText.includes(s.file.replace(/\.js$/, '')));
+const curvesRec = ((await read('reference/reveals.desktop.json'))?.scrubs || []).filter((c) => c.cls);
+const uncitedCurves = curvesRec.filter((c) => { const k = String(c.cls).split('.')[0]; return k && !covText.includes(k) && !scriptJs.includes(k); });
+if (ran.length || curvesRec.length) {
+  const covOk = !uncitedScripts.length && !uncitedCurves.length;
+  rows.push(`| Coverage (site code) | ${ran.length - uncitedScripts.length}/${ran.length} scripts, ${curvesRec.length - uncitedCurves.length}/${curvesRec.length} curves | – | – | – | – | ${covOk ? 'pass' : '**below target**'} | ${covOk ? 'every script of the site that ran and every recorded scroll curve is ported (cited in Behaviours or driven by script.js) or explained under Findings' : `not cited in notes.md (Behaviours, or Findings with why not): ${[...uncitedScripts.map((s) => s.file), ...uncitedCurves.map((c) => `curve .${String(c.cls).split('.')[0]}`)].slice(0, 6).join(', ')}${uncitedScripts.length + uncitedCurves.length > 6 ? '…' : ''}`} |`);
+  checks.push({ check: 'Coverage (site code)', key: 'coverage', pass: covOk, failing: [...uncitedScripts.map((s) => ({ viewport: null, script: s.file })), ...uncitedCurves.map((c) => ({ viewport: null, curve: c.cls, path: c.path }))] });
+}
 // scenarios the capture found where the reference itself does not react are not behaviour: not counted
 const scenarios = (interact?.scenarios || []).filter((s) => !s.notBehaviour);
 const failed = scenarios.filter((s) => s.expect && !s.expect.pass);
@@ -147,15 +175,18 @@ for (const r of (meta.routes || []).filter((x) => x.slug)) {
   const st = states?.routes?.find((x) => x.path === r.path)?.viewports || [];
   const cell = (list, v) => list.find((x) => x.viewport === v)?.match;
   const lows = [];
+  // a route that differs from itself between two loads (capture: meta.routes[].unstable) is held to its own match,
+  // less a point: no copy can be closer to the reference than the reference is to itself
+  const bar = (target) => (r.unstable ? Math.min(target, r.unstable.match - 1) : target);
   for (const v of VPS) {
-    if (typeof cell(lay, v) === 'number' && cell(lay, v) < T.layout) lows.push({ route: r.path, viewport: v, check: 'layout', value: cell(lay, v) });
-    if (typeof cell(st, v) === 'number' && cell(st, v) < T.states) lows.push({ route: r.path, viewport: v, check: 'states', value: cell(st, v) });
+    if (typeof cell(lay, v) === 'number' && cell(lay, v) < bar(T.layout)) lows.push({ route: r.path, viewport: v, check: 'layout', value: cell(lay, v) });
+    if (typeof cell(st, v) === 'number' && cell(st, v) < bar(T.states)) lows.push({ route: r.path, viewport: v, check: 'states', value: cell(st, v) });
   }
   const measured = lay.length > 0;
   if (!measured) lows.push({ route: r.path, viewport: null, check: 'layout', value: null });
   routeFailing.push(...lows);
   const worst = Math.min(...[...lay, ...st].map((x) => x.match).filter((x) => typeof x === 'number'), 100);
-  routeRows.push({ worst: measured ? worst : -1, line: `| \`${r.path}\` | ${VPS.map((v) => `${cell(lay, v) ?? '–'} / ${cell(st, v) ?? '–'}`).join(' | ')} | ${!measured ? '**not scored**' : lows.length ? '**below target**' : 'pass'} |` });
+  routeRows.push({ worst: measured ? worst : -1, line: `| \`${r.path}\` | ${VPS.map((v) => `${cell(lay, v) ?? '–'} / ${cell(st, v) ?? '–'}`).join(' | ')} | ${!measured ? '**not scored**' : lows.length ? '**below target**' : 'pass'}${r.unstable ? ` (random on the reference: ${r.unstable.match}% like itself, held to ${bar(T.layout)})` : ''} |` });
 }
 if (routeRows.length) {
   rows.push(`| Routes | ${VPS.map(() => '').join(' | ')} | ${routeFailing.length ? '**below target**' : 'pass'} | ${routeRows.length} other route(s): layout ≥ ${T.layout} and scroll states ≥ ${T.states} at every size (see Routes below) |`);
@@ -163,7 +194,9 @@ if (routeRows.length) {
 }
 checks.push({ check: 'Review (by eye)', key: 'review', pass: reviewFrames.length > 0 && !reviewOpen.length, failing: reviewFrames.length ? reviewOpen.map((x) => ({ viewport: x.size, frame: x.id, verdict: x.verdict })) : [{ viewport: null, frame: null, verdict: 'not done' }] });
 await fs.mkdir(path.join(root, COMPARE), { recursive: true });
-await fs.writeFile(path.join(root, COMPARE, 'verdict.json'), JSON.stringify({ at: new Date().toISOString(), drift: Boolean(drift?.stale), checks }, null, 2));
+// a report regenerated only to follow the notes (TC_KEEP_AT, below) keeps the time its scores were taken
+const priorAt = process.env.TC_KEEP_AT ? (await read(`${COMPARE}/verdict.json`))?.at : null;
+await fs.writeFile(path.join(root, COMPARE, 'verdict.json'), JSON.stringify({ at: priorAt || new Date().toISOString(), drift: Boolean(drift?.stale), checks }, null, 2));
 const failing = rows.filter((r) => r.includes('below target')).length;
 const acceptedCount = rows.filter((r) => r.includes('| accepted (')).length;
 const verdict = (failing ? `${failing} check(s) below target` : 'every scored check meets its target') + (acceptedCount ? ` (${acceptedCount} accepted with a reason in notes.md)` : '') + (drift?.stale ? '; the live site has changed since the capture: re-capture before trusting the live-measured checks' : '');
@@ -235,3 +268,9 @@ ${data.length ? `- **Data and API calls** the reference makes (${uniq(data).leng
 const [head, ...rest] = md.split('\n## Scores');
 await fs.writeFile(path.join(root, REPORT_FILE), [head.replace(/(\|[^\n]*)\n(?:\n)+(?=\|)/g, '$1\n'), ...rest].join('\n## Scores'));
 console.log(`${verdict} -> ${path.relative(process.cwd(), path.join(root, REPORT_FILE))}`);
+// The Next.js app's report reads the same notes (review verdicts, accepted differences, findings): regenerated with
+// this one so it never shows stale counts. Its scores are not re-run, and its verdict keeps the time they were taken
+// (status still asks for a new verify when the HTML clone changed after it).
+if (COMPARE === 'compare' && fsSync.existsSync(path.join(root, 'compare-next', 'verdict.json'))) {
+  spawnSync(process.execPath, [fileURLToPath(import.meta.url), name], { stdio: 'inherit', env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md', TC_KEEP_AT: '1' } });
+}

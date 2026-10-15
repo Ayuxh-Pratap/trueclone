@@ -16,7 +16,6 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { parse, serialize } from 'parse5';
-import { transform as transformCss } from 'lightningcss';
 import { fileURLToPath as toPath } from 'node:url';
 import { parseArgs, siteDir } from './lib.mjs';
 
@@ -77,7 +76,27 @@ const styleObject = (css) => {
   }
   return o;
 };
-const fixUrl = (v) => (v.startsWith('assets/') ? '/' + v : v);
+// A relative reference resolves against the page's folder (or its <base href>) in the HTML clone; the app serves the
+// same files from public/ at every route, so it is written root-relative: assets/x.png on /work/x stays /assets/x.png.
+// Absolute, protocol-relative, data:, in-page (#x) and query-only references are left as they are.
+let pageBase = '/';
+const fixUrl = (v) => {
+  const t = v.trim();
+  if (!t || /^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\?)/i.test(t)) return v;
+  if (t.startsWith('/')) return t;
+  const u = new URL(t, `http://h${pageBase}`);
+  return u.pathname + u.search + u.hash;
+};
+const fixSrcset = (v) => (/^\s*data:/i.test(v) ? v : v.split(',').map((part) => { const [u, ...rest] = part.trim().split(/\s+/); return [fixUrl(u), ...rest].join(' '); }).join(', '));
+// url() in CSS text, token by token: a quoted value is read whole, so a url(%23n) inside a data: URI is never touched
+const cssUrls = (css) => css.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|&quot;(.*?)&quot;|([^'")\s]*))\s*\)/g, (m, d, s, e, u) => {
+  const v = d ?? s ?? e ?? u;
+  return !v || /^\s*data:/i.test(v) ? m : m.replace(v, () => fixUrl(v));
+});
+// raw markup (a <template>'s content, a shadow root): the same references, in attributes and inline styles
+const rawHtml = (h) => cssUrls(h
+  .replace(/(\s(?:src|href|poster|data-src))=("|')([^"']*)\2/gi, (m, a, q, u) => `${a}=${q}${fixUrl(u)}${q}`)
+  .replace(/(\s(?:srcset|data-srcset))=("|')([^"']*)\2/gi, (m, a, q, u) => `${a}=${q}${fixSrcset(u)}${q}`));
 const attrString = (n, v) => (/["\\]/.test(v) ? `${n}={${JSON.stringify(v)}}` : `${n}="${v}"`);
 
 let usesStyle = false; // set while converting a component whose style objects need the CSSProperties type (custom properties like --i)
@@ -85,12 +104,14 @@ function jsxAttrs(node, inSvg) {
   const parts = [];
   for (const a of node.attrs || []) {
     if (/^on[a-z]+$/.test(a.name)) continue; // inline handlers are strings; the motion script owns behaviour
+    // React reserves ref and key and never renders them as attributes (a Vue template's ref="footer" is inert markup)
+    if (a.name === 'ref' || a.name === 'key') continue;
     // an input's value/checked are its starting state here; as plain props React would make the field read-only
     if (node.tagName === 'input' && a.name === 'value') { parts.push(attrString('defaultValue', a.value)); continue; }
     if (node.tagName === 'input' && a.name === 'checked') { parts.push('defaultChecked'); continue; }
     if (LEGACY.has(a.name) && !inSvg) { parts.push(`{...{ ${JSON.stringify(a.name)}: ${JSON.stringify(a.value)} }}`); continue; }
     // url(assets/…) in an inline style resolves against the page in the clone; the app serves assets at /assets
-    if (a.name === 'style') { usesStyle = true; parts.push(`style={${JSON.stringify(styleObject(a.value.replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`)))} as CSSProperties}`); continue; }
+    if (a.name === 'style') { usesStyle = true; parts.push(`style={${JSON.stringify(styleObject(cssUrls(a.value)))} as CSSProperties}`); continue; }
     // SVG elements have no typed boolean props (hidden), so they go through the spread too
     // in HTML a boolean attribute is on whatever its value (disabled="true", even disabled="false"); hidden="until-found"
     // is the one with a meaning of its own
@@ -108,7 +129,7 @@ function jsxAttrs(node, inSvg) {
     // empty href means "this page", which # also does without the request
     if (['src', 'srcSet', 'poster'].includes(n) && a.value === '') continue;
     if (n === 'href' && a.value === '') { parts.push('href="#"'); continue; }
-    const v = ['src', 'href', 'poster', 'srcSet'].includes(n) ? fixUrl(a.value) : a.value;
+    const v = n === 'srcSet' ? fixSrcset(a.value) : ['src', 'href', 'poster'].includes(n) ? fixUrl(a.value) : a.value;
     // React types these as numbers: tabIndex="0" fails type-checking, tabIndex={0} is the same attribute
     if (['tabIndex', 'colSpan', 'rowSpan', 'maxLength', 'minLength', 'span', 'size', 'cols', 'rows'].includes(n) && /^-?\d+$/.test(v)) { parts.push(`${n}={${v}}`); continue; }
     // and these ARIA properties too (aria-valuenow="3" fails type-checking; the number is the same attribute)
@@ -151,6 +172,8 @@ function toJsx(node, depth, inSvg = false, inPre = false) {
     return `${/^\s/.test(text) ? SPACE : ''}${textJsx(text.trim())}${/\s$/.test(text) ? SPACE : ''}`;
   }
   if (['script', 'noscript', 'style'].includes(node.nodeName)) return '';
+  // a seeded clone's stylesheets are written into <head> in their document order (seededApp)
+  if (seeded && node.tagName === 'link' && (node.attrs || []).some((a) => a.name === 'rel' && /\bstylesheet\b/i.test(a.value))) return '';
   const tag = node.tagName;
   const svg = inSvg || tag === 'svg';
   const pre = inPre || keepsWhitespace(node);
@@ -158,9 +181,11 @@ function toJsx(node, depth, inSvg = false, inPre = false) {
   // a host with a declarative shadow root (<template shadowrootmode>): the browser's HTML parser builds the shadow
   // root from the streamed markup, React must not touch the inside, so the host's content is emitted as raw HTML
   if ((node.childNodes || []).some((c) => c.tagName === 'template' && (c.attrs || []).some((a) => a.name === 'shadowrootmode'))) {
-    const inner = serialize(node).replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`).replace(/(src|href|poster)="assets\//g, '$1="/assets/');
-    return `${pad}<${tag}${attrs} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: ${JSON.stringify(inner)} }} />`;
+    return `${pad}<${tag}${attrs} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: ${JSON.stringify(rawHtml(serialize(node)))} }} />`;
   }
+  // a <template> (content a script clones: a case study's body, a card) keeps its content as it is: inert markup,
+  // never rendered by React
+  if (tag === 'template') return `${pad}<template${attrs} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: ${JSON.stringify(rawHtml(serialize(node.content)))} }} />`;
   const kids = (node.childNodes || []).map((c) => toJsx(c, depth + 1, svg, pre)).filter((s) => s !== '');
   if (VOID.has(tag) || !kids.length) return `${pad}<${tag}${attrs} />`;
   const inline = kids.every((k) => !k.startsWith('  ')) && kids.join('').length < 120;
@@ -181,9 +206,11 @@ const body = find(htmlEl, 'body');
 const title = (els(head).find((e) => e.tagName === 'title')?.childNodes[0]?.value || name).trim();
 const fontLinks = els(head).filter((e) => e.tagName === 'link').map((e) => Object.fromEntries(e.attrs.map((a) => [a.name, a.value])))
   .filter((l) => /fonts\.(googleapis|gstatic)\.com/.test(l.href || ''));
+const docBodies = [body]; // every page's <body> (a site of separate pages adds its other pages in seededApp)
 
 await fs.rm(path.join(out, 'app'), { recursive: true, force: true });
 await fs.rm(path.join(out, 'components', 'site'), { recursive: true, force: true });
+await fs.rm(path.join(out, 'styles', 'site'), { recursive: true, force: true }); // stylesheets were imported from here before 0.5
 for (const d of ['app', 'components/site', 'lib', 'styles', 'public']) await fs.mkdir(path.join(out, d), { recursive: true });
 
 let components = [];
@@ -318,9 +345,21 @@ ${components.map((c) => `        <${c} />`).join('\n')}
 `);
 }
 
-// Assets, design system docs, config
-await fs.rm(path.join(out, 'public', 'assets'), { recursive: true, force: true });
-await fs.cp(path.join(cloneDir, 'assets'), path.join(out, 'public', 'assets'), { recursive: true });
+// Assets, design system docs, config. A seeded clone's files are all served as they are (stylesheets, scripts,
+// patches, media at the clone's root or in folders of their own): everything but the pages themselves (they are the
+// app's routes) and the seed's working files (dotfiles); folders left with nothing to serve are dropped.
+const notServed = (p) => /\.html?$/i.test(p) || path.basename(p).startsWith('.');
+const prune = async (dir) => {
+  for (const e of await fs.readdir(dir, { withFileTypes: true })) if (e.isDirectory()) await prune(path.join(dir, e.name));
+  if (!(await fs.readdir(dir)).length) await fs.rmdir(dir);
+};
+for (const e of seeded ? await fs.readdir(cloneDir, { withFileTypes: true }) : [{ name: 'assets', isDirectory: () => true }]) {
+  if (notServed(e.name)) continue;
+  const to = path.join(out, 'public', e.name);
+  await fs.rm(to, { recursive: true, force: true });
+  await fs.cp(path.join(cloneDir, e.name), to, { recursive: true, filter: (src) => !notServed(src) });
+  if (e.isDirectory()) await prune(to);
+}
 for (const f of ['DESIGN.md', 'design-tokens.json']) await fs.copyFile(path.join(root, f), path.join(out, f)).catch(() => {});
 await fs.writeFile(path.join(out, 'package.json'), JSON.stringify(PKG, null, 2) + '\n');
 // custom elements (<code-island>, <swiper-container>) have no JSX type: declared here, or `next build` fails
@@ -328,7 +367,7 @@ await fs.writeFile(path.join(out, 'package.json'), JSON.stringify(PKG, null, 2) 
 // newer than the typings or outside them (command, commandfor, popovertarget, a framework's own): an HTML attribute
 // is valid markup whether React lists it or not, so every element accepts any attribute here.
 const custom = new Set();
-(function walk(n) { if (n.tagName && n.tagName.includes('-')) custom.add(n.tagName); for (const c of n.childNodes || []) walk(c); })(body);
+for (const b of docBodies) (function walk(n) { if (n.tagName && n.tagName.includes('-')) custom.add(n.tagName); for (const c of n.childNodes || []) walk(c); })(b);
 await fs.rm(path.join(out, 'custom-elements.d.ts'), { force: true });
 await fs.writeFile(path.join(out, 'html-types.d.ts'), `// Generated by scripts/next.mjs: the page's markup, typed for JSX as the browser accepts it.
 import type { DetailedHTMLProps, HTMLAttributes as ReactHTMLAttributes } from 'react';
@@ -373,102 +412,191 @@ console.log(`generated ${path.relative(process.cwd(), out)} (${seeded ? 'seeded 
 
 // ---------------- Seeded clones ----------------
 // The page is the original's markup and stylesheets (trueclone seed), so the app keeps them as they are:
-// - the stylesheets and inline <style> blocks of <head>, in their order, after the shadcn theme; Tailwind's own class
+// - every file the clone serves (stylesheets, scripts, patches, media) is copied to public/ at the same path, and the
+//   stylesheets and <style> blocks are written into <head> in document order, after the shadcn theme, as the browser
+//   loads them in the HTML clone: no CSS pipeline in between (Next's would merge `transform` and `scale`, reject an
+//   @import the browser accepts, and fail the build on a declaration the browser ignores). Tailwind's own class
 //   scanning is limited to components/ui, because the original's compiled CSS already defines every class in the
 //   markup and a second build from a different theme would compete with it;
-// - <html> and <body> attributes (font-variable classes, dark mode, color-scheme);
+// - <html> and <body> attributes (font-variable classes, dark mode, color-scheme), <base>, the title;
 // - the largest body child is split at its first element with 3+ children: each of those becomes a component, the
 //   wrappers around them stay in the page with their classes; other body children are components of their own;
+//   <template> elements stay in the page as they are (a script clones them);
 // - trueclone's players and script.js are served from public/ and run in order after hydration, with the data
 //   blocks they read (script type="application/json") rendered in the page.
-// A browser drops a declaration (or a rule) it cannot parse and keeps the rest of the sheet; Next's CSS parser
-// (Lightning CSS, the version Next ships) fails the whole build instead. The site's CSS is parsed strictly the way Next
-// will, and each piece that fails is removed, exactly what the browser already ignores, until the sheet parses.
-function browserParsed(css, file) {
-  const dropped = [];
-  for (let tries = 0; tries < 200; tries++) {
-    let loc;
-    try { transformCss({ filename: file, code: Buffer.from(css), errorRecovery: false }); return { css, dropped }; }
-    catch (e) { loc = e.loc; if (!loc) return { css, dropped }; }
-    let at = 0;
-    for (let line = 1; line < loc.line; line++) at = css.indexOf('\n', at) + 1;
-    at = Math.min(css.length - 1, at + Math.max(0, loc.column - 1));
-    const prev = Math.max(css.lastIndexOf(';', at), css.lastIndexOf('{', at), css.lastIndexOf('}', at));
-    const segment = css.slice(prev + 1, at);
-    if (css[prev] !== '}' && segment.includes(':') && !/[{]/.test(segment)) {
-      // a declaration: from after the previous ; or { to its own ; (or up to the closing })
-      let end = at, depth = 0;
-      for (; end < css.length; end++) { const ch = css[end]; if (ch === '(') depth++; else if (ch === ')') depth--; else if ((ch === ';' && depth <= 0) || ch === '}') break; }
-      dropped.push(css.slice(prev + 1, end).trim());
-      css = css.slice(0, prev + 1) + css.slice(css[end] === ';' ? end + 1 : end);
-    } else {
-      // a rule whose selector fails: the selector through its matching }
-      const open = css.indexOf('{', at);
-      if (open < 0) return { css, dropped };
-      let end = open, depth = 0;
-      for (; end < css.length; end++) { if (css[end] === '{') depth++; else if (css[end] === '}' && --depth === 0) break; }
-      dropped.push(css.slice(prev + 1, open).trim());
-      css = css.slice(0, prev + 1) + css.slice(end + 1);
-    }
-  }
-  return { css, dropped };
-}
-
+// A site of separate pages (meta.app "pages") gets one route per page, each with its own root layout (a route group:
+// its own <head>, stylesheets, <html>/<body> attributes and title), exactly as each document of the HTML clone. A
+// single-page app with routes gets one page for every address (an optional catch-all), as its host serves it.
 async function seededApp() {
   const attrsOf = (n) => Object.fromEntries((n.attrs || []).map((a) => [a.name, a.value]));
-  // styles
-  await fs.mkdir(path.join(out, 'styles', 'site'), { recursive: true });
-  const imports = [];
-  let inline = 0, usesTailwind = false;
-  // <style> blocks (and stylesheet links) can sit inside <body> too, anywhere in the tree: same cascade, so they
+  const siteMeta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').catch(() => '{}'));
+  const routes = siteMeta.routes || [];
+  const spa = routes.length > 1 && siteMeta.app === 'single-page app';
+  const separate = siteMeta.app === 'pages' ? routes.filter((r) => r.slug && !r.sameDocument) : [];
+
+  // the documents: the captured page, and every separate page of the site (clone/<route>/index.html)
+  const pages = [{ path: '/', slug: '', parts: [], head, body, htmlEl, title }];
+  for (const r of separate) {
+    const parts = r.path.split('/').filter(Boolean);
+    // a folder named (x), [x], @x or _x is route syntax to Next, not an address
+    if (!parts.length || parts.some((p) => /^[([@_]/.test(p))) { console.warn(`WARNING ${r.path}: not a Next.js route folder name, left out`); continue; }
+    const text = await fs.readFile(path.join(cloneDir, ...parts, 'index.html'), 'utf8').catch(() => null);
+    if (text === null) { console.warn(`WARNING ${r.path}: no clone/${parts.join('/')}/index.html (seed the site again)`); continue; }
+    const d = parse(text);
+    const h = find(d, 'html');
+    const hd = find(h, 'head');
+    pages.push({ path: r.path, slug: r.slug, parts, head: hd, body: find(h, 'body'), htmlEl: h, title: (els(hd).find((e) => e.tagName === 'title')?.childNodes[0]?.value || title).trim() });
+  }
+  docBodies.push(...pages.slice(1).map((pg) => pg.body));
+  // where each page's relative references point: its own folder, or its <base href>
+  for (const pg of pages) {
+    const dir = '/' + pg.parts.map((p) => p + '/').join('');
+    const base = attrsOf(els(pg.head).find((e) => e.tagName === 'base') || {}).href;
+    pg.base = dir;
+    if (base) { const u = new URL(base, `http://h${dir}`); if (u.host === 'h') pg.base = u.pathname.replace(/[^/]*$/, ''); }
+  }
+
+  // styles: <style> blocks and stylesheet links can sit inside <body> too, anywhere in the tree: same cascade, so they
   // follow the head's in document order
-  const bodyStyles = [];
-  (function walk(n) { for (const c of n.childNodes || []) { if (c.tagName === 'style' || c.tagName === 'link') bodyStyles.push(c); else walk(c); } })(body);
-  const layerOrder = []; // the site's own cascade layers, in the order its stylesheets first declare them
-  // a stylesheet's relative @import (patches/x.css importing ../tokens.css): the imported file comes along, renamed
-  // into styles/site/, and the @import points at it there
-  const carryImports = async (css, fromDir) => {
-    const out2 = [];
-    for (const m of css.matchAll(/@import\s+(?:url\()?\s*(['"])([^'"]+)\1\s*\)?/g)) {
-      const spec = m[2];
-      if (/^(https?:)?\/\//.test(spec) || spec.startsWith('data:') || !/\.css(\?|$)/i.test(spec)) continue;
-      const src = path.resolve(fromDir, spec.split('?')[0]);
-      const text = await fs.readFile(src, 'utf8').catch(() => null);
-      if (text === null) { console.warn(`WARNING @import ${spec} not found next to its stylesheet`); continue; }
-      const name = `imported-${path.basename(src)}`;
-      await fs.writeFile(path.join(out, 'styles', 'site', name), text.replace(/url\((['"]?)(?:\.\.\/)*assets\//g, (q0, q) => `url(${q}/assets/`));
-      out2.push([m[0], `@import "./${name}"`]);
-    }
-    for (const [a, b] of out2) css = css.split(a).join(b);
-    return css;
+  const stylesOf = (pg) => {
+    const found = [];
+    (function walk(n) { for (const c of n.childNodes || []) { if (c.tagName === 'style' || (c.tagName === 'link' && /\bstylesheet\b/i.test(attrsOf(c).rel || ''))) found.push(c); else if (c.tagName !== 'template') walk(c); } })(pg.body);
+    return found;
   };
-  for (const e of [...els(head), ...bodyStyles]) {
-    const a = attrsOf(e);
-    let css = null, file = null, fromDir = cloneDir;
-    if (e.tagName === 'link' && a.rel === 'stylesheet' && a.href && !/^(https?:)?\/\//.test(a.href)) {
-      css = await fs.readFile(path.join(cloneDir, a.href), 'utf8').catch(() => null);
-      file = path.basename(a.href);
-      fromDir = path.dirname(path.join(cloneDir, a.href));
-    } else if (e.tagName === 'style') {
-      css = (e.childNodes || []).map((c) => c.value || '').join('');
-      file = `inline-${++inline}.css`;
-    }
-    if (css === null) continue;
-    // an import needs the .css extension to be parsed as CSS (a capture may have saved /wss/fonts?… as "…-fonts")
-    if (!/\.css$/i.test(file)) file += '.css';
-    // stylesheets lived in clone/css/ (assets at ../assets/), inline blocks in the page (assets at assets/)
-    css = css.replace(/url\((['"]?)(?:\.\.\/)?assets\//g, (m, q) => `url(${q}/assets/`);
-    css = await carryImports(css, fromDir);
-    const clean = browserParsed(css, file);
-    if (clean.dropped.length) console.log(`  ${file}: ${clean.dropped.length} invalid declaration(s)/rule(s) the browser ignores, left out for the Next CSS parser (${clean.dropped.slice(0, 2).map((d) => JSON.stringify(d.slice(0, 60))).join(', ')})`);
-    css = clean.css;
+  const layerOrder = []; // the site's own cascade layers, in the order its stylesheets first declare them
+  let usesTailwind = false;
+  const readsCss = (css) => {
     for (const m of css.matchAll(/@layer\s+([\w-]+(?:\s*,\s*[\w-]+)*)\s*[;{]/g)) for (const l of m[1].split(',').map((x) => x.trim())) if (!layerOrder.includes(l)) layerOrder.push(l);
     usesTailwind ||= /--tw-|tailwindcss v\d/.test(css);
-    await fs.writeFile(path.join(out, 'styles', 'site', file), css);
-    imports.push(`import '../styles/site/${file}';`);
-  }
-  // globals.css = the shadcn theme only; the original's stylesheets are imported by layout.tsx AFTER it, so they come
-  // later in the cascade and win every tie (same layer names, same variable names: the original is often Tailwind too)
+  };
+  const localFile = (href) => (/^\/(?!\/)/.test(href) ? path.join(cloneDir, ...decodeURIComponent(href.split(/[?#]/)[0]).split('/').filter(Boolean)) : null);
+  const exists = (f) => fs.stat(f).then(() => true, () => false);
+  const headAttr = (k, v) => `${k === 'crossorigin' ? 'crossOrigin' : k === 'hreflang' ? 'hrefLang' : k === 'referrerpolicy' ? 'referrerPolicy' : k === 'fetchpriority' ? 'fetchPriority' : k === 'imagesrcset' ? 'imageSrcSet' : k === 'imagesizes' ? 'imageSizes' : k}=${JSON.stringify(k === 'crossorigin' && v === '' ? 'anonymous' : v)}`;
+  const linkTag = (a) => `<link ${Object.entries(a).filter(([k]) => !/^on/.test(k)).map(([k, v]) => headAttr(k, v)).join(' ')} />`;
+
+  // the page's <head> as the HTML clone has it, in its order: <base>, stylesheets and <style> blocks (then the ones
+  // in <body>), the seed's small head scripts (tc-vw keeps --tc-vw at 1% of the layout width: before paint), and the
+  // other head links (icons, font preloads, preconnects, a manifest); local files are served from public/
+  const headOf = async (pg) => {
+    pageBase = pg.base;
+    const lines = [];
+    for (const e of [...els(pg.head), ...stylesOf(pg)]) {
+      const a = attrsOf(e);
+      const rel = String(a.rel || '').toLowerCase();
+      if (e.tagName === 'base' && a.href) lines.push(`<base href=${JSON.stringify(a.href)} />`);
+      else if (e.tagName === 'style') {
+        const css = (e.childNodes || []).map((c) => c.value || '').join('');
+        if (!css.trim()) continue;
+        readsCss(css);
+        const keep = Object.entries(a).filter(([k]) => ['id', 'media', 'title', 'nonce'].includes(k)).map(([k, v]) => `${k}=${JSON.stringify(v)} `).join('');
+        lines.push(`<style ${keep}dangerouslySetInnerHTML={{ __html: ${JSON.stringify(cssUrls(css))} }} />`);
+      } else if (e.tagName === 'link' && /\bstylesheet\b/.test(rel) && a.href) {
+        const href = fixUrl(a.href);
+        const file = localFile(href);
+        if (file) {
+          const css = await fs.readFile(file, 'utf8').catch(() => null);
+          if (css === null) console.warn(`WARNING stylesheet ${a.href} not in clone/`);
+          else readsCss(css);
+        }
+        lines.push(linkTag({ ...a, href }));
+      } else if (e.tagName === 'script' && /^tc-/.test(a.id || '') && !a.src) {
+        lines.push(`<script id=${JSON.stringify(a.id)} dangerouslySetInnerHTML={{ __html: ${JSON.stringify((e.childNodes || []).map((c) => c.value || '').join(''))} }} />`);
+      } else if (e.tagName === 'link' && a.href && /\b(icon|apple-touch-icon|mask-icon|preload|modulepreload|prefetch|preconnect|dns-prefetch|manifest)\b/.test(rel)) {
+        if (/\b(preload|modulepreload)\b/.test(rel) && (a.as === 'script' || rel === 'modulepreload') && localFile(fixUrl(a.href))) continue; // the scripts' own preloads are written below
+        lines.push(linkTag({ ...a, href: a.href.startsWith('data:') ? a.href : fixUrl(a.href) }));
+      }
+    }
+    return lines;
+  };
+
+  // markup: each page's sections as components (components/site/ for the captured page, components/site/<slug>/ for
+  // a separate page), the page itself in app/
+  const SKIP_BODY = new Set(['script', 'noscript', 'next-route-announcer', 'style', 'link']);
+  const size = (n) => (n.childNodes || []).reduce((s, c) => s + 1 + size(c), 0);
+  const contains = (a, b) => { for (let n = b; n; n = n.parentNode) if (n === a) return true; return false; };
+  const allNames = [];
+  const markupOf = async (pg) => {
+    pageBase = pg.base;
+    const compDir = pg.slug ? `site/${pg.slug}` : 'site';
+    await fs.mkdir(path.join(out, 'components', compDir), { recursive: true });
+    const kids = els(pg.body).filter((e) => !SKIP_BODY.has(e.tagName));
+    const content = kids.reduce((x, y) => (size(y) > size(x) ? y : x), kids[0]);
+    let container = content;
+    while (container && els(container).length < 3) {
+      const inner = els(container);
+      if (!inner.length) break;
+      container = inner.reduce((x, y) => (size(y) > size(x) ? y : x));
+    }
+    const used = new Set();
+    const names = [];
+    // names: the element's id when it has one, otherwise its tag and position (utility classes such as "mx-auto" and
+    // placeholder headings say nothing about what a section is)
+    let counter = 0;
+    const nameFor = (node, fallback) => {
+      counter++;
+      const id = attrsOf(node).id;
+      let n = id ? pascal(id) : `${pascal(node.tagName) || fallback}${String(counter).padStart(2, '0')}`;
+      if (/^\d/.test(n)) n = 'S' + n;
+      n = n.slice(0, 40) || fallback;
+      let k = n, i = 2;
+      while (used.has(k) || k === 'SiteScripts') k = `${n}${i++}`;
+      used.add(k);
+      return k;
+    };
+    const from = pg.slug ? `clone/${pg.parts.join('/')}/index.html` : 'clone/index.html';
+    const writeComp = async (compName, node) => {
+      usesStyle = false;
+      const jsx = toJsx(node, 3);
+      const typeImport = usesStyle ? "import type { CSSProperties } from 'react';\n\n" : '';
+      await fs.writeFile(path.join(out, 'components', compDir, `${compName}.tsx`), `// Generated from ${from} by scripts/next.mjs. Edit the HTML clone and regenerate.\n${typeImport}export default function ${compName}() {\n  return (\n    <>\n${jsx}\n    </>\n  );\n}\n`);
+      names.push(compName);
+    };
+    // the page: wrappers kept inline down to the container, the container's children as components
+    let pageUsesStyle = false;
+    const wrap = async (node, depth) => {
+      const pad = '  '.repeat(depth);
+      if (node.nodeName === '#text' || node.nodeName === '#comment') return toJsx(node, depth);
+      usesStyle = false;
+      const attrs = jsxAttrs(node, false);
+      pageUsesStyle ||= usesStyle;
+      const children = [];
+      for (const c of node.childNodes || []) {
+        if (node === container && c.tagName) { const n = nameFor(c, 'Section'); await writeComp(n, c); children.push(`${pad}  <${n} />`); }
+        else if (c.tagName && c !== container && !contains(c, container)) { usesStyle = false; children.push(toJsx(c, depth + 1)); pageUsesStyle ||= usesStyle; }
+        else if (c.tagName) children.push(await wrap(c, depth + 1));
+      }
+      const inner = children.filter((s) => s && s.trim()).join('\n');
+      return inner ? `${pad}<${node.tagName}${attrs}>\n${inner}\n${pad}</${node.tagName}>` : `${pad}<${node.tagName}${attrs} />`;
+    };
+    const parts = [];
+    for (const k of kids) {
+      if (k === content) parts.push(await wrap(k, 3));
+      else { const n = nameFor(k, 'Part'); await writeComp(n, k); parts.push(`      <${n} />`); }
+    }
+    // data blocks the players read, and the scripts (served from public/, run in order after hydration): files and
+    // inline scripts in document order; a module script stays a module
+    const scripts = [];
+    (function walk(n) { for (const c of n.childNodes || []) { if (c.tagName === 'script') scripts.push(c); else if (c.tagName !== 'template') walk(c); } })(pg.body);
+    const dataBlocks = scripts.filter((s) => /json/.test(attrsOf(s).type || '') && attrsOf(s).id)
+      .map((s) => `      <script type="${attrsOf(s).type}" id="${attrsOf(s).id}" dangerouslySetInnerHTML={{ __html: ${JSON.stringify((s.childNodes || []).map((c) => c.value || '').join(''))} }} />`);
+    const scriptList = [];
+    for (const s of scripts) {
+      const a = { ...attrsOf(s), code: (s.childNodes || []).map((c) => c.value || '').join('') };
+      if (/json/.test(a.type || '') || (a.src ? /^(https?:)?\/\//.test(a.src) : !a.code.trim())) continue;
+      if (a.src) {
+        const src = fixUrl(a.src).split(/[?#]/)[0];
+        if (!localFile(src) || !(await exists(localFile(src)))) console.warn(`WARNING script referenced but not in clone/: ${a.src}`);
+        scriptList.push({ src, ...(a.type === 'module' ? { type: 'module' } : {}) });
+      } else scriptList.push({ code: a.code, ...(a.type === 'module' ? { type: 'module' } : {}) });
+    }
+    allNames.push(...names);
+    return { compDir, names, parts, pageUsesStyle, dataBlocks, scriptList };
+  };
+
+  // globals.css = the shadcn theme only; the original's stylesheets come after it in <head>, so they come later in
+  // the cascade and win every tie (same layer names, same variable names: the original is often Tailwind too)
+  const heads = [];
+  for (const pg of pages) heads.push(await headOf(pg));
   const theme = await fs.readFile(path.join(root, 'globals.css'), 'utf8').catch(() => '@import "tailwindcss";\n');
   // Tailwind's preflight resets what the browser draws by default (form controls, headings, lists); an original built
   // without Tailwind relies on those defaults, so its clone gets Tailwind's theme and utilities but not the reset
@@ -480,121 +608,7 @@ async function seededApp() {
   // reset ends up overriding its own base.
   const layerHead = layerOrder.length ? `/* the original's cascade layer order, declared first (see scripts/next.mjs) */\n@layer ${layerOrder.join(', ')};\n` : '';
   await fs.writeFile(path.join(out, 'app', 'globals.css'), layerHead + scoped);
-  const siteCssImports = imports;
 
-  // markup
-  const SKIP_BODY = new Set(['script', 'noscript', 'next-route-announcer', 'template']);
-  const kids = els(body).filter((e) => !SKIP_BODY.has(e.tagName));
-  const size = (n) => (n.childNodes || []).reduce((s, c) => s + 1 + size(c), 0);
-  const content = kids.reduce((x, y) => (size(y) > size(x) ? y : x), kids[0]);
-  let container = content;
-  while (els(container).length < 3) {
-    const inner = els(container);
-    if (!inner.length) break;
-    container = inner.reduce((x, y) => (size(y) > size(x) ? y : x));
-  }
-  const used = new Set();
-  const names = [];
-  // names: the element's id when it has one, otherwise its tag and position (utility classes such as "mx-auto" and
-  // placeholder headings say nothing about what a section is)
-  let counter = 0;
-  const nameFor = (node, fallback) => {
-    counter++;
-    const id = attrsOf(node).id;
-    let n = id ? pascal(id) : `${pascal(node.tagName) || fallback}${String(counter).padStart(2, '0')}`;
-    if (/^\d/.test(n)) n = 'S' + n;
-    n = n.slice(0, 40) || fallback;
-    let k = n, i = 2;
-    while (used.has(k)) k = `${n}${i++}`;
-    used.add(k);
-    return k;
-  };
-  const writeComp = async (compName, node) => {
-    usesStyle = false;
-    const jsx = toJsx(node, 3);
-    const typeImport = usesStyle ? "import type { CSSProperties } from 'react';\n\n" : '';
-    await fs.writeFile(path.join(out, 'components', 'site', `${compName}.tsx`), `// Generated from clone/index.html by scripts/next.mjs. Edit the HTML clone and regenerate.\n${typeImport}export default function ${compName}() {\n  return (\n    <>\n${jsx}\n    </>\n  );\n}\n`);
-    names.push(compName);
-  };
-  // the page: wrappers kept inline down to the container, the container's children as components
-  let pageUsesStyle = false;
-  const wrap = async (node, depth) => {
-    const pad = '  '.repeat(depth);
-    if (node.nodeName === '#text' || node.nodeName === '#comment') return toJsx(node, depth);
-    usesStyle = false;
-    const attrs = jsxAttrs(node, false);
-    pageUsesStyle ||= usesStyle;
-    const children = [];
-    for (const c of node.childNodes || []) {
-      if (node === container && c.tagName) { const n = nameFor(c, 'Section'); await writeComp(n, c); children.push(`${pad}  <${n} />`); }
-      else if (c.tagName && c !== container && !c.childNodes?.some(() => false) && !(contains(c, container))) { usesStyle = false; children.push(toJsx(c, depth + 1)); pageUsesStyle ||= usesStyle; }
-      else if (c.tagName) children.push(await wrap(c, depth + 1));
-    }
-    const body = children.filter((s) => s && s.trim()).join('\n');
-    return body ? `${pad}<${node.tagName}${attrs}>\n${body}\n${pad}</${node.tagName}>` : `${pad}<${node.tagName}${attrs} />`;
-  };
-  const contains = (a, b) => { for (let n = b; n; n = n.parentNode) if (n === a) return true; return false; };
-  const pageParts = [];
-  for (const k of kids) {
-    if (k === content) pageParts.push(await wrap(k, 3));
-    else { const n = nameFor(k, 'Part'); await writeComp(n, k); pageParts.push(`      <${n} />`); }
-  }
-  // data blocks the players read, and the scripts themselves (copied to public/, run in order after hydration)
-  const scripts = els(body).filter((e) => e.tagName === 'script');
-  const dataBlocks = scripts.filter((s) => /json/.test(attrsOf(s).type || '') && attrsOf(s).id)
-    .map((s) => `      <script type="${attrsOf(s).type}" id="${attrsOf(s).id}" dangerouslySetInnerHTML={{ __html: ${JSON.stringify((s.childNodes || []).map((c) => c.value || '').join(''))} }} />`);
-  // the scripts, copied to public/ at their own relative paths (a script that loads a sibling file keeps working),
-  // with the files their import statements and import() calls name; a module script stays a module
-  // in document order: files (copied) and inline scripts (run as written); data blocks are rendered in the page
-  const scriptTags = scripts.map((s) => ({ ...attrsOf(s), code: (s.childNodes || []).map((c) => c.value || '').join('') }))
-    .filter((a) => !/json/.test(a.type || '') && (a.src ? !/^(https?:)?\/\//.test(a.src) : a.code.trim()));
-  const copied = new Set();
-  const copyScript = async (rel, depth = 0) => {
-    const clean = rel.split(/[?#]/)[0].replace(/^\.\//, '');
-    if (copied.has(clean) || depth > 4) return;
-    copied.add(clean);
-    const from = path.join(cloneDir, clean);
-    const text = await fs.readFile(from, 'utf8').catch(() => null);
-    if (text === null) { console.warn(`WARNING script referenced but not in clone/: ${clean}`); return; }
-    await fs.mkdir(path.dirname(path.join(out, 'public', clean)), { recursive: true });
-    await fs.copyFile(from, path.join(out, 'public', clean));
-    for (const m of text.matchAll(/(?:^|[^\w$.])import\s*(?:[\w$*{},\s]+from\s*)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-      const spec = m[1] || m[2];
-      if (!spec || /^(https?:)?\/\//.test(spec) || !/^[./]/.test(spec)) continue;
-      await copyScript(path.posix.join(path.posix.dirname(clean), spec), depth + 1);
-    }
-    // a script file named in a string (new URL('vendor/three.module.min.js', here), a worker, a lazy loader)
-    for (const m of text.matchAll(/['"]([\w./-]+\.m?js)['"]/g)) {
-      const rel = path.posix.join(path.posix.dirname(clean), m[1].replace(/^\//, ''));
-      if (!copied.has(rel) && await fs.stat(path.join(cloneDir, rel)).then(() => true, () => false)) await copyScript(rel, depth + 1);
-    }
-  };
-  for (const a of scriptTags) if (a.src) await copyScript(a.src);
-  // the page's other head links (icons, font preloads, preconnects, a manifest), as in the HTML clone; local files are
-  // served from public/ at the same path
-  const headLinks = [];
-  for (const e of els(head)) {
-    // the seed's own small head scripts (tc-vw keeps --tc-vw at 1% of the layout width): they must run before paint
-    if (e.tagName === 'script' && /^tc-/.test(attrsOf(e).id || '') && !attrsOf(e).src) {
-      headLinks.push(`        <script id=${JSON.stringify(attrsOf(e).id)} dangerouslySetInnerHTML={{ __html: ${JSON.stringify((e.childNodes || []).map((c) => c.value || '').join(''))} }} />`);
-      continue;
-    }
-    if (e.tagName !== 'link') continue;
-    const a = attrsOf(e);
-    const rel = String(a.rel || '').toLowerCase();
-    if (!a.href || rel === 'stylesheet' || !/\b(icon|apple-touch-icon|mask-icon|preload|prefetch|preconnect|dns-prefetch|manifest)\b/.test(rel)) continue;
-    if (/\bpreload\b/.test(rel) && a.as === 'script') continue; // the scripts' own preloads are written below
-    let href = a.href;
-    if (!/^(https?:)?\/\//.test(href) && !href.startsWith('data:')) {
-      const clean = href.replace(/^\.\//, '').split(/[?#]/)[0];
-      const to = path.join(out, 'public', clean);
-      if (!clean.startsWith('assets/')) { await fs.mkdir(path.dirname(to), { recursive: true }); await fs.copyFile(path.join(cloneDir, clean), to).catch(() => {}); }
-      href = `/${clean}`;
-    }
-    const attrs = Object.entries({ ...a, href }).filter(([k]) => !/^on/.test(k)).map(([k, v]) => `${k === 'crossorigin' ? 'crossOrigin' : k === 'hreflang' ? 'hrefLang' : k === 'referrerpolicy' ? 'referrerPolicy' : k === 'fetchpriority' ? 'fetchPriority' : k}=${JSON.stringify(k === 'crossorigin' && v === '' ? 'anonymous' : v)}`);
-    headLinks.push(`        <link ${attrs.join(' ')} />`);
-  }
-  const scriptList = scriptTags.map((a) => ({ ...(a.src ? { src: '/' + a.src.split(/[?#]/)[0].replace(/^\.\//, '') } : { code: a.code }), ...(a.type === 'module' ? { type: 'module' } : {}) }));
   await fs.writeFile(path.join(out, 'components', 'site', 'SiteScripts.tsx'), `'use client';
 // Generated by scripts/next.mjs: runs the clone's scripts (trueclone's players, inline scripts, script.js) in order,
 // once, the moment hydration is done. The HTML clone runs them as deferred scripts right after parsing; a component
@@ -603,16 +617,21 @@ async function seededApp() {
 // (<html class="tc-boot">, seed) keeps script-built regions hidden until the last one has run.
 import { useLayoutEffect } from 'react';
 
-const SCRIPTS: { src?: string; code?: string; type?: string }[] = ${JSON.stringify(scriptList)};
+export type SiteScript = { src?: string; code?: string; type?: string };
 
-export default function SiteScripts() {
+export default function SiteScripts({ scripts }: { scripts: SiteScript[] }) {
   useLayoutEffect(() => {
     const w = window as unknown as Record<string, unknown>;
     if (w.__siteScripts) return; // React strict mode runs effects twice in dev
     w.__siteScripts = true;
     w.__tcInjected = true;
+    // Next renders its metadata outlet, an empty <div hidden> holding only Suspense markers, as the body's first
+    // child; the page's scripts may address elements by position (body > :nth-child(3), children[i]) as in the HTML
+    // clone, so it goes after the page
+    const outlet = document.body.firstElementChild as HTMLElement | null;
+    if (outlet && outlet.tagName === 'DIV' && outlet.hidden && outlet.attributes.length === 1 && outlet.childNodes.length && [...outlet.childNodes].every((n) => n.nodeType === Node.COMMENT_NODE)) document.body.appendChild(outlet);
     let last: HTMLScriptElement | null = null;
-    for (const { src, code, type } of SCRIPTS) {
+    for (const { src, code, type } of scripts) {
       const s = document.createElement('script');
       if (type) s.type = type;
       if (src) { s.src = src; s.async = false; } else { s.textContent = code || ''; }
@@ -621,23 +640,33 @@ export default function SiteScripts() {
     }
     const boot = () => { const b = (w as { tcBoot?: { release: () => void } }).tcBoot; if (b) b.release(); else requestAnimationFrame(() => document.documentElement.classList.remove('tc-boot')); };
     if (last) last.addEventListener('load', boot), last.addEventListener('error', boot); else boot();
-  }, []);
+  }, [scripts]);
   return null;
 }
 `);
-  // layout: the original's <html> and <body> attributes
-  usesStyle = false;
-  const htmlAttrs = jsxAttrs(htmlEl, false);
-  const bodyAttrs = jsxAttrs(body, false);
-  const layoutStyle = usesStyle;
-  await fs.writeFile(path.join(out, 'app', 'layout.tsx'), `// Generated by scripts/next.mjs
-import type { Metadata } from 'next';
-${layoutStyle ? "import type { CSSProperties } from 'react';\n" : ''}import './globals.css';
-// the original's stylesheets, in its <head> order, after the theme
-${siteCssImports.join('\n')}
 
+  for (const [i, pg] of pages.entries()) {
+    const m = await markupOf(pg);
+    // where this page lives: a single page at app/; a single-page app at app/[[...slug]]/ (every address); a site of
+    // separate pages in one route group per page, app/(home)/ and app/(<slug>)/<route>/, each with its own root layout
+    const group = separate.length ? path.join('app', pg.slug ? `(${pg.slug})` : '(home)') : 'app';
+    const pageDir = path.join(out, group, ...pg.parts, ...(spa ? ['[[...slug]]'] : []));
+    const layoutDir = path.join(out, group);
+    await fs.mkdir(pageDir, { recursive: true });
+    const globalsImport = path.relative(layoutDir, path.join(out, 'app', 'globals.css')).split(path.sep).join('/');
+    usesStyle = false;
+    pageBase = pg.base;
+    const htmlAttrs = jsxAttrs(pg.htmlEl, false);
+    const bodyAttrs = jsxAttrs(pg.body, false);
+    const layoutStyle = usesStyle;
+    const preloads = m.scriptList.filter((s) => s.src).map((s) => `        <link rel="${s.type === 'module' ? 'modulepreload' : 'preload'}" href=${JSON.stringify(s.src)}${s.type === 'module' ? '' : ' as="script"'} />`);
+    await fs.writeFile(path.join(layoutDir, 'layout.tsx'), `// Generated by scripts/next.mjs: the <html>, <head> and <body> of ${pg.slug ? `clone/${pg.parts.join('/')}/index.html` : 'clone/index.html'}
+import type { Metadata } from 'next';
+${layoutStyle ? "import type { CSSProperties } from 'react';\n" : ''}import '${globalsImport.startsWith('.') ? globalsImport : './' + globalsImport}';
+
+// no title here: Next streams a metadata title in after hydration, over the one the clone's script sets for the
+// address (a case study's own title); the page's <title> is plain markup below, and the script owns it
 export const metadata: Metadata = {
-  title: ${JSON.stringify(title)},
   robots: { index: false, follow: false },
 };
 
@@ -645,39 +674,40 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html${htmlAttrs} suppressHydrationWarning>
       <head>
-${headLinks.join('\n')}
+        <title>{${JSON.stringify(pg.title)}}</title>
+        {/* the seed's head runtime (tc-runtime) leaves the boot to SiteScripts, which runs the clone's scripts after hydration */}
+        <script dangerouslySetInnerHTML={{ __html: "window.__tcInjected = true" }} />
+        {/* the original's head, in its order, after the theme: stylesheets as the browser loads them (no CSS pipeline) */}
+${heads[i].map((l) => `        ${l}`).join('\n')}
         {/* the clone's scripts start downloading with the page; SiteScripts runs them the moment hydration is done */}
-${scriptList.filter((s) => s.src).map((s) => `        <link rel="${s.type === 'module' ? 'modulepreload' : 'preload'}" href=${JSON.stringify(s.src)}${s.type === 'module' ? '' : ' as="script"'} />`).join('\n')}
+${preloads.join('\n')}
       </head>
       <body${bodyAttrs} suppressHydrationWarning>{children}</body>
     </html>
   );
 }
 `);
-  await fs.writeFile(path.join(out, 'app', 'page.tsx'), `// Generated by scripts/next.mjs from a seeded clone: the original's structure, one component per section.
-${pageUsesStyle ? "import type { CSSProperties } from 'react';\n" : ''}${names.map((c) => `import ${c} from '@/components/site/${c}';`).join('\n')}
+    await fs.writeFile(path.join(pageDir, 'page.tsx'), `// Generated by scripts/next.mjs from a seeded clone: the original's structure, one component per section.
+${m.pageUsesStyle ? "import type { CSSProperties } from 'react';\n" : ''}${m.names.map((c) => `import ${c} from '@/components/${m.compDir}/${c}';`).join('\n')}
 import SiteScripts from '@/components/site/SiteScripts';
+
+const SCRIPTS = ${JSON.stringify(m.scriptList)};
 
 export default function Page() {
   return (
     <>
-${pageParts.join('\n')}
-${dataBlocks.join('\n')}
-      <SiteScripts />
+${m.parts.join('\n')}
+${m.dataBlocks.join('\n')}
+      <SiteScripts scripts={SCRIPTS} />
     </>
   );
 }
 `);
-  // A single-page app with routes: one document for every address, the clone's script shows the view for the address.
-  // The app serves the same page at every route (an optional catch-all), as the host does.
-  const siteMeta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').catch(() => '{}'));
-  if ((siteMeta.routes || []).length > 1 && siteMeta.app === 'single-page app') {
-    const catchAll = path.join(out, 'app', '[[...slug]]');
-    await fs.mkdir(catchAll, { recursive: true });
-    await fs.rename(path.join(out, 'app', 'page.tsx'), path.join(catchAll, 'page.tsx'));
-    console.log(`routes: ${siteMeta.routes.map((r) => r.path).join(', ')} all served by app/[[...slug]]/page.tsx (a single-page app: the clone's script shows the view for the address)`);
-  } else await fs.rm(path.join(out, 'app', '[[...slug]]'), { recursive: true, force: true });
-  return names;
+  }
+  if (spa) console.log(`routes: ${routes.map((r) => r.path).join(', ')} all served by app/[[...slug]]/page.tsx (a single-page app: the clone's script shows the view for the address)`);
+  if (separate.length) console.log(`routes: ${pages.map((pg) => pg.path).join(', ')}, one Next.js route each (a site of separate pages, each with its own root layout)`);
+  pageBase = '/';
+  return allNames;
 }
 
 // ---------------- Install / build / verify ----------------

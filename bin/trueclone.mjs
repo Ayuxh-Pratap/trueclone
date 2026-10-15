@@ -151,6 +151,11 @@ else if (/^https?:\/\//.test(cmd)) {
   if (code === 0) code = await run(path.join(SCRIPTS, 'design.mjs'), [name]);
   if (code === 0) console.log(`\nnext: npx trueclone motion ${name}, then build sites/${name}/clone/ following .claude/skills/trueclone/SKILL.md`);
   process.exitCode = code;
+} else if (STEPS[cmd] && rest.some((a) => a === '--help' || a === '-h')) {
+  // a step's help is its usage lines (the script's header), never a run: `serve --help` would start a server
+  const head = (await fs.readFile(path.join(SCRIPTS, STEPS[cmd][0]), 'utf8')).split('\n');
+  const usage = head.filter((l, i) => l.startsWith('//') && head.slice(0, i + 1).every((x) => x.startsWith('//') || !x.trim())).map((l) => l.replace(/^\/\/ ?/, ''));
+  console.log(`trueclone ${cmd}: ${STEPS[cmd][1]}\n\n${usage.join('\n').replace(/node scripts\/[\w-]+\.mjs|npm run \w+ --/g, `trueclone ${cmd}`)}`);
 } else if (STEPS[cmd]) process.exitCode = await run(path.join(SCRIPTS, STEPS[cmd][0]), rest);
 else {
   console.error(`unknown command: ${cmd}\n`);

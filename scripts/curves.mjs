@@ -14,7 +14,7 @@
 //        node scripts/curves.mjs <name> --draft      (writes motion-map.draft.json from reference/motion.<vp>.json)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE, siteDir, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -170,7 +170,7 @@ async function run(url, side, entries, onEntry) {
   try {
     const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
     await page.addInitScript(installFind);
-    await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    await openUrl(page, url); // a load event that never comes is not a failed check (lib.mjs)
     await page.mouse.move(5, vp.height - 5);
     await waitStill(page, { timeout: 15000, interval: 200 });
     await warmUp(page);

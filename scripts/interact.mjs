@@ -18,7 +18,7 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -59,10 +59,12 @@ if (flags.auto) {
   try {
     for (const vp of VIEWPORTS) {
       const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
-      await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
+      await openUrl(page, meta.url);
       await waitStill(page, { timeout: 15000, interval: 200 });
       await page.evaluate(() => scrollTo(0, 0));
-      found.push(...await page.evaluate(detectInPage, [vp.name, meta.mode === 'exact' ? 'visual' : 'structure', 10]));
+      // navigation only to the routes this capture has (the others have nothing to compare with)
+      const captured = new Set((meta.routes || [{ path: '/' }]).map((r) => r.path));
+      found.push(...(await page.evaluate(detectInPage, [vp.name, meta.mode === 'exact' ? 'visual' : 'structure', 10])).filter((s) => !s.navigation || captured.has(s.name.replace(/^go to (\S+).*/, '$1'))));
       await context.close();
     }
   } finally { if (!flags.cdp) await browser.close(); }
@@ -117,7 +119,7 @@ async function runSide(url, side, list) {
       const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
       // a scenario on another route of the site starts at that route's address, on both sides
       const startUrl = sc.path && sc.path !== '/' ? new URL(side === 'ref' ? sc.path : sc.path.replace(/^\//, ''), url).href : url;
-      await page.goto(startUrl, { waitUntil: 'load', timeout: 60000 });
+      await openUrl(page, startUrl); // a load event that never comes is not a failed scenario (lib.mjs)
       await page.mouse.move(5, vp.height - 5);
       await waitStill(page, { timeout: 15000, interval: 200 });
       await unroll(page); // an app shell scrolls like a document (lib.mjs), the same on both sides
@@ -188,8 +190,14 @@ async function runSide(url, side, list) {
           // a wheel turn over a point: how a desktop visitor scrolls a sideways scroller (dx) or a panel (dy)
           await page.mouse.move(...px(st.wheel.at || [0.5, 0.5]), { steps: 5 });
           for (let i = 0, n = 6; i < n; i++) { await page.mouse.wheel((st.wheel.dx || 0) / n, (st.wheel.dy || 0) / n); await page.waitForTimeout(40); }
-        } else if (st.back) await page.goBack({ waitUntil: 'commit', timeout: 10000 }).catch(() => {}); // the browser's Back (a single-page app answers it with popstate)
-        else if (st.forward) await page.goForward({ waitUntil: 'commit', timeout: 10000 }).catch(() => {});
+        } else if (st.back || st.forward) {
+          // the browser's Back / Forward (a single-page app answers it with popstate). Settled before the next step
+          // on both sides alike: the page loaded (a document navigation) and nothing moving any more (the scroll
+          // position restored, the view's images in), so a shot never catches one side half-way
+          await (st.back ? page.goBack({ waitUntil: 'commit', timeout: 10000 }) : page.goForward({ waitUntil: 'commit', timeout: 10000 })).catch(() => {});
+          await page.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
+          await waitStill(page, { timeout: 4000, interval: 120 }).catch(() => {});
+        }
         else if (st.key) await page.keyboard.press(st.key);
         else if (st.wait) await page.waitForTimeout(st.wait);
         else if (st.shot) await shot(st.shot);

@@ -7,7 +7,7 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, unroll } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, unroll, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -48,7 +48,7 @@ async function runRoute(r) {
     await fs.rm(dir, { recursive: true, force: true });
     await fs.mkdir(dir, { recursive: true });
     const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
-    await page.goto(target, { waitUntil: 'load', timeout: 60000 });
+    await openUrl(page, target); // a load event that never comes is not a failed check (lib.mjs)
     await page.mouse.move(5, vp.height - 5);
     const intro = await waitStill(page, { timeout: 15000, interval: 200 }); // let intros/loaders finish first
     await unroll(page); // an app shell scrolls like a document (lib.mjs), the same on both sides

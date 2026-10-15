@@ -9,7 +9,7 @@
 // usage: node scripts/detail.mjs <name> [--viewport desktop|tablet|mobile|all] [--url <clone url>] [--max 400]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE, siteDir, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -154,7 +154,7 @@ async function sample(browser, url, vp, probes) {
   // Motion on, as visitors see it: many originals ignore prefers-reduced-motion, while a clone that honours it
   // shows a different (unpinned, unrevealed) layout. CSS transitions are frozen so states snap.
   const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
-  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+  await openUrl(page, url); // a load event that never comes is not a failed check (lib.mjs)
   await page.mouse.move(5, vp.height - 5);
   await waitStill(page, { timeout: 15000, interval: 200 }); // intros and loaders first
   await settle(page);

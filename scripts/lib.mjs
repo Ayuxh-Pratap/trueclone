@@ -24,6 +24,17 @@ export const HELD_OUT = [
   { name: 'wide', width: 1920, height: 1080, heldOut: true },
 ];
 export const SCORED = [...VIEWPORTS, ...HELD_OUT];
+// --viewport for a tool that only looks (rules, explain): any scored size by name, or a width in pixels ("1366" or
+// "1366x768"); anything else is a clear error, not a crash further down
+export function viewportArg(v, list = SCORED) {
+  const want = typeof v === 'string' ? v : 'desktop';
+  const named = list.find((x) => x.name === want);
+  if (named) return named;
+  const m = /^(\d{3,4})(?:x(\d{3,4}))?$/.exec(want);
+  if (m) return { name: `${m[1]}px`, width: Number(m[1]), height: Number(m[2] || 900) };
+  console.error(`--viewport ${want}: use one of ${list.map((x) => x.name).join(', ')}, or a width in pixels (1366, 1366x768)`);
+  process.exit(1);
+}
 // Where a score run writes (sites/<name>/<COMPARE>/, <REPORT_FILE>): the HTML clone's by default; `next --verify` sets
 // compare-next / REPORT.next.md for the app, so the two never share or move each other's files.
 export const COMPARE = process.env.TC_COMPARE || 'compare';
@@ -90,6 +101,26 @@ export async function openBrowser(cdp) {
 // One locale for every page, so a site that picks its variant by language or region (stripe.com -> /in) shows the
 // same one to the capture and to every check. `capture --locale` sets it; score passes it on (TC_LOCALE).
 export const LOCALE = process.env.TC_LOCALE || 'en-US';
+// The reference's own visit settings, on every page any check opens on the reference's host, from the first byte: the
+// hide list (capture --hide: a cookie banner, a popup a region gets by its IP) and the cookies the capture was given
+// (capture --cookie "consent=1; region=us": a choice any visitor makes, never a login). Without them a check compares
+// the clone with a page under a popup. Read from the capture of the site the command names (every check is called
+// with the site's name first), or set by capture itself before it has written meta.json. The clone is never touched.
+let referenceProfile;
+export function setReferenceProfile(p) { referenceProfile = p; }
+async function profileOfSite() {
+  if (referenceProfile !== undefined) return referenceProfile;
+  referenceProfile = null;
+  const [name] = parseArgs(process.argv.slice(2)).pos;
+  if (name && !/^https?:/i.test(name)) {
+    const meta = JSON.parse(await fs.readFile(path.join(siteDir(name), 'reference', 'meta.json'), 'utf8').catch(() => 'null'));
+    if (meta?.url) referenceProfile = { url: meta.finalUrl || meta.url, hide: meta.hide || [], cookies: meta.cookies || [], unroll: meta.unroll || 'xy' };
+  }
+  return referenceProfile;
+}
+// "a=1; b=2" -> [{ name, value }]
+export const parseCookies = (s) => String(s || '').split(';').map((p) => p.trim()).filter((p) => p.includes('=')).map((p) => ({ name: p.slice(0, p.indexOf('=')).trim(), value: p.slice(p.indexOf('=') + 1).trim() }));
+
 export async function newPage(browser, vp, extra = {}) {
   const context = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
@@ -99,6 +130,20 @@ export async function newPage(browser, vp, extra = {}) {
     extraHTTPHeaders: { 'accept-language': `${LOCALE},${LOCALE.split('-')[0]};q=0.9` },
     ...extra,
   });
+  const ref = await profileOfSite();
+  if (ref && (ref.hide.length || ref.cookies.length)) {
+    const host = new URL(ref.url).hostname.replace(/^www\./, '');
+    if (ref.cookies.length) await context.addCookies(ref.cookies.map((c) => ({ name: c.name, value: c.value, domain: `.${host}`, path: '/' }))).catch((e) => console.warn(`WARNING cookies not set: ${e.message}`));
+    // an adopted sheet exists before the page's first element, and no script of the site removes it
+    if (ref.hide.length) await context.addInitScript(([h, css]) => {
+      if (location.hostname.replace(/^www\./, '') !== h && !location.hostname.endsWith(`.${h}`)) return;
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(css);
+      const adopt = () => { if (!document.adoptedStyleSheets.includes(sheet)) document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]; };
+      adopt();
+      document.addEventListener('DOMContentLoaded', adopt);
+    }, [host, ref.hide.map((s) => `${s}{display:none!important}`).join('\n')]);
+  }
   const page = await context.newPage();
   // Hard limits on Playwright actions: a stuck click or navigation fails loudly instead of hanging for hours.
   page.setDefaultTimeout(30000);
@@ -107,6 +152,19 @@ export async function newPage(browser, vp, extra = {}) {
   // turn every score into noise, which is much harder to diagnose from the numbers alone.
   page.on('pageerror', (e) => console.warn(`PAGE ERROR (${page.url()}): ${e.message}`));
   return { context, page };
+}
+
+// Open a page for measuring. A live page whose load event never comes (a third-party request that hangs, several
+// checks loading the same site at once) is still the page a visitor sees once it is parsed: on a load timeout the
+// check carries on from DOMContentLoaded, says so, and settles as usual, instead of failing the whole check.
+export async function openUrl(page, url, timeout = 60000) {
+  try {
+    await page.goto(url, { waitUntil: 'load', timeout });
+  } catch (e) {
+    if (!/Timeout/i.test(e.name || e.message)) throw e;
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+    console.warn(`WARNING ${url}: no load event within ${timeout / 1000}s (a request that never finishes); measured from the parsed page`);
+  }
 }
 
 // page.evaluate has no timeout in Playwright; anything that loops over evaluate goes through this.
@@ -120,7 +178,7 @@ export function withTimeout(promise, ms, label) {
 // The key includes the capture time, so `npm run capture` invalidates everything automatically.
 async function cacheFile(siteRoot, keyObj) {
   const meta = JSON.parse(await fs.readFile(path.join(siteRoot, 'reference', 'meta.json'), 'utf8'));
-  const key = crypto.createHash('sha1').update(JSON.stringify({ capturedAt: meta.capturedAt, ...keyObj })).digest('hex').slice(0, 16);
+  const key = crypto.createHash('sha1').update(JSON.stringify({ capturedAt: meta.capturedAt, ...((meta.hide || []).length || (meta.cookies || []).length ? { visit: [meta.hide, meta.cookies] } : {}), ...keyObj })).digest('hex').slice(0, 16);
   return path.join(siteRoot, 'reference', 'cache', `${key}.json`);
 }
 
@@ -144,7 +202,7 @@ export async function cached(siteRoot, keyObj, compute, refresh = false) {
 // whole-page measure (a full-page shot, scroll states, sections) would see one screen. The pane and its ancestors are
 // let grow to their content, with a stylesheet and marks only (never inline styles, removed before any HTML is saved),
 // so the page scrolls like a document: done the same way on the reference and on the clone. Returns what was unrolled.
-export function unrollInPage() {
+export function unrollInPage(axis = 'y') {
   if (document.getElementById('tc-unroll')) return document.getElementById('tc-unroll').dataset.what || null;
   const doc = document.scrollingElement || document.documentElement;
   if (doc.scrollHeight > innerHeight + 4) return null; // the document scrolls: nothing to do
@@ -173,11 +231,21 @@ export function unrollInPage() {
   const st = document.createElement('style');
   st.id = 'tc-unroll';
   st.dataset.what = `${pick.tagName.toLowerCase()}${pick.id ? `#${pick.id}` : ''}${pick.classList.length ? `.${[...pick.classList].slice(0, 2).join('.')}` : ''}`;
-  st.textContent = '[data-tc-unroll]{height:auto!important;max-height:none!important;overflow:visible!important}[data-tc-unroll~="fixed"]{position:absolute!important}';
+  // axis "y" (captures from 0.5.0-rc.3, meta.unroll): vertically only, so a horizontal ticker or a closed sideways
+  // drawer inside stays clipped at the side. overflow-x is clip, not hidden: next to hidden (or auto), overflow-y:
+  // visible computes to auto and the pane would still scroll. "xy" (older captures): both axes, as they were shot.
+  st.textContent = `[data-tc-unroll]{height:auto!important;max-height:none!important;${axis === 'y' ? 'overflow-x:clip!important;overflow-y:visible!important' : 'overflow:visible!important'}}[data-tc-unroll~="fixed"]{position:absolute!important}`;
   document.head.append(st);
   return st.dataset.what;
 }
-export const unroll = (page) => page.evaluate(unrollInPage).catch(() => null);
+// The clone is unrolled exactly as the reference was when it was captured (meta.unroll), so both sides match. A clone's
+// scripts may open a view at load (a case study's sheet at its own address; in the Next app they run after hydration,
+// later than in the HTML clone): the pane to unroll is the one they leave, so the boot contract is waited for first
+// (tc-boot released: every clone script has run). A reference never has it.
+export const unroll = async (page) => {
+  await page.waitForFunction(() => !document.documentElement.classList.contains('tc-boot'), null, { timeout: 5000 }).catch(() => {});
+  return page.evaluate(unrollInPage, (await profileOfSite())?.unroll || 'xy').catch(() => null);
+};
 
 export async function settle(page, hide = []) {
   const hideCss = hide.length ? `${hide.join(',')}{display:none!important}` : '';

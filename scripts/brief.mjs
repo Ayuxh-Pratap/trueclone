@@ -68,7 +68,9 @@ try {
       pins: marks('data-tc-pin'),
       gsap: marks('data-tc-gsap'),
       canvases: [...document.querySelectorAll('canvas')].map((c) => ({ y: y(c), el: label(c), w: c.width, h: c.height, engine: c.getAttribute('data-engine') || '' })),
-      curves: curves.map((s) => ({ y: y(byPath(s.path)), path: s.path, cls: s.cls, key: s.key, n: (s.samples || []).length, from: s.samples?.[0], to: s.samples?.at(-1) })),
+      // a curve sits where its element was on the reference when it was sampled (scroll position + its place in the
+      // window), not where its path lands in the clone: a wrapper or a fixed layer would put it in another section
+      curves: curves.map((s) => ({ y: s.samples?.[0]?.v !== undefined ? Math.round(s.samples[0].y + s.samples[0].v) : y(byPath(s.path)), path: s.path, cls: s.cls, key: s.key, n: (s.samples || []).length, from: s.samples?.[0], to: s.samples?.at(-1) })),
       owned: ownedList.map((o) => ({ y: y(byPath(o.path)), ...o })),
       scenarios: scenarios.map((s) => ({ y: y(bySel(s.at?.clone || s.at?.ref)) ?? (s.at?.offset || 0), name: s.name, auto: Boolean(s.auto) })),
       triggers: triggers.map((t) => ({ y: y(bySel(t.trigger?.sel)), sel: t.trigger?.sel, start: t.start, end: t.end, scrub: t.scrub, pin: t.pin?.sel || null })),
@@ -123,6 +125,30 @@ if (!nArg) {
 const r = ranges[Number(nArg) - 1];
 if (!r) { console.error(`no section ${nArg} (1-${ranges.length})`); process.exit(1); }
 const e = evidenceOf(r);
+// the scroll class changes the seed replays (indexed as the seed marked them: the desktop record)
+const classRec = (await read('reference/reveals.desktop.json', {})).classes || [];
+// the site's own scripts (readable copies), without the libraries it loads (GSAP, Flip, jQuery…), with the lines where
+// a GSAP Flip starts: Flip.getState / Flip.from, or a bundled one (x.getState() then x.from(state, { absolute… }))
+let scriptCache = null;
+const siteScripts = async () => {
+  if (scriptCache) return scriptCache;
+  const dir = path.join(ref, 'scripts');
+  const names = (await fs.readdir(dir).catch(() => [])).filter((f) => f.endsWith('.pretty.js') && !/(^|[\W_])(gsap|flip|scrolltrigger|splittext|jquery|lenis|swiper|three|webflow\.schunk)([\W_]|$)/i.test(f));
+  scriptCache = [];
+  for (const n of names) {
+    const lines = (await fs.readFile(path.join(dir, n), 'utf8').catch(() => '')).split('\n');
+    const flips = [];
+    lines.forEach((l, i) => {
+      if (/\bFlip\.(getState|from|fit)\s*\(/.test(l)) flips.push(i);
+      else if (/\.getState\(/.test(l)) {
+        const next = lines.slice(i, i + 40).join('\n');
+        if (/\.from\(/.test(next) && (/\b(absolute|nested|prune|simple|targets|toggleClass)\s*:/.test(next) || /\bFlip\b/.test(lines.join('\n')))) flips.push(i);
+      }
+    });
+    scriptCache.push({ name: n, lines, flips });
+  }
+  return scriptCache;
+};
 const sources = new Map();
 const excerpt = async (l) => {
   if (!l.file) return '';
@@ -159,7 +185,35 @@ P();
 for (const t of e.triggers) P(`- ScrollTrigger on \`${t.sel}\`: start "${t.start}", end "${t.end}"${t.scrub !== false ? `, scrub ${t.scrub}` : ''}${t.pin ? `, pins \`${t.pin}\`` : ''}`);
 for (const p of e.pins) P(`- pin: \`${p.el}\` for ${p.v}px (sticky in the seed; data-tc-pin)`);
 if (e.reveals.length) P(`- ${e.reveals.length} one-shot reveal(s) replayed by the seed's player (${e.reveals.slice(0, 4).map((x) => `\`${x.el}\``).join(', ')}${e.reveals.length > 4 ? '…' : ''}); tcOwn takes them over`);
-if (e.classes.length) P(`- ${e.classes.length} scroll class change(s) replayed by the player (${e.classes.slice(0, 4).map((x) => `\`${x.el}\``).join(', ')})`);
+if (e.classes.length) {
+  P(`- ${e.classes.length} scroll class change(s) replayed by the player (${e.classes.slice(0, 4).map((x) => `\`${x.el}\``).join(', ')}): the player swaps the classes; any motion between the two states is yours`);
+  // where the site's own code sets each added class, and whether a GSAP Flip animates the change there: a replayed
+  // swap is then a jump (cards that slide into their new places on the original snap in the clone)
+  const added = [...new Set(e.classes.flatMap((x) => { const c = classRec[Number(x.v)]; if (!c) return []; const from = String(c.from || '').split(/\s+/); return String(c.to || '').split(/\s+/).filter((t) => t && !from.includes(t)); }))];
+  const files = await siteScripts();
+  for (const t of added.slice(0, 6)) {
+    const re = new RegExp(`['"\`.\\s]${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"\`\\s,)]`);
+    const at = [];
+    for (const f of files) f.lines.forEach((l, i) => { if (at.length < 3 && re.test(l)) at.push(`${f.name}:${i + 1}`); });
+    if (at.length) P(`  - \`${t}\` is set by the site's code at ${at.map((x) => `\`${x}\``).join(', ')}`);
+  }
+}
+// A GSAP Flip that moves this section's elements (cards that slide into new places when a class or their order
+// changes): found by the classes of the elements recorded moving here, near a Flip call in the site's code. The player's
+// replay (a reveal, a class swap) is then not the site's motion: the Flip is, and it is yours to port.
+{
+  const tokens = [...new Set([...e.reveals, ...e.classes].flatMap((x) => String(x.el).split('.').slice(1)).filter((t) => t.length > 2 && !/^(w-|is-|active$)/.test(t)))];
+  const hits = [];
+  // a script of the site's own with a Flip in it that names one of these elements' classes (the module that runs the
+  // section: a bundle keeps one section's code together)
+  for (const f of tokens.length ? await siteScripts() : []) {
+    if (!f.flips.length) continue;
+    const all = f.lines.join('\n');
+    const t = tokens.find((x) => all.includes(x));
+    if (t && hits.length < 4) hits.push(`\`${f.name}:${f.flips[0] + 1}\` (the file names .${t})`);
+  }
+  if (hits.length) P(`- **a GSAP Flip moves elements here**: ${hits.join(', ')}. On the original they slide to their new places; the player's replay only swaps states (a jump). Port the Flip with the site's duration and ease (\`npx trueclone vendor ${name}\` vendors Flip), and \`tcOwn\` the elements first`);
+}
 for (const c of e.curves.slice(0, 12)) P(`- scroll curve (not replayed, yours to write): \`${c.cls || c.path}\` ${c.n} samples from ${JSON.stringify(c.from)} to ${JSON.stringify(c.to)}`);
 if (e.gsap.length) P(`- ${e.gsap.length} element(s) with GSAP-written transforms (data-tc-gsap): tcOwn clears them before your script animates`);
 if (!e.triggers.length && !e.pins.length && !e.reveals.length && !e.classes.length && !e.curves.length) P('- none recorded');

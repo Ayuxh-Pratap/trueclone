@@ -49,6 +49,18 @@ export function detectInPage([vpName, compare, max]) {
     const track = !scrolls && /(hidden|clip)/.test(s.overflowX) && [...el.children].find((c) => c.scrollWidth > el.clientWidth * 1.3 && c.children.length >= 3);
     if (!scrolls && !track) continue;
     if (scrollers.some((x) => x.el.contains(el) || el.contains(x.el))) continue;
+    // A wide track a visitor cannot drag is not a carousel: a CSS marquee runs forever on its own (an infinite
+    // animation inside), and a track no script made draggable shows none of the signs a drag handler leaves (a grab
+    // cursor, touch-action for the browser to leave the horizontal pan to it, a carousel library's classes, a next
+    // button).
+    if (track) {
+      const marquee = el.getAnimations({ subtree: true }).some((a) => a.effect?.getTiming?.().iterations === Infinity);
+      const parts = [el, track, ...track.children].slice(0, 12);
+      const draggable = parts.some((p) => { const ps = getComputedStyle(p); return /grab/.test(ps.cursor) || /pan-y|none|pinch-zoom/.test(ps.touchAction); })
+        || /swiper|slick|splide|flickity|glide|embla|keen-slider|carousel|slider|owl-/i.test(`${el.className?.baseVal ?? el.className} ${track.className?.baseVal ?? track.className}`)
+        || Boolean(nextNear(el));
+      if (marquee || !draggable) continue;
+    }
     scrollers.push({ el, moving: scrolls ? el : track });
   }
   for (const { el, moving } of scrollers) {

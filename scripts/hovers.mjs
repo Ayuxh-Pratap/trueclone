@@ -10,7 +10,7 @@
 // usage: node scripts/hovers.mjs <name> [--viewport desktop] [--url <clone url>] [--max 60] [--refresh-ref]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE, siteDir } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE, siteDir, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -53,9 +53,18 @@ function targets(max) {
   const seen = new Set();
   const out = [];
   const sel = (el) => `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.')}`;
+  // what a visitor cannot reach is not a hover target: an element faded out (itself or an ancestor at opacity ~0, a
+  // closed menu's links), one that lets the pointer through (pointer-events: none), or one inside an inert or
+  // aria-hidden region
+  const reachable = (el) => {
+    if (el.closest('[inert], [aria-hidden="true"]')) return false;
+    if (getComputedStyle(el).pointerEvents === 'none') return false;
+    for (let n = el; n && n !== document.body; n = n.parentElement) if (Number(getComputedStyle(n).opacity) < 0.05) return false;
+    return true;
+  };
   const consider = (el, why) => {
     const s = getComputedStyle(el);
-    if (s.display === 'none' || s.visibility === 'hidden') return;
+    if (s.display === 'none' || s.visibility === 'hidden' || !reachable(el)) return;
     const r = el.getBoundingClientRect();
     if (r.width < 10 || r.height < 10 || r.width > innerWidth * 0.95) return;
     // one target per interactive root: never the same element twice (found by its listener and by its cursor), nor
@@ -110,7 +119,7 @@ const regionOf = (t, vy) => {
 
 async function hoverAll(browser, url, list, shotDir) {
   const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
-  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+  await openUrl(page, url); // a load event that never comes is not a failed check (lib.mjs)
   await settle(page);
   let listened = 0;
   if (!list) { listened = await markListened(page); list = await page.evaluate(targets, MAX); }
@@ -170,7 +179,7 @@ let ref, cl;
 try {
   // reference hovers are cached until the next capture (--refresh-ref to re-measure); read twice, so a hover effect
   // that comes and goes by timing on the reference itself is set aside as unstable rather than demanded of the clone
-  ref = await cached(root, { tool: 'hovers', vp: vp.name, max: MAX, v: 8 }, async () => {
+  ref = await cached(root, { tool: 'hovers', vp: vp.name, max: MAX, v: 9 }, async () => {
     const dir = path.join(root, 'reference', 'cache', `hovers-${vp.name}`);
     const first = await hoverAll(browser, meta.url, null, path.join(dir, 'a'));
     const captured = meta.viewports?.find((v) => v.viewport === vp.name)?.pageHeight;

@@ -51,9 +51,10 @@ function watchInPage() {
     const s = getComputedStyle(el);
     const m = new DOMMatrixReadOnly(s.transform === 'none' ? undefined : s.transform);
     const blur = /blur\(([\d.]+)px\)/.exec(s.filter);
-    return { o: +(+s.opacity).toFixed(3), tx: +m.m41.toFixed(2), ty: +m.m42.toFixed(2), s: +Math.hypot(m.m11, m.m12).toFixed(4), blur: blur ? +blur[1] : 0 };
+    // clip-path too: a wipe (a footer drawn open by inset(), a banner revealed by a polygon) is a reveal of its own
+    return { o: +(+s.opacity).toFixed(3), tx: +m.m41.toFixed(2), ty: +m.m42.toFixed(2), s: +Math.hypot(m.m11, m.m12).toFixed(4), blur: blur ? +blur[1] : 0, clip: s.clipPath };
   };
-  const hiddenish = (st) => st.o <= 0.05 || Math.hypot(st.tx, st.ty) >= 8 || Math.abs(st.s - 1) >= 0.04 || st.blur > 0;
+  const hiddenish = (st) => st.o <= 0.05 || Math.hypot(st.tx, st.ty) >= 8 || Math.abs(st.s - 1) >= 0.04 || st.blur > 0 || st.clip !== 'none';
   const candidates = [];
   const tracked = [];
   for (const el of document.body.querySelectorAll('*')) {
@@ -105,14 +106,14 @@ function watchInPage() {
         // reveal ended; between the two the curve is interpolated (a parallax is linear in the scroll position)
         const last = rev.frames[rev.frames.length - 1];
         const after = samples.filter((s) => s.y > rev.doneAtY);
-        samples = [...(t.back && t.back.y < rev.doneAtY ? [t.back] : []), { y: rev.doneAtY, v: after[0] ? after[0].v + (after[0].y - rev.doneAtY) : undefined, o: last.o, tx: last.tx, ty: last.ty, s: last.s, blur: last.blur }, ...after];
+        samples = [...(t.back && t.back.y < rev.doneAtY ? [t.back] : []), { y: rev.doneAtY, v: after[0] ? after[0].v + (after[0].y - rev.doneAtY) : undefined, o: last.o, tx: last.tx, ty: last.ty, s: last.s, blur: last.blur, clip: last.clip }, ...after];
       }
       if (samples.length < 3) continue; // two states is a toggle, not a curve
       // a pin: translateY follows the scroll one to one between two positions, nothing else changes
       const slopes = [];
       for (let i = 1; i < samples.length; i++) slopes.push((samples[i].ty - samples[i - 1].ty) / ((samples[i].y - samples[i - 1].y) || 1));
       const isPin = (k) => Math.abs(k - 1) < 0.05, isFlat = (k) => Math.abs(k) < 0.02;
-      if (slopes.filter(isPin).length >= 2 && slopes.every((k) => isPin(k) || isFlat(k)) && samples.every((s) => Math.abs(s.tx - samples[0].tx) < 2 && Math.abs(s.o - samples[0].o) < 0.03 && Math.abs(s.s - samples[0].s) < 0.01)) {
+      if (slopes.filter(isPin).length >= 2 && slopes.every((k) => isPin(k) || isFlat(k)) && samples.every((s) => Math.abs(s.tx - samples[0].tx) < 2 && Math.abs(s.o - samples[0].o) < 0.03 && Math.abs(s.s - samples[0].s) < 0.01 && s.clip === samples[0].clip)) {
         const first = slopes.findIndex(isPin);
         let lastI = slopes.length - 1;
         while (lastI > first && !isPin(slopes[lastI])) lastI--;
@@ -267,7 +268,7 @@ async function record(vp) {
       // keep at most ~60 keyframes: enough for any easing, small enough for the clone
       const step = Math.max(1, Math.ceil(c.frames.length / 60));
       const frames = c.frames.filter((f, i) => i % step === 0 || i === c.frames.length - 1);
-      return { path: c.path, cls: String(c.el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.'), from: c.from, to: { o: last.o, tx: last.tx, ty: last.ty, s: last.s, blur: last.blur }, trigger: c.topAtStart, duration: last.t, frames };
+      return { path: c.path, cls: String(c.el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.'), from: c.from, to: { o: last.o, tx: last.tx, ty: last.ty, s: last.s, blur: last.blur, clip: last.clip }, trigger: c.topAtStart, duration: last.t, frames };
     }));
     ({ scrubs, pins } = await page.evaluate((cp) => window.__tcClassify(cp), classes.map((c) => c.path)));
     console.log(`${vp.name}: ${count} candidates below the fold, ${result.length} revealed while scrolling; ${scrubs.length} scroll-linked curve(s), ${pins.length} pin(s)${pins.length ? ` (${pins.map((p) => `${p.cls || p.path.split('>').pop()} ${p.start}-${p.end}px`).join(', ')})` : ''}`);
