@@ -7,7 +7,7 @@
 //        trueclone brief <name> <n> [--viewport desktop]   section n (1-based) -> compare/brief/<vp>-<n>.md
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, COMPARE, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, COMPARE, siteDir, unroll } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name, nArg] = pos;
@@ -19,8 +19,12 @@ const root = siteDir(name);
 const ref = path.join(root, 'reference');
 const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop')) || VIEWPORTS.find((v) => v.name === 'desktop');
 const read = (p, fallback = null) => fs.readFile(path.join(root, p), 'utf8').then(JSON.parse).catch(() => fallback);
-const sections = await read(`reference/${vp.name}.sections.json`, []);
-if (!sections.length) { console.error(`no reference/${vp.name}.sections.json: run capture first`); process.exit(1); }
+// --route "/about": another route of the site (meta.routes): its own sections, the clone opened at its address
+const meta = await read('reference/meta.json', {});
+const route = typeof flags.route === 'string' ? (meta.routes || []).find((x) => x.path === flags.route.replace(/\/+$/, '') || (flags.route === '/' && !x.slug)) : null;
+if (typeof flags.route === 'string' && !route) { console.error(`no route ${flags.route} in this capture: ${(meta.routes || []).map((x) => x.path).join(', ') || 'one page only'}`); process.exit(1); }
+const sections = await read(`${route?.dir || 'reference'}/${vp.name}.sections.json`, []);
+if (!sections.length) { console.error(`no ${route?.dir || 'reference'}/${vp.name}.sections.json: run capture first`); process.exit(1); }
 const scripts = await read('reference/scripts/scripts.json', { listeners: [] });
 const reveals = await read(`reference/reveals.${vp.name}.json`, {});
 const owned = (await read('reference/script-owned.json', { owned: [] })).owned || [];
@@ -40,8 +44,10 @@ const browser = await openBrowser();
 let placed;
 try {
   const { page } = await newPage(browser, vp, {});
-  await page.goto(server.url, { waitUntil: 'load', timeout: 60000 });
-  placed = await page.evaluate(([curves, ownedList, scenarios, triggers]) => {
+  await page.goto(route?.slug ? new URL(route.path.replace(/^\//, ''), server.url).href : server.url, { waitUntil: 'load', timeout: 60000 });
+  await page.waitForTimeout(800);
+  await unroll(page); // positions as the capture measured them (an app shell's pane unrolled, lib.mjs)
+  placed = await page.evaluate(([curves, ownedList, scenarios, triggers, handlerLabels]) => {
     const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
     const byPath = (p) => {
       let n = document.body;
@@ -66,9 +72,17 @@ try {
       owned: ownedList.map((o) => ({ y: y(byPath(o.path)), ...o })),
       scenarios: scenarios.map((s) => ({ y: y(bySel(s.at?.clone || s.at?.ref)) ?? (s.at?.offset || 0), name: s.name, auto: Boolean(s.auto) })),
       triggers: triggers.map((t) => ({ y: y(bySel(t.trigger?.sel)), sel: t.trigger?.sel, start: t.start, end: t.end, scrub: t.scrub, pin: t.pin?.sel || null })),
+      // every handler's elements, found on this page by the label the capture recorded (tag#id.class.class): where
+      // they are visible here (another view of a single-page app included), not only where they were at capture
+      handlerYs: handlerLabels.map((labels) => labels.flatMap((l) => {
+        const m = /^([a-z][\w-]*)(#[^.\s]+)?((?:\.[^.\s]+)*)$/i.exec(l);
+        if (!m) return [];
+        let q = m[1] + (m[2] ? `#${CSS.escape(m[2].slice(1))}` : '') + (m[3] ? m[3].split('.').filter(Boolean).map((c) => `.${CSS.escape(c)}`).join('') : '');
+        try { return [...document.querySelectorAll(q)].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).slice(0, 12).map(y); } catch { return []; }
+      })),
       pageHeight: document.documentElement.scrollHeight,
     };
-  }, [reveals.scrubs || [], owned, [...own, ...auto.filter((a) => a.viewport === vp.name)], motion.triggers || []]);
+  }, [reveals.scrubs || [], owned, [...own, ...auto.filter((a) => a.viewport === vp.name && (!route?.slug || a.path === route.path))], motion.triggers || [], (scripts.listeners || []).map((l) => l.elements || [])]);
 } finally {
   await browser.close();
   server.close();
@@ -77,7 +91,7 @@ try {
 const ranges = sections.map((s, i) => ({ i, s, from: s.y, to: s.y + s.height }));
 const inRange = (r, y) => y !== null && y !== undefined && y >= r.from && y < r.to;
 const evidenceOf = (r) => ({
-  handlers: (scripts.listeners || []).filter((l) => (l.ys || []).some((y) => inRange(r, y))),
+  handlers: (scripts.listeners || []).filter((l, i) => (placed.handlerYs[i]?.length ? placed.handlerYs[i] : (route?.slug ? [] : l.ys || [])).some((y) => inRange(r, y))),
   reveals: placed.reveals.filter((x) => inRange(r, x.y)),
   classes: placed.classes.filter((x) => inRange(r, x.y)),
   pins: placed.pins.filter((x) => inRange(r, x.y)),
@@ -88,7 +102,8 @@ const evidenceOf = (r) => ({
   triggers: placed.triggers.filter((x) => inRange(r, x.y)),
   gsap: placed.gsap.filter((x) => inRange(r, x.y)),
 });
-const layoutOf = (r) => layout?.viewports?.find((v) => v.viewport === vp.name)?.worstSections?.find((s) => s.index === r.s.index)?.match ?? null;
+const layoutViewports = route?.slug ? layout?.routes?.find((x) => x.path === route.path)?.viewports : layout?.viewports;
+const layoutOf = (r) => layoutViewports?.find((v) => v.viewport === vp.name)?.worstSections?.find((s) => s.index === r.s.index)?.match ?? null;
 
 // ---- the list ----
 if (!nArg) {
@@ -117,7 +132,7 @@ const excerpt = async (l) => {
 };
 const out = [];
 const P = (s = '') => out.push(s);
-P(`# ${name}, section ${r.i + 1}: ${labelOf(r.s)} (${vp.name}, y ${r.from}-${r.to})`);
+P(`# ${name}${route?.slug ? ` ${route.path}` : ''}, section ${r.i + 1}: ${labelOf(r.s)} (${vp.name}, y ${r.from}-${r.to})`);
 P();
 P('Port the rule, never the code: read each handler at its line, write the behaviour in `clone/script.js` computed from the viewport, and one line per behaviour in notes.md Behaviours citing the file:line. If your script drives this section, `tcOwn(\'<selector>\')` at the top of script.js first.');
 P();
@@ -168,7 +183,7 @@ if (e.canvases.length) {
 P('## Check after each change');
 P();
 P(`\`npx trueclone score ${name} --only layout,states${e.scenarios.length ? ',interact' : ''}${hv.length ? ',hovers' : ''} --viewport ${vp.name}\`, then \`npx trueclone review ${name} --size wide\` once this section looks right.`);
-const file = path.join(root, COMPARE, 'brief', `${vp.name}-${r.i + 1}.md`);
+const file = path.join(root, COMPARE, 'brief', `${route?.slug ? `${route.slug}-` : ''}${vp.name}-${r.i + 1}.md`);
 await fs.mkdir(path.dirname(file), { recursive: true });
 await fs.writeFile(file, out.join('\n') + '\n');
 console.log(out.join('\n'));

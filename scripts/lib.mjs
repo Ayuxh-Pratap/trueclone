@@ -28,6 +28,15 @@ export const SCORED = [...VIEWPORTS, ...HELD_OUT];
 // compare-next / REPORT.next.md for the app, so the two never share or move each other's files.
 export const COMPARE = process.env.TC_COMPARE || 'compare';
 
+// A route given on the command line ("/about", "about"): Git Bash on Windows rewrites an argument that starts with "/"
+// into a path inside its install folder ("C:/Program Files/Git/about"), so that is undone, and the leading slash is
+// optional.
+export function routeArg(v) {
+  if (typeof v !== 'string') return null;
+  const s = v.replace(/\\/g, '/').replace(/^[a-z]:\/.*?\/git(\/|$)/i, '/');
+  return `/${s.replace(/^\/+/, '')}`.replace(/\/+$/, '') || '/';
+}
+
 // sites/<name> from any folder inside the project: the current folder, the nearest parent that has sites/<name>, or
 // the site folder itself (an agent that cd'd into sites/<name>). A new site (capture) goes in ./sites/<name>.
 export function siteDir(name) {
@@ -57,6 +66,9 @@ export function parseArgs(argv) {
       if (next !== undefined && !next.startsWith('--')) { flags[key] = next; i++; } else flags[key] = true;
     } else pos.push(a);
   }
+  // routes as the site names them, whatever the shell did to the argument (see routeArg)
+  if (typeof flags.route === 'string') flags.route = routeArg(flags.route);
+  if (typeof flags.routes === 'string' && !/^\d+$/.test(flags.routes)) flags.routes = flags.routes.split(',').map((r) => routeArg(r.trim())).join(',');
   return { pos, flags };
 }
 
@@ -128,10 +140,50 @@ export async function cached(siteRoot, keyObj, compute, refresh = false) {
   return value;
 }
 
+// An app shell (a fixed sidebar beside a content pane that scrolls on its own, the document never scrolling): every
+// whole-page measure (a full-page shot, scroll states, sections) would see one screen. The pane and its ancestors are
+// let grow to their content, with a stylesheet and marks only (never inline styles, removed before any HTML is saved),
+// so the page scrolls like a document: done the same way on the reference and on the clone. Returns what was unrolled.
+export function unrollInPage() {
+  if (document.getElementById('tc-unroll')) return document.getElementById('tc-unroll').dataset.what || null;
+  const doc = document.scrollingElement || document.documentElement;
+  if (doc.scrollHeight > innerHeight + 4) return null; // the document scrolls: nothing to do
+  const scrolls = (el) => { const s = getComputedStyle(el); return /(auto|scroll|overlay)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 40; };
+  // the pane a visitor scrolls: the one under the middle of the screen (an open sheet over the page, the content pane
+  // beside a sidebar), otherwise the largest that scrolls
+  let pick = null;
+  for (let el = document.elementFromPoint(innerWidth / 2, innerHeight / 2); el && el !== document.body; el = el.parentElement) if (scrolls(el)) { pick = el; break; }
+  if (!pick) {
+    let best = 0;
+    for (const el of document.querySelectorAll('body *')) {
+      if (!scrolls(el)) continue;
+      const r = el.getBoundingClientRect();
+      const area = r.width * r.height;
+      if (area >= innerWidth * innerHeight * 0.3 && area > best) { pick = el; best = area; }
+    }
+  }
+  if (!pick) return null;
+  pick.setAttribute('data-tc-unroll', 'pane');
+  // a fixed container (a sheet, an overlay) does not add to the page's height: while unrolled it is placed in the
+  // page instead, from the top, so its whole content is part of the page
+  for (let p = pick; p; p = p.parentElement) {
+    if (p !== pick) p.setAttribute('data-tc-unroll', '');
+    if (getComputedStyle(p).position === 'fixed') p.setAttribute('data-tc-unroll', p === pick ? 'pane fixed' : 'fixed');
+  }
+  const st = document.createElement('style');
+  st.id = 'tc-unroll';
+  st.dataset.what = `${pick.tagName.toLowerCase()}${pick.id ? `#${pick.id}` : ''}${pick.classList.length ? `.${[...pick.classList].slice(0, 2).join('.')}` : ''}`;
+  st.textContent = '[data-tc-unroll]{height:auto!important;max-height:none!important;overflow:visible!important}[data-tc-unroll~="fixed"]{position:absolute!important}';
+  document.head.append(st);
+  return st.dataset.what;
+}
+export const unroll = (page) => page.evaluate(unrollInPage).catch(() => null);
+
 export async function settle(page, hide = []) {
   const hideCss = hide.length ? `${hide.join(',')}{display:none!important}` : '';
   const tag = await page.addStyleTag({ content: FREEZE_CSS + hideCss });
   await tag.evaluate((el) => el.setAttribute('data-lab-freeze', ''));
+  await unroll(page);
   // Scroll the whole page once so lazy images and in-view reveals load.
   await page.evaluate(async (max) => {
     const step = Math.max(200, window.innerHeight * 0.8);
@@ -242,11 +294,13 @@ export async function sectionsOf(page) {
       return s.display !== 'none' && s.visibility !== 'hidden' && r.height > 0 && r.width > 0
         && !['SCRIPT', 'STYLE', 'NOSCRIPT', 'LINK', 'META'].includes(el.tagName);
     };
-    let node = document.body;
+    // an app shell's sections are its scrolling pane's blocks (lib.mjs unrollInPage marks the pane), not the shell
+    let node = document.querySelector('[data-tc-unroll~="pane"]') || document.body;
     for (let kids = [...node.children].filter(visible); kids.length === 1; kids = [...node.children].filter(visible)) {
       node = kids[0];
     }
-    let blocks = [...node.children].filter(visible);
+    // decorations (a custom cursor parked off the page, a 2px rule) are not sections
+    let blocks = [...node.children].filter(visible).filter((el) => { const r = el.getBoundingClientRect(); return r.height >= 8 && r.bottom + window.scrollY > 0; });
     blocks = blocks.flatMap((el) => (el.tagName === 'MAIN' && el.children.length > 1 ? [...el.children].filter(visible) : [el]));
     return blocks.map((el, index) => {
       const r = el.getBoundingClientRect();
@@ -283,8 +337,15 @@ export function serve(dir, port = 0) {
     const server = http.createServer(async (req, res) => {
       let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
       if (p.endsWith('/')) p += 'index.html';
-      const file = path.join(dir, p);
+      let file = path.join(dir, p);
       if (file !== dir && !file.startsWith(dir + path.sep)) { res.writeHead(403).end(); return; }
+      // An address that is not a file is a route, served like a host does: its own page (/about -> about/index.html,
+      // about.html) or, for a single-page app (one document for every address), the app's document.
+      if (!path.extname(p) && !(await fs.stat(file).then((s) => s.isFile(), () => false))) {
+        for (const c of [path.join(file, 'index.html'), `${file}.html`, path.join(dir, 'index.html')]) {
+          if (await fs.stat(c).then((s) => s.isFile(), () => false)) { file = c; break; }
+        }
+      }
       try {
         await fs.access(file);
         // a stylesheet saved without an extension by an older capture (/wss/fonts?…) is still a stylesheet

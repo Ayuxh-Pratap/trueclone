@@ -668,6 +668,15 @@ ${dataBlocks.join('\n')}
   );
 }
 `);
+  // A single-page app with routes: one document for every address, the clone's script shows the view for the address.
+  // The app serves the same page at every route (an optional catch-all), as the host does.
+  const siteMeta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').catch(() => '{}'));
+  if ((siteMeta.routes || []).length > 1 && siteMeta.app === 'single-page app') {
+    const catchAll = path.join(out, 'app', '[[...slug]]');
+    await fs.mkdir(catchAll, { recursive: true });
+    await fs.rename(path.join(out, 'app', 'page.tsx'), path.join(catchAll, 'page.tsx'));
+    console.log(`routes: ${siteMeta.routes.map((r) => r.path).join(', ')} all served by app/[[...slug]]/page.tsx (a single-page app: the clone's script shows the view for the address)`);
+  } else await fs.rm(path.join(out, 'app', '[[...slug]]'), { recursive: true, force: true });
   return names;
 }
 

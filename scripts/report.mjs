@@ -54,8 +54,9 @@ const accepted = notesSection('Accepted differences');
 // review: the frames trueclone review wrote, and the verdict the agent gave each in notes.md
 const reviewVerdicts = notesSection('Review');
 const reviewFrames = [];
-for (const size of ['wide', 'laptop', 'desktop', 'tablet', 'mobile']) {
-  const fr = await read(`compare/review/${size}/frames.json`);
+// the captured page's frames, and each other route's (compare/review/routes/<slug>/<size>, ids "about/03-section-2")
+for (const [dir, size] of ['wide', 'laptop', 'desktop', 'tablet', 'mobile'].flatMap((s) => [[`compare/review/${s}`, s], ...(meta.routes || []).filter((r) => r.slug).map((r) => [`compare/review/routes/${r.slug}/${s}`, s])])) {
+  const fr = await read(`${dir}/frames.json`);
   for (const x of fr?.frames || []) {
     const v = reviewVerdicts.find((l) => l.startsWith(`${x.id} ${size}:`) || l.startsWith(`${x.id} ${size} :`));
     reviewFrames.push({ size, id: x.id, pct: x.pct, verdict: v ? v.slice(v.indexOf(':') + 1).trim() : null });
@@ -137,6 +138,29 @@ const retired = interact?.skipped || [];
 row('Interactions', { desktop: scenarios.length ? +(scenarios.reduce((n, s) => n + (s.score || 0), 0) / scenarios.length).toFixed(2) : undefined }, scenarios.length ? failed.length === 0 : null,
   scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change on both sides and end in the reference's state (≥ 95)${autoCount ? `; ${autoCount} found by the capture` : ''}${failed.length ? `; failing: ${failed.slice(0, 4).map((s) => s.name).join(', ')}${failed.length > 4 ? '…' : ''}` : ''}${retired.length ? `; retired: ${retired.map((s) => `${s.name} (${s.why})`).join(', ')}` : ''}` : 'no scenarios (interactions.json, or reference/interactions.auto.json from capture)');
 
+// The site's other routes (meta.routes): layout and scroll states of each, at each size, worst route first. One
+// route below target fails the check: exact means every page, not the one captured first.
+const routeRows = [];
+const routeFailing = [];
+for (const r of (meta.routes || []).filter((x) => x.slug)) {
+  const lay = layout?.routes?.find((x) => x.path === r.path)?.viewports || [];
+  const st = states?.routes?.find((x) => x.path === r.path)?.viewports || [];
+  const cell = (list, v) => list.find((x) => x.viewport === v)?.match;
+  const lows = [];
+  for (const v of VPS) {
+    if (typeof cell(lay, v) === 'number' && cell(lay, v) < T.layout) lows.push({ route: r.path, viewport: v, check: 'layout', value: cell(lay, v) });
+    if (typeof cell(st, v) === 'number' && cell(st, v) < T.states) lows.push({ route: r.path, viewport: v, check: 'states', value: cell(st, v) });
+  }
+  const measured = lay.length > 0;
+  if (!measured) lows.push({ route: r.path, viewport: null, check: 'layout', value: null });
+  routeFailing.push(...lows);
+  const worst = Math.min(...[...lay, ...st].map((x) => x.match).filter((x) => typeof x === 'number'), 100);
+  routeRows.push({ worst: measured ? worst : -1, line: `| \`${r.path}\` | ${VPS.map((v) => `${cell(lay, v) ?? '–'} / ${cell(st, v) ?? '–'}`).join(' | ')} | ${!measured ? '**not scored**' : lows.length ? '**below target**' : 'pass'} |` });
+}
+if (routeRows.length) {
+  rows.push(`| Routes | ${VPS.map(() => '').join(' | ')} | ${routeFailing.length ? '**below target**' : 'pass'} | ${routeRows.length} other route(s): layout ≥ ${T.layout} and scroll states ≥ ${T.states} at every size (see Routes below) |`);
+  checks.push({ check: 'Routes', key: 'routes', pass: !routeFailing.length, failing: routeFailing.sort((a, b) => (a.value ?? -1) - (b.value ?? -1)) });
+}
 checks.push({ check: 'Review (by eye)', key: 'review', pass: reviewFrames.length > 0 && !reviewOpen.length, failing: reviewFrames.length ? reviewOpen.map((x) => ({ viewport: x.size, frame: x.id, verdict: x.verdict })) : [{ viewport: null, frame: null, verdict: 'not done' }] });
 await fs.mkdir(path.join(root, COMPARE), { recursive: true });
 await fs.writeFile(path.join(root, COMPARE, 'verdict.json'), JSON.stringify({ at: new Date().toISOString(), drift: Boolean(drift?.stale), checks }, null, 2));
@@ -195,7 +219,7 @@ ${(load?.viewports || []).some((v) => v.cloneUnstable) ? `| Clone loads inconsis
 ${rows.join('\n')}
 
 ° held out: captured and scored, never used to build the clone. A clone right at the seed sizes and wrong here is fitted to those sizes, not a copy of the site.
-${unproven.length ? `\n${unproven.length} accepted difference(s) in notes.md name no evidence file and are not applied: ${unproven.map((a) => `"${a.slice(0, 50)}…"`).join('; ')}\n` : ''}
+${routeRows.length ? `\n## Routes\n\nThe captured page is the table above (\`${meta.routes?.find((r) => !r.slug)?.path || '/'}\`); every other route of the site (${meta.app || 'pages'}), opened at its own address. Layout / scroll states, worst route first.\n\n| Route | ${VPS.map((v) => v[0].toUpperCase() + v.slice(1)).join(' | ')} | Status |\n|---|${VPS.map(() => '---').join('|')}|---|\n${routeRows.sort((a, b) => a.worst - b.worst).map((r) => r.line).join('\n')}\n` : ''}${unproven.length ? `\n${unproven.length} accepted difference(s) in notes.md name no evidence file and are not applied: ${unproven.map((a) => `"${a.slice(0, 50)}…"`).join('; ')}\n` : ''}
 ${drift?.stale ? `## Stale capture\n\nThe live page differs from the capture of ${meta.capturedAt}: ${drift.viewports.filter((v) => v.stale).map((v) => `${v.viewport} ${v.livePageHeight}px tall vs ${v.capturedPageHeight}px captured, ${v.liveSections} vs ${v.capturedSections} sections`).join('; ')}. Layout and states score against the captured screenshots; detail, hovers, motion, interactions and load measure the live page and are marked stale above. Re-capture (\`trueclone capture\`, then \`states\`, \`reveals\`, \`seed --force\`) before reading them.\n\n` : ''}${accepted.length ? `## Accepted differences\n\nRecorded in notes.md with a reason; a check below target that is covered here is marked "accepted" in the table.\n\n${accepted.map((a) => `- ${a}`).join('\n')}\n\n` : ''}${reviewOpen.length ? `## Review: open frames\n\n${reviewOpen.slice(0, 40).map((x) => `- ${x.id} ${x.size}: ${x.verdict || 'no verdict yet'} (compare/review/${x.size}/${x.id}.png)`).join('\n')}\n\n` : ''}${weak.length ? `## Fix first\n\n${weak.join('\n')}\n` : '## Fix first\n\nNothing below 99% on layout, 90% on motion or failing.\n'}
 ${findings.length ? `## Findings (tool defects met on this site)\n\n${findings.map((f) => `- ${f}`).join('\n')}\n\n` : ''}## Motion found on the reference
 

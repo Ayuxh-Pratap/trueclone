@@ -18,7 +18,7 @@
 // usage: node scripts/reveals.mjs <name> [--viewport desktop]   -> sites/<name>/reference/reveals.<vp>.json
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo, siteDir, unroll } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -205,6 +205,7 @@ async function record(vp) {
     await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
     await page.mouse.move(5, vp.height - 5);
     await waitStill(page, { timeout: 15000, interval: 200 });
+    await unroll(page); // an app shell scrolls like a document (lib.mjs), as everywhere the page is measured
     // Only what scrolling does: with pointer events off, whatever scrolls under the resting pointer is never hovered,
     // so a card that opens on hover is not recorded as opened by the scroll. (Wheel input still reaches the page.)
     await page.addStyleTag({ content: '*, *::before, *::after { pointer-events: none !important; }' });

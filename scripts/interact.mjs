@@ -18,7 +18,7 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -115,9 +115,12 @@ async function runSide(url, side, list) {
     {
       const vp = VIEWPORTS.find((v) => v.name === (sc.viewport || 'desktop'));
       const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
-      await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+      // a scenario on another route of the site starts at that route's address, on both sides
+      const startUrl = sc.path && sc.path !== '/' ? new URL(side === 'ref' ? sc.path : sc.path.replace(/^\//, ''), url).href : url;
+      await page.goto(startUrl, { waitUntil: 'load', timeout: 60000 });
       await page.mouse.move(5, vp.height - 5);
       await waitStill(page, { timeout: 15000, interval: 200 });
+      await unroll(page); // an app shell scrolls like a document (lib.mjs), the same on both sides
       await warmUp(page);
       const atSel = sc.at?.[side];
       if (atSel && atSel !== 'body') {
@@ -139,6 +142,7 @@ async function runSide(url, side, list) {
       const expectSel = sc.expectChange?.[side];
       const before = expectSel ? await stateOf(page, expectSel) : null;
       const shots = {};
+      const paths = {};
       const states = [];
       const shot = async (label) => {
         if (expectSel) states.push(await stateOf(page, expectSel));
@@ -147,6 +151,8 @@ async function runSide(url, side, list) {
         await page.screenshot({ path: file });
         if (sc.compare === 'structure') await maskToggle(page, false);
         shots[label] = file;
+        // the address at this moment: a link must take both sides to the same route (the clone is served at its root)
+        paths[label] = new URL(page.url()).pathname.replace(/\/index\.html$/, '/').replace(/\/+$/, '') || '/';
       };
       await shot('before');
       for (const st of sc.steps) {
@@ -182,13 +188,15 @@ async function runSide(url, side, list) {
           // a wheel turn over a point: how a desktop visitor scrolls a sideways scroller (dx) or a panel (dy)
           await page.mouse.move(...px(st.wheel.at || [0.5, 0.5]), { steps: 5 });
           for (let i = 0, n = 6; i < n; i++) { await page.mouse.wheel((st.wheel.dx || 0) / n, (st.wheel.dy || 0) / n); await page.waitForTimeout(40); }
-        } else if (st.key) await page.keyboard.press(st.key);
+        } else if (st.back) await page.goBack({ waitUntil: 'commit', timeout: 10000 }).catch(() => {}); // the browser's Back (a single-page app answers it with popstate)
+        else if (st.forward) await page.goForward({ waitUntil: 'commit', timeout: 10000 }).catch(() => {});
+        else if (st.key) await page.keyboard.press(st.key);
         else if (st.wait) await page.waitForTimeout(st.wait);
         else if (st.shot) await shot(st.shot);
       }
       const after = expectSel ? await stateOf(page, expectSel) : null;
       const changed = expectSel ? before !== null && [...states, after].some((s) => s !== null && s !== before) : null;
-      results.push({ name: sc.name, shots, changed, before, after });
+      results.push({ name: sc.name, shots, paths, changed, before, after });
       await context.close();
     }
   };
@@ -209,7 +217,7 @@ const server = typeof flags.url === 'string' ? null : await serve(path.join(root
 const cloneUrl = server ? server.url : flags.url;
 // Reference results are cached per scenario (reference side + viewport + capture time) as long as the shot
 // files still exist; only new or edited scenarios touch the live site. --refresh-ref re-measures all.
-const refKey = (sc) => ({ tool: 'interact', v: 2, name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
+const refKey = (sc) => ({ tool: 'interact', v: 3, path: sc.path || '/', name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
 const refRes = [];
 const missing = [];
 for (const sc of scenarios) {
@@ -244,10 +252,14 @@ for (const sc of scenarios) {
   // a scenario the capture found, where the reference itself does not react, is not a behaviour of the site
   // (a scroller that only scrolls by touch, a disclosure a script never wires): set aside, not failed
   if (sc.auto && a && a.changed === false) { report.scenarios.push({ name: sc.name, auto: true, notBehaviour: true, score: null, shots, expect: { ref: false, clone: b?.changed ?? null, endState: score, pass: true }, errors }); continue; }
+  // the address at every shot must be the reference's: a link that shows the right view at the wrong address (or
+  // stays on the same address) is not the same site
+  const wrongAddress = Object.keys(a?.paths || {}).filter((l) => b?.paths && l in b.paths && a.paths[l] !== b.paths[l]);
+  for (const l of wrongAddress) errors.push(`${l}: the clone is at ${b.paths[l]}, the reference at ${a.paths[l]}`);
   const expect = sc.expectChange
-    ? { ref: a?.changed, clone: b?.changed, endState: score, pass: a?.changed === true && b?.changed === true && endOk }
-    : { ref: null, clone: null, endState: score, pass: endOk };
-  report.scenarios.push({ name: sc.name, ...(sc.auto ? { auto: true } : {}), score, shots, expect, errors });
+    ? { ref: a?.changed, clone: b?.changed, endState: score, pass: a?.changed === true && b?.changed === true && endOk && !wrongAddress.length }
+    : { ref: null, clone: null, endState: score, pass: endOk && !wrongAddress.length };
+  report.scenarios.push({ name: sc.name, ...(sc.auto ? { auto: true } : {}), ...(sc.path ? { path: sc.path } : {}), score, shots, ...(a?.paths ? { paths: { ref: a.paths, clone: b?.paths || {} } } : {}), expect, errors });
 }
 report.skipped = skipped.map((s) => ({ name: s.name, why: s.skip }));
 await fs.writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));

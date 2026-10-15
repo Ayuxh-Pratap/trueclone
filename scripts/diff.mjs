@@ -23,13 +23,21 @@ const suffix = structure ? '.mask' : '';
 const server = flags.url ? null : await serve(path.join(root, 'clone'));
 const target = typeof flags.url === 'string' ? flags.url : server.url;
 const browser = await openBrowser(flags.cdp);
-const report = { name, mode: structure ? 'structure' : 'visual', source: meta.url, clone: target, at: new Date().toISOString(), viewports: [] };
-try {
+const report = { name, mode: structure ? 'structure' : 'visual', source: meta.url, clone: target, at: new Date().toISOString(), viewports: [], routes: [] };
+// Every route of the site (meta.routes, from capture): the captured page writes where it always has (compare/), each
+// other route to compare/routes/<slug>/, its reference in reference/routes/<slug>/, opened at its own address.
+const routes = meta.routes?.length ? meta.routes : [{ path: '/', slug: '', dir: 'reference' }];
+async function scoreRoute(r) {
+  const ref = path.join(root, r.dir);
+  const out = r.slug ? path.join(root, COMPARE, 'routes', r.slug) : path.join(root, COMPARE);
+  await fs.mkdir(out, { recursive: true });
+  const pageUrl = r.slug ? new URL(r.path.replace(/^\//, ''), target).href : target;
+  const viewports = [];
   for (const vp of SCORED) {
     // a capture made before held-out sizes existed has no reference for them: skipped, not failed
-    if (!(await fs.stat(path.join(ref, `${vp.name}${suffix}.png`)).then(() => true, () => false))) { console.log(`${vp.name}: no reference capture at ${vp.width}x${vp.height} (re-capture to score it)`); continue; }
+    if (!(await fs.stat(path.join(ref, `${vp.name}${suffix}.png`)).then(() => true, () => false))) { if (!r.slug) console.log(`${vp.name}: no reference capture at ${vp.width}x${vp.height} (re-capture to score it)`); continue; }
     const { context, page } = await newPage(browser, vp);
-    await page.goto(target, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(pageUrl, { waitUntil: 'load', timeout: 60000 });
     await settle(page);
     if (structure) await mask(page);
     const clonePath = path.join(out, `${vp.name}${suffix}.clone.png`);
@@ -69,7 +77,7 @@ try {
         const miss = match(crop(a, y0, sh), crop(b, y0, sh));
         return { index: s.index, label: s.heading || s.id || s.classes || s.tag, y: s.y, height: s.height, match: +(100 - (miss / (w * sh)) * 100).toFixed(2) };
       });
-    report.viewports.push({
+    viewports.push({
       viewport: vp.name,
       match: +(100 - (bad / (w * h)) * 100).toFixed(2),
       heightRef: a0.height,
@@ -79,6 +87,14 @@ try {
       sections: perSection,
     });
   }
+  return viewports;
+}
+try {
+  for (const r of routes) {
+    const viewports = await scoreRoute(r);
+    if (!r.slug) report.viewports = viewports;
+    else report.routes.push({ path: r.path, slug: r.slug, viewports: viewports.map(({ sections, ...v }) => v) });
+  }
 } finally {
   if (!flags.cdp) await browser.close();
   server?.close();
@@ -87,4 +103,5 @@ try {
 await fs.writeFile(path.join(out, `report${suffix}.json`), JSON.stringify(report, null, 2));
 console.log(`mode: ${report.mode}`);
 console.table(report.viewports.map((v) => ({ viewport: v.viewport, 'match %': v.match, 'ref h': v.heightRef, 'clone h': v.heightClone, worst: v.worstSections[0] ? `${v.worstSections[0].label} (${v.worstSections[0].match}%)` : '-' })));
+for (const r of report.routes) console.log(`route ${r.path}: ${r.viewports.map((v) => `${v.viewport} ${v.match}`).join('  ')}`);
 console.log(`Diff images + report: ${path.relative(process.cwd(), out)}`);

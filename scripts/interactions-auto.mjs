@@ -83,6 +83,22 @@ export function detectInPage([vpName, compare, max]) {
     accordions++;
   }
 
+  // navigation: every visible link to another route of the site (same host, not a file): click it, the address and the
+  // view must be the reference's; then Back, and they must be again. The address is compared at every shot.
+  const here = location.pathname.replace(/\/+$/, '') || '/';
+  const seenRoutes = new Set();
+  let navs = 0;
+  for (const a of document.querySelectorAll('a[href]')) {
+    if (navs >= 8 || !visible(a)) continue;
+    let u;
+    try { u = new URL(a.href); } catch { continue; }
+    const to = u.pathname.replace(/\/+$/, '') || '/';
+    if (u.host.replace(/^www\./, '') !== location.host.replace(/^www\./, '') || to === here || seenRoutes.has(to) || /\.(pdf|png|jpe?g|svg|webp|zip|mp4|xml|txt)$/i.test(to) || a.target === '_blank') continue;
+    seenRoutes.add(to);
+    navs++;
+    add({ key: `nav:${to}`, name: `go to ${to} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(a) - OFFSET)) }, steps: [{ click: { ref: selOf(a), clone: selOf(a) } }, { wait: 1500 }, { shot: 'arrived' }, { back: true }, { wait: 1200 }, { shot: 'back' }], navigation: true });
+  }
+
   // header menus and dialogs: a trigger that opens something, then Escape
   let menus = 0;
   for (const el of document.querySelectorAll('[aria-haspopup]:not([aria-haspopup="false"]), [aria-expanded][aria-controls]')) {

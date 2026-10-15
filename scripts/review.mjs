@@ -12,7 +12,7 @@
 // usage: node scripts/review.mjs <name> [--size wide|laptop|desktop|tablet|mobile] [--url <clone url>]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, matchPct, PNG, COMPARE, siteDir } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, matchPct, PNG, COMPARE, siteDir, unroll } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -25,14 +25,22 @@ const ref = path.join(root, 'reference');
 const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
 const vp = SCORED.find((v) => v.name === (flags.size || 'wide'));
 if (!vp) { console.error(`unknown size ${flags.size}: ${SCORED.map((v) => v.name).join(', ')}`); process.exit(1); }
+// --route "/about": another route of the site (meta.routes), opened at its own address on both sides; its frames go to
+// compare/review/routes/<slug>/<size>/ and their ids carry the route ("about/03-section-2"), so verdicts never collide
+const route = typeof flags.route === 'string' ? (meta.routes || []).find((r) => r.path === flags.route.replace(/\/+$/, '') || (flags.route === '/' && !r.slug)) : null;
+if (typeof flags.route === 'string' && !route) { console.error(`no route ${flags.route} in this capture: ${(meta.routes || []).map((r) => r.path).join(', ') || 'one page only'}`); process.exit(1); }
+const prefix = route?.slug ? `${route.slug}/` : '';
+const refDir = route ? path.join(root, route.dir) : ref;
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
-const cloneUrl = server ? `${server.url}index.html` : flags.url;
-const outDir = path.join(root, COMPARE, 'review', vp.name);
+const cloneBase = server ? server.url : flags.url;
+const cloneUrl = route?.slug ? new URL(route.path.replace(/^\//, ''), cloneBase).href : server ? `${server.url}index.html` : flags.url;
+const refUrl = route?.slug ? new URL(route.path, meta.finalUrl || meta.url).href : meta.url;
+const outDir = route?.slug ? path.join(root, COMPARE, 'review', 'routes', route.slug, vp.name) : path.join(root, COMPARE, 'review', vp.name);
 await fs.rm(outDir, { recursive: true, force: true });
 await fs.mkdir(outDir, { recursive: true });
 
 // the frame plan comes from the reference at this size: section tops, and a frame per screen in tall sections
-const sections = JSON.parse(await fs.readFile(path.join(ref, `${vp.name}.sections.json`), 'utf8').catch(() => 'null'));
+const sections = JSON.parse(await fs.readFile(path.join(refDir, `${vp.name}.sections.json`), 'utf8').catch(() => 'null'));
 if (!sections) { console.error(`no capture at ${vp.name} (${vp.width}x${vp.height}): re-capture with trueclone 0.4+`); process.exit(1); }
 const plan = [];
 sections.forEach((s, i) => {
@@ -77,6 +85,7 @@ async function shoot(url, side) {
       await Promise.race([Promise.all([...document.images].map((i) => (i.complete ? null : new Promise((r) => { i.onload = r; i.onerror = r; })))), new Promise((r) => setTimeout(r, 8000))]);
     }).catch(() => {});
     await page.waitForTimeout(1500);
+    await unroll(page); // an app shell scrolls like a document (lib.mjs), the same on both sides
     const scrollTo = async (y) => {
       // with the wheel, the way a visitor scrolls: scroll-linked scenes and smooth scrolling follow wheel input; then
       // checked: the frame is taken where it was meant (within 2px), the wheel turned again if it fell short
@@ -116,7 +125,7 @@ const browserP = openBrowser(flags.cdp);
 const browser = await browserP;
 let refShots, cloneShots;
 try {
-  refShots = await shoot(meta.url, 'ref');
+  refShots = await shoot(refUrl, 'ref');
   cloneShots = await shoot(cloneUrl, 'clone');
 } finally {
   if (!flags.cdp) await browser.close();
@@ -140,11 +149,12 @@ for (const label of Object.keys(refShots)) {
       img.data[di] = src.data[si]; img.data[di + 1] = src.data[si + 1]; img.data[di + 2] = src.data[si + 2]; img.data[di + 3] = 255;
     }
   });
-  const id = `${String(n++).padStart(2, '0')}-${label}`;
-  await fs.writeFile(path.join(outDir, `${id}.png`), PNG.sync.write(img));
+  const file = `${String(n++).padStart(2, '0')}-${label}`;
+  const id = `${prefix}${file}`; // a route's frames carry the route: "about/03-section-2"
+  await fs.writeFile(path.join(outDir, `${file}.png`), PNG.sync.write(img));
   const pct = matchPct(a, b).pct;
   const base = label.replace(/-hover$/, '');
-  lines.push({ id, pct, ...(positions.ref[base] !== undefined ? { y: { ref: positions.ref[base], clone: positions.clone[base] } } : {}), img });
+  lines.push({ id, file, pct, ...(positions.ref[base] !== undefined ? { y: { ref: positions.ref[base], clone: positions.clone[base] } } : {}), img });
 }
 // contact sheets: three frames per image, so the whole review is a few reads
 const sheets = [];
@@ -161,7 +171,7 @@ for (let s = 0; s * 3 < lines.length; s++) {
   sheets.push({ file, frames: group.map((l) => l.id) });
 }
 for (const l of lines) delete l.img;
-await fs.writeFile(path.join(outDir, 'index.md'), `# Review at ${vp.name} (${vp.width}x${vp.height}): reference left, clone right
+await fs.writeFile(path.join(outDir, 'index.md'), `# Review${route?.slug ? ` of ${route.path}` : ''} at ${vp.name} (${vp.width}x${vp.height}): reference left, clone right
 
 Look at every frame (the sheets hold three frames each, in order). In notes.md under "## Review", one line per frame:
 \`- <frame> ${vp.name}: same\`, \`- <frame> ${vp.name}: differs: <what you see>\`, or, only when you proved the
@@ -172,7 +182,7 @@ Sheets: ${sheets.map((s) => `[${s.file}](${s.file}) (${s.frames.join(', ')})`).j
 
 | frame | pixel match | scrolled to (reference / clone) |
 |---|---|---|
-${lines.map((l) => `| [${l.id}](${l.id}.png) | ${l.pct}% | ${l.y ? `${l.y.ref} / ${l.y.clone}${Math.abs(l.y.ref - l.y.clone) > 2 ? ' **(not the same place)**' : ''}` : '–'} |`).join('\n')}
+${lines.map((l) => `| [${l.id}](${l.file}.png) | ${l.pct}% | ${l.y ? `${l.y.ref} / ${l.y.clone}${Math.abs(l.y.ref - l.y.clone) > 2 ? ' **(not the same place)**' : ''}` : '–'} |`).join('\n')}
 `);
 // make sure notes.md has the section the verdicts go in
 const notesFile = path.join(root, 'notes.md');

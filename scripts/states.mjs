@@ -7,7 +7,7 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, unroll } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -23,22 +23,27 @@ const structure = Boolean(flags.structure);
 const stepFrac = Number(flags.step || 0.5);
 const wanted = typeof flags.viewports === 'string' ? flags.viewports.split(',') : null;
 const viewportsAll = SCORED.filter((v) => !wanted || wanted.includes(v.name));
-// the clone is only replayed where the reference has states (a capture older than the held-out sizes has none there)
-const viewports = [];
-for (const v of viewportsAll) {
-  if (flags.clone && !(await fs.stat(path.join(ref, 'states', `${v.name}.json`)).then(() => true, () => false))) { console.log(`${v.name}: no reference states (run trueclone states ${name}); skipped`); continue; }
-  viewports.push(v);
-}
-const outRoot = path.join(cloneMode ? path.join(root, COMPARE) : ref, 'states');
-
+// Every route of the site (meta.routes, from capture; --route "/about" for one): the captured page reads and writes
+// where it always has (reference/states, compare/states), each other route under its own folder
+// (reference/routes/<slug>/states, compare/routes/<slug>/states), opened at its own address.
+const routes = (meta.routes?.length ? meta.routes : [{ path: '/', slug: '', dir: 'reference' }]).filter((r) => typeof flags.route !== 'string' || r.path === flags.route);
 const server = cloneMode && typeof flags.clone !== 'string' ? await serve(path.join(root, 'clone')) : null;
-const target = cloneMode ? (typeof flags.clone === 'string' ? flags.clone : server.url) : meta.url;
+const base = cloneMode ? (typeof flags.clone === 'string' ? flags.clone : server.url) : (meta.finalUrl || meta.url);
 const browser = await openBrowser(flags.cdp);
-const report = { name, target, mode: cloneMode ? (structure ? 'clone-structure' : 'clone-visual') : 'reference', at: new Date().toISOString(), viewports: [] };
+const report = { name, target: base, mode: cloneMode ? (structure ? 'clone-structure' : 'clone-visual') : 'reference', at: new Date().toISOString(), viewports: [], routes: [] };
 
-// Viewports run side by side (one page each): most of a step is waiting for smooth scroll to glide.
-try {
-  report.viewports = await Promise.all(viewports.map(async (vp) => {
+async function runRoute(r) {
+  const refDir = path.join(root, r.dir);
+  const outRoot = path.join(cloneMode ? (r.slug ? path.join(root, COMPARE, 'routes', r.slug) : path.join(root, COMPARE)) : refDir, 'states');
+  const target = r.slug ? new URL(cloneMode ? r.path.replace(/^\//, '') : r.path, base).href : base;
+  // the clone is only replayed where the reference has states (a capture older than the held-out sizes has none there)
+  const viewports = [];
+  for (const v of viewportsAll) {
+    if (cloneMode && !(await fs.stat(path.join(refDir, 'states', `${v.name}.json`)).then(() => true, () => false))) { if (!r.slug) console.log(`${v.name}: no reference states (run trueclone states ${name}); skipped`); continue; }
+    viewports.push(v);
+  }
+  // Viewports run side by side (one page each): most of a step is waiting for smooth scroll to glide.
+  const result = await Promise.all(viewports.map(async (vp) => {
     const dir = path.join(outRoot, vp.name);
     await fs.rm(dir, { recursive: true, force: true });
     await fs.mkdir(dir, { recursive: true });
@@ -46,6 +51,7 @@ try {
     await page.goto(target, { waitUntil: 'load', timeout: 60000 });
     await page.mouse.move(5, vp.height - 5);
     const intro = await waitStill(page, { timeout: 15000, interval: 200 }); // let intros/loaders finish first
+    await unroll(page); // an app shell scrolls like a document (lib.mjs), the same on both sides
     // Before the first scroll: one-shot reveals (Framer Motion whileInView once, IntersectionObserver classes) are
     // still in their starting state here. The warm-up below fires them for good, so they must be read now.
     const initial = cloneMode ? null : await page.evaluate(statesInPage);
@@ -57,10 +63,9 @@ try {
     const docH = await page.evaluate(() => document.documentElement.scrollHeight);
     let ys;
     if (cloneMode) {
-      const refMeta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
-      const refH = refMeta.viewports?.find((v) => v.viewport === vp.name)?.pageHeight;
-      if (refH && Math.abs(docH - refH) / refH > 0.2) console.warn(`WARNING ${vp.name}: clone page height ${docH}px vs reference ${refH}px after the warm-up scroll - a layout is running away; fix that before reading state scores.`);
-      ys = JSON.parse(await fs.readFile(path.join(ref, 'states', `${vp.name}.json`), 'utf8')).steps.map((s) => s.y);
+      const refH = (r.slug ? r.viewports : meta.viewports)?.find((v) => v.viewport === vp.name)?.pageHeight;
+      if (refH && Math.abs(docH - refH) / refH > 0.2) console.warn(`WARNING ${r.path} ${vp.name}: clone page height ${docH}px vs reference ${refH}px after the warm-up scroll - a layout is running away; fix that before reading state scores.`);
+      ys = JSON.parse(await fs.readFile(path.join(refDir, 'states', `${vp.name}.json`), 'utf8')).steps.map((s) => s.y);
     } else {
       const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
       const step = Math.round(vp.height * stepFrac);
@@ -96,19 +101,19 @@ try {
       const scored = [];
       for (const s of steps) {
         const f = `${String(s.i).padStart(2, '0')}${sfx}.png`;
-        const a = PNG.sync.read(await fs.readFile(path.join(ref, 'states', vp.name, f)));
+        const a = PNG.sync.read(await fs.readFile(path.join(refDir, 'states', vp.name, f)));
         const b = PNG.sync.read(await fs.readFile(path.join(dir, f)));
         scored.push({ ...s, match: matchPct(a, b).pct });
       }
       const avg = +(scored.reduce((n, s) => n + s.match, 0) / scored.length).toFixed(2);
       // canvases: the reference's canvas regions at each step, compared by what is drawn (real pixels, not the mask)
-      const refSteps = JSON.parse(await fs.readFile(path.join(ref, 'states', `${vp.name}.json`), 'utf8')).steps;
+      const refSteps = JSON.parse(await fs.readFile(path.join(refDir, 'states', `${vp.name}.json`), 'utf8')).steps;
       const canvasScores = [];
       for (const s of steps) {
         const regions = refSteps[s.i]?.canvases;
         if (!regions?.length) continue;
         const f = `${String(s.i).padStart(2, '0')}.png`;
-        const a = PNG.sync.read(await fs.readFile(path.join(ref, 'states', vp.name, f)));
+        const a = PNG.sync.read(await fs.readFile(path.join(refDir, 'states', vp.name, f)));
         const b = PNG.sync.read(await fs.readFile(path.join(dir, f)));
         for (const [x0, y0, x1, y1] of regions) {
           const w = Math.min(x1, a.width, b.width) - x0, h = Math.min(y1, a.height, b.height) - y0;
@@ -129,12 +134,26 @@ try {
       return { viewport: vp.name, introMs: intro.ms, steps: steps.length, unsettled: steps.filter((s) => !s.settled).length, ...summary.counts };
     }
   }));
+  if (r.slug) await fs.writeFile(path.join(outRoot, cloneMode ? `report${structure ? '.mask' : ''}.json` : 'report.json'), JSON.stringify({ ...report, route: r.path, viewports: result, routes: undefined }, null, 2));
+  return result;
+}
+
+try {
+  for (const r of routes) {
+    const result = await runRoute(r);
+    if (!r.slug) report.viewports = result;
+    else report.routes.push({ path: r.path, slug: r.slug, viewports: result.map(({ steps, ...v }) => v) });
+  }
 } finally {
   if (!flags.cdp) await browser.close();
   server?.close();
 }
 
+// the captured page's report (with every other route's summary in it), where it has always been
+const outRoot = path.join(cloneMode ? path.join(root, COMPARE) : ref, 'states');
+await fs.mkdir(outRoot, { recursive: true });
 await fs.writeFile(path.join(outRoot, cloneMode ? `report${structure ? '.mask' : ''}.json` : 'report.json'), JSON.stringify(report, null, 2));
+for (const r of report.routes) console.log(`route ${r.path}: ${r.viewports.map((v) => `${v.viewport} ${v.match ?? `${v.steps} steps`}`).join('  ')}`);
 if (cloneMode) {
   console.log(`state match (${report.mode}) - average over scroll steps`);
   console.table(report.viewports.map((v) => ({ viewport: v.viewport, 'match %': v.match, 'canvas %': v.canvas ?? '-', worst: v.worst.map((s) => `#${s.i} y${s.y} ${s.match}%`).join('  ') })));

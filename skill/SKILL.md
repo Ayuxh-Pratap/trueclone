@@ -78,6 +78,13 @@ replayed** (yours, from the brief); the boot contract (`<html class="tc-boot">` 
 `</head>`, `*.css` after the site's stylesheets, `body-*.html` and `*.js` (deferred) before `script.js`, in name order.
 `npx trueclone vendor <name>` puts the site's libraries there at the site's versions.
 
+**Routes**: a site is all its pages. Capture follows the page's links and sitemap.xml (`--routes N`, or
+`--routes "/,/about"`), captures every route at every size, and tells a single-page app (one document, a script shows
+the view for the address: your `script.js` routes like the site's, `pushState`/`popstate`) from separate pages. Layout
+and scroll states are scored per route; navigation is scored (each link: the right view at the right address, then
+Back); `brief --route /about` and `review --route /about` work on one route. An app shell (a fixed sidebar and a pane
+that scrolls on its own) is measured with the pane unrolled, the same way on both sides.
+
 **The checks**: layout, scroll states, canvases, motion curves, detail, hovers, interactions (the capture finds every
 scroller, carousel, tab set, accordion, menu and dialog, `reference/interactions.auto.json`; your `interactions.json`
 adds, overrides by name, or retires one with `{ "name": "…", "skip": "<why>" }`), load, notes and review. Sizes: built

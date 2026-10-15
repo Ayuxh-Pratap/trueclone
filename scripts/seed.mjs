@@ -12,7 +12,10 @@
 // usage: node scripts/seed.mjs <name> [--force]   (--force overwrites an existing clone/)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { parseArgs, openBrowser, newPage, serve, VIEWPORTS, siteDir } from './lib.mjs';
+import fsSync from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { parseArgs, openBrowser, newPage, serve, VIEWPORTS, siteDir, routeArg } from './lib.mjs';
 import { planInlineStyles } from './viewport-fit.mjs';
 
 // placeholder vocabulary, wide enough to match most word widths
@@ -224,6 +227,13 @@ if (!(await fs.stat(path.join(mirror, 'index.html')).then(() => true, () => fals
   process.exit(1);
 }
 const clone = path.join(root, 'clone');
+// --route-page "/privacy": a separate page of the site (its own document, captured as reference/mirror/routes/<slug>.html),
+// seeded by the same pipeline at the clone's root (so every relative path holds), then written to clone/<route>/index.html
+// with its relative references re-based for the depth. The captured page's recordings (reveals, widgets, inline values)
+// belong to another document and are not used. The main seed runs one of these per separate page.
+const routePage = typeof flags['route-page'] === 'string' ? (meta.routes || []).find((r) => r.path === routeArg(flags['route-page'])) : null;
+if (typeof flags['route-page'] === 'string' && !routePage) { console.error(`no separate page ${flags['route-page']} in this capture`); process.exit(1); }
+const passFile = routePage ? `.page-${routePage.slug}.html` : 'index.html';
 const t0 = Date.now();
 const step = (msg) => console.log(`seed ${String(Math.round((Date.now() - t0) / 1000)).padStart(4)}s  ${msg}`);
 // --patches: re-apply clone/patches/ onto the last seed output in a second, without seeding again
@@ -232,11 +242,17 @@ if (flags.patches) {
   if (base === null) { console.error(`no seed output to patch in ${path.relative(process.cwd(), clone)}: run trueclone seed ${name} first`); process.exit(1); }
   const { html: patched, applied } = await applyPatches(base);
   await fs.writeFile(path.join(clone, 'index.html'), patched);
+  for (const r of (meta.routes || []).filter((x) => x.slug && !x.sameDocument)) {
+    const pageBase = await fs.readFile(path.join(clone, `.seed-base-${r.slug}.html`), 'utf8').catch(() => null);
+    if (pageBase === null) continue;
+    await fs.mkdir(path.join(clone, ...r.path.split('/').filter(Boolean)), { recursive: true });
+    await fs.writeFile(path.join(clone, ...r.path.split('/').filter(Boolean), 'index.html'), rebaseHtml((await applyPatches(pageBase)).html, r.path.split('/').filter(Boolean).length));
+  }
   console.log(`patches re-applied onto the last seed (no re-seed): ${applied.join(', ') || 'none in clone/patches/'}`);
   process.exit(0);
 }
 const exists = await fs.stat(path.join(clone, 'index.html')).then(() => true, () => false);
-if (exists && !flags.force) {
+if (exists && !flags.force && !routePage) {
   console.error(`${path.relative(process.cwd(), clone)} already has an index.html: add --force to seed again (your script.js, patches/ and notes.md are kept), or --patches to only re-apply clone/patches/`);
   process.exit(1);
 }
@@ -268,7 +284,7 @@ const rewrite = async (text, prefix, replacement, forPass = false) => {
   return text.replace(re, (all, rel) => (exact || isFont(rel) ? `${replacement}assets/${rel}` : forPass ? `${REF_ASSETS}${rel}` : `${replacement}${PLACEHOLDER}`));
 };
 
-for (const file of await fs.readdir(path.join(mirror, 'css')).catch(() => [])) {
+for (const file of routePage ? [] : await fs.readdir(path.join(mirror, 'css')).catch(() => [])) { // a separate page shares the stylesheets the main seed copied
   const css = await fs.readFile(path.join(mirror, 'css', file), 'utf8');
   let out = await rewrite(css, '../../', '../');
   // template mode: images the capture never downloaded still point at the site (url("https://…/bg.avif"));
@@ -278,9 +294,9 @@ for (const file of await fs.readdir(path.join(mirror, 'css')).catch(() => [])) {
   await fs.writeFile(path.join(clone, 'css', file), out);
 }
 step(`stylesheets copied (${exact ? 'exact' : 'template'} mode)`);
-let html = await fs.readFile(path.join(mirror, 'index.html'), 'utf8');
+let html = await fs.readFile(routePage ? path.join(mirror, 'routes', `${routePage.slug}.html`) : path.join(mirror, 'index.html'), 'utf8');
 html = await rewrite(html, '../', '', !exact);
-await fs.writeFile(path.join(clone, 'index.html'), html);
+await fs.writeFile(path.join(clone, passFile), html);
 
 if (!exact) {
   // a neutral box that reads on light and dark pages
@@ -293,7 +309,7 @@ if (!exact) {
 // One file per width when `reveals` ran at every width: elements are matched by path (the same DOM at every width)
 // and the player uses the record for the visitor's width, so phone offsets are phone offsets, not desktop pixels.
 const recs = {};
-for (const v of ['desktop', 'tablet', 'mobile']) {
+for (const v of routePage ? [] : ['desktop', 'tablet', 'mobile']) {
   const r = JSON.parse(await fs.readFile(path.join(ref, `reveals.${v}.json`), 'utf8').catch(() => 'null'));
   if (r) recs[v] = r;
 }
@@ -314,7 +330,7 @@ const scrubbed = [];
 const classChanges = primary?.classes || [];
 // Widget states recorded on the reference (trueclone widgets): tabs, menus. Template mode only for now: the snapshots
 // are placeholdered like the page; exact-mode snapshots would still point at the site's media.
-const widgetRec = exact ? null : JSON.parse(await fs.readFile(path.join(ref, 'widgets.desktop.json'), 'utf8').catch(() => 'null'));
+const widgetRec = exact || routePage ? null : JSON.parse(await fs.readFile(path.join(ref, 'widgets.desktop.json'), 'utf8').catch(() => 'null'));
 const widgetGroups = widgetRec?.groups || [];
 let marked = 0, classMarked = 0, scrubMarked = 0, widgets = null, runtime = null;
 step('browser pass: reveal marks, widgets, runtime clean-up' + (exact ? '' : ', placeholder text and media'));
@@ -346,9 +362,17 @@ html = html.replace(/<\/head>/i, '<style id="tc-boot-styles">/* trueclone seed: 
 // the clone's own behaviour script, loaded once the DOM is parsed
 if (!/<script[^>]+src="script\.js"/.test(html)) html = html.replace(/<\/body>/i, '<script src="script.js" defer></script>\n</body>');
 // the seed's own output, kept so `seed --patches` can re-apply clone/patches/ onto it in a second
-await fs.writeFile(path.join(clone, '.seed-base.html'), html);
+await fs.writeFile(path.join(clone, routePage ? `.seed-base-${routePage.slug}.html` : '.seed-base.html'), html);
 const { html: patchedHtml, applied: patches } = await applyPatches(html);
 html = patchedHtml;
+if (routePage) {
+  const parts = routePage.path.split('/').filter(Boolean);
+  await fs.mkdir(path.join(clone, ...parts), { recursive: true });
+  await fs.writeFile(path.join(clone, ...parts, 'index.html'), rebaseHtml(html, parts.length));
+  await fs.rm(path.join(clone, passFile), { force: true });
+  console.log(`seeded ${routePage.path}: clone/${parts.join('/')}/index.html (a separate page of the site)`);
+  process.exit(0);
+}
 await fs.writeFile(path.join(clone, 'index.html'), html);
 step('index.html written');
 
@@ -403,6 +427,12 @@ if (runtime) {
 }
 if (widgetGroups.length) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
 if (patches.length) console.log(`patches applied from clone/patches/: ${patches.join(', ')}`);
+// every separate page of the site, by the same pipeline (one child run each)
+const ownPages = (meta.routes || []).filter((r) => r.slug && !r.sameDocument && fsSync.existsSync(path.join(mirror, 'routes', `${r.slug}.html`)));
+for (const r of ownPages) {
+  const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), name, '--route-page', r.path, ...(typeof flags['hide-until-boot'] === 'string' ? ['--hide-until-boot', flags['hide-until-boot']] : [])], { cwd: process.cwd(), encoding: 'utf8' });
+  console.log((child.stdout || '').split('\n').filter((l) => l.startsWith('seeded ')).join('\n') || `WARNING ${r.path} not seeded: ${(child.stderr || '').split('\n')[0]}`);
+}
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------
@@ -412,8 +442,12 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
   const browser = await openBrowser(flags.cdp);
   try {
     const { page } = await newPage(browser, VIEWPORTS.find((v) => v.name === 'desktop'), {});
-    await page.goto(`${server.url}clone/index.html`, { waitUntil: 'load', timeout: 60000 });
+    await page.goto(`${server.url}clone/${passFile}`, { waitUntil: 'load', timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
+    // the site's own links point at the clone's routes: an address on the site's host becomes a path (/about), in
+    // both modes, so a visitor of the clone stays in the clone (the local server and the Next app answer every route)
+    const localised = await page.evaluate(localLinksInPage, new URL(meta.finalUrl || meta.url).host);
+    if (localised) console.log(`links: ${localised} link(s) to the site's own pages now point at the clone's routes`);
     const counts = reveals.length || classes.length || scrubs.length ? await page.evaluate(markRevealsInPage, [reveals, classes, scrubs]) : [0, 0, 0];
     // widgets: mark regions and triggers, then give every recorded state the same placeholders as the page by
     // placing it into its region (so it is laid out and measured for real) and reading it back
@@ -456,7 +490,7 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
     // inline styles that differ between widths (script-computed sizes and offsets) become media-query rules
     // inline styles a script set: functions of the viewport where they are, left to script.js where they aren't
     const inlineStyles = JSON.parse(await fs.readFile(path.join(ref, 'inline-styles.json'), 'utf8').catch(() => 'null'));
-    if (inlineStyles) {
+    if (inlineStyles && !routePage) { // read on the captured page: its paths mean nothing in another document
       const { plan, owned, fitted, sizes, breakpoints } = planInlineStyles(inlineStyles, VIEWPORTS);
       const applied = await page.evaluate(applyInlineStylePlanInPage, plan);
       runtime.viewport = { fitted, sizes, breakpoints, elements: applied.elements, dropped: applied.dropped };
@@ -697,6 +731,22 @@ function applyInlineStylePlanInPage(plan) {
 // keeps the spacer as a plain block with the pin distance as padding (`data-tc-pin-spacer`), makes the element
 // sticky, and records the distance on it (`data-tc-pin`), so layout and scroll states hold without a script. The
 // clone's script may take the pin over (unwrap the spacer, drop the sticky style) and draws the marked canvases.
+// Links to the site's own pages (absolute on its host, or root-relative) become paths, so they open the clone's route.
+function localLinksInPage(siteHost) {
+  const host = String(siteHost).replace(/^www\./, '');
+  let n = 0;
+  for (const a of document.querySelectorAll('a[href]')) {
+    const h = a.getAttribute('href');
+    if (!/^https?:\/\//i.test(h) && !h.startsWith('//')) continue; // relative already
+    let u;
+    try { u = new URL(h, location.href); } catch { continue; }
+    if (u.host.replace(/^www\./, '') !== host || /\.(pdf|png|jpe?g|gif|svg|webp|zip|mp4|xml|txt)$/i.test(u.pathname)) continue;
+    a.setAttribute('href', `${u.pathname}${u.search}${u.hash}`);
+    n++;
+  }
+  return n;
+}
+
 function cleanRuntimeInPage() {
   const log = { pins: [], canvases: 0, gsap: 0 };
   const label = (el) => `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.classList.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''}`;
@@ -918,7 +968,8 @@ function placeholdersInPage([lorem, rootSel]) {
   for (const el of root.querySelectorAll('[style*="url("]')) el.setAttribute('style', el.getAttribute('style').replace(/url\((['"]?)(?!data:)[^)'"]+\1\)/g, 'url("assets/placeholder.svg")'));
 
   // links, forms and brand metadata
-  root.querySelectorAll('a[href]').forEach((a) => { if (!a.getAttribute('href').startsWith('#')) a.setAttribute('href', '#'); });
+  // the site's own routes stay links (made local by localLinksInPage); links elsewhere go nowhere
+  root.querySelectorAll('a[href]').forEach((a) => { const h = a.getAttribute('href'); if (!h.startsWith('#') && !(h.startsWith('/') && !h.startsWith('//'))) a.setAttribute('href', '#'); });
   root.querySelectorAll('form').forEach((f) => f.setAttribute('action', '#'));
   if (root !== document.body) return root.innerHTML;
   document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"], meta[name="description"], meta[name="keywords"], meta[name="author"], meta[name="application-name"], meta[name="generator"], meta[name="apple-mobile-web-app-title"], link[rel="author"], link[rel="preconnect"], link[rel="dns-prefetch"], link[rel="preload"][as="image"], link[rel="prefetch"], link[rel~="icon"], link[rel="apple-touch-icon"], link[rel="manifest"], link[rel="canonical"], link[rel="alternate"], script[type="application/ld+json"]').forEach((m) => m.remove());
@@ -943,4 +994,17 @@ async function applyPatches(html) {
     else if (/\.js$/i.test(f)) html = beforeScript(`<script src="patches/${f}" defer></script>`);
   }
   return { html, applied };
+}
+
+// A page written below the clone's root (clone/privacy/index.html): its relative references (assets/x, css/x,
+// script.js, patches/x) gain one "../" per level, so they reach the same files. Root-relative (/x), absolute, data:,
+// and in-page (#x) references are left as they are.
+function rebaseHtml(html, depth) {
+  if (!depth) return html;
+  const up = '../'.repeat(depth);
+  const fix = (u) => (/^(?:[a-z][a-z0-9+.-]*:|\/|#|\?)/i.test(u.trim()) || !u.trim() ? u : up + u.trim());
+  return html
+    .replace(/\s(src|href|poster|data-src)=("|')([^"']*)\2/gi, (all, a, q, u) => ` ${a}=${q}${fix(u)}${q}`)
+    .replace(/\s(srcset|data-srcset)=("|')([^"']*)\2/gi, (all, a, q, list) => ` ${a}=${q}${list.split(',').map((part) => { const [u, ...rest] = part.trim().split(/\s+/); return [fix(u), ...rest].join(' '); }).join(', ')}${q}`)
+    .replace(/url\((['"]?|&quot;)([^'")&]+)\1\)/g, (all, q, u) => `url(${q}${fix(u)}${q})`);
 }

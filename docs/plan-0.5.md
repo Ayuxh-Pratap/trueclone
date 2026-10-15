@@ -67,10 +67,28 @@ just score.
 ## Phase 5. Prove it (one run at a time)
 
 1. Regression on the probes (rea-tools, resend, nickho, varsity-b) after each phase.
-2. The same three runs, one at a time, the same prompts.
-3. **Model matrix:** varsity and stripe each with Sonnet 5.5 and Opus 5.5. Bar: the Sonnet result is within a point of
-   Opus on every check, with no check-in.
-4. Then the site-kind matrix.
+2. New sites rather than the same three again (the user's call): first a multi-route portfolio (heybhaskar.com, Phase 6),
+   then the site-kind matrix. Each judged by eye first, then review, then scores.
+3. **Model matrix:** each new site on Sonnet 5.5 (the default for most users) and, where it matters, Opus 5.5. Bar: the
+   Sonnet result within a point of Opus on every check, with no check-in.
+
+## Phase 6. A website is more than one page (routes)
+
+Until now a clone was one URL: capture, every check, the review and the Next app looked at one address. A real site
+has routes (a portfolio's home, work, about, resume, case studies), linked to each other, either as one document an
+app script switches between (a single-page app: heybhaskar.com serves the same HTML at every address and app.js shows
+the view) or as separate documents (a multi-page site). Exact means every route, the links between them and the
+navigation itself.
+
+| # | Item | Done when |
+|---|---|---|
+| 6.1 | **Routes discovered at capture**: same-origin links on the rendered page (every view's, not only the visible one) and sitemap.xml, capped and listed (`--routes N`, or `--routes "/,/about"`); each route's raw HTML compared: one document for every address = a single-page app, different documents = separate pages; `meta.routes`, `meta.app` | heybhaskar: 8 routes, app "single-page" |
+| 6.2 | **A reference per route**: every route shot, sectioned and masked at all five sizes (`reference/routes/<slug>/`); separate pages also get their own rendered HTML and mirror | each route has its five shots |
+| 6.3 | **Serving like the host**: an address that is not a file is the route's page (`/about` → `about/index.html`) or, for a single-page app, the app's document; the same in the Next app (a catch-all route) | `/about` opens on the clone and in the Next app |
+| 6.4 | **Every check per route**: layout, scroll states and load at every route and size; the report's route table, worst first; a failing route fails the verdict | heybhaskar's case studies scored |
+| 6.5 | **Navigation is behaviour**: scenarios drafted for every internal link (from the home and from each route: the right address and the right view), Back and Forward, and overlays a route opens; the address is compared at every shot | a link that changes the view but not the address fails |
+| 6.6 | **Separate pages seeded**: each route's mirror seeded into `clone/<route>/index.html`, internal links kept relative | a two-page site clones with both pages |
+| 6.7 | **status, brief and review know routes**: the worst route first; a brief per route section; review frames per route | an agent walks every route without being told |
 
 ## Release gate for 0.5.0
 
@@ -88,3 +106,4 @@ just score.
 | 3 | done: status (one next command from the files, exit 0 only when every gate passes; stale scores re-measured first), brief (a section's handlers file:line + code, motion, script-owned values, scenarios, canvases, scores), vendor (the busiest GSAP: varsity runs Webflow's 3.15 and its own 3.13, the 3.13 drives 13 triggers), serve; skill rewritten around the status loop (12.5 -> 7.7 KB) with the no-check-in rule, also in AGENTS.md; report gates notes (Behaviours must cite file:line: varsity 32 cited passes, an empty one fails), findings read from any heading |
 | 4 | done: review (load frames from each load event, lazy media first, scroll verified and recorded, contact sheets, tool verdicts with evidence close), detail paired by document path, textshape inside horizontal scrollers, stale rows marked and failing (resend: detail, hovers, load measured before its re-seed), siteDir from any folder |
 | 5 | probe regression done: resend unchanged (layout/states 99.7-100, load 97.9-99.2, detail 99.5-99.7 -> 100 by structure; hovers 78.8 real; notes and review gates now open, correctly), nickho unchanged (hand-built: detail falls back to points, same numbers), stripe detail 92.3/70.2/69.2 -> 100/88.2/85.5 with 0 unpaired probes (the rest are real box-size gaps at tablet/mobile); varsity end to end in 13.5 min (capture + every read + seed), status walks it to the briefs, the team brief shows the hover handlers' code; review at 1920 takes every frame at the verified position (2 bottom frames flagged where the seed-only clone is 12px shorter). Next: publish 0.5.0-rc.1, the three test runs one at a time, then the model matrix (Sonnet vs Opus on varsity and stripe) |
+| 6 | done: heybhaskar captured as a single-page app with 8 routes, each at 5 sizes (2.4 min); app shells (a fixed sidebar, a pane that scrolls on its own, a sheet over the page) unrolled the same way on both sides, so whole-page measures see the whole page (home 948 -> 2065 px, a case study 948 -> 9202 px) and sections follow the pane's blocks; serve() and the Next app answer every route; layout and states scored per route, a Routes check and table in the report (a seed-only clone fails all 7 other routes, correctly: no routing yet); navigation drafted and scored with the address at every shot (the original replaces its history entry, so Back leaves the site: the clone must do the same); same-site links kept as the clone's routes in both modes (template mode had turned them into #); brief, review and status take --route (Git Bash rewriting of /about undone). Separate pages (6.6): each mirrored at capture and seeded by the same pipeline into clone/<route>/index.html with references rebased (nickho: its privacy page scores 98.2-99.9 layout at all 5 sizes straight from the seed). Open: the Next app for a separate-page site is still one page (a catch-all is only right for a single-page app) |

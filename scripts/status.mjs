@@ -117,7 +117,7 @@ const sectionAt = (vp, worst = true) => {
   const s = v?.worstSections?.slice().sort((a, b) => a.match - b.match)[0];
   return s ? { n: s.index + 1, y: s.y, label: String(s.label).slice(0, 40), match: s.match } : null;
 };
-const order = ['layout', 'scroll', 'canvases', 'interactions', 'load', 'detail', 'hovers', 'motion'];
+const order = ['layout', 'scroll', 'canvases', 'routes', 'interactions', 'load', 'detail', 'hovers', 'motion'];
 const heldOut = (f) => ['laptop', 'wide'].includes(f.viewport);
 const sorted = failingChecks.slice().sort((a, b) => (order.indexOf(a.key) - order.indexOf(b.key)) || (Number(b.failing.some(heldOut)) - Number(a.failing.some(heldOut))));
 const reviewCheck = (verdict.checks || []).find((c) => c.key === 'review');
@@ -135,6 +135,12 @@ if (sorted.length) {
     const s = sectionAt(vp);
     next(s ? T(`explain ${name} ${s.y} --viewport ${vp}`) : T(`explain ${name} 0 --viewport ${vp}`), `${c.check} ${vp} is ${f.value}${s ? `; its worst section is ${s.n} "${s.label}" (${s.match})` : ''}`, [s ? T(`brief ${name} ${s.n} --viewport ${briefVp}`) : T(`brief ${name}`), `after the fix: ${T(`score ${name} --only ${c.key === 'layout' ? 'layout' : 'states'} --viewport ${vp}`)}`]);
   }
+  if (c.key === 'routes') {
+    // the worst route first: look at it side by side, then its sections' evidence
+    const w = c.failing[0];
+    const size = w.viewport || 'desktop';
+    next(w.value === null ? T(`score ${name} --only layout,states`) : T(`review ${name} --route ${w.route} --size ${size}`), w.value === null ? `route ${w.route} has not been scored yet` : `route ${w.route} is the furthest from the original: ${w.check} at ${size} is ${w.value}`, [T(`brief ${name} --route ${w.route}`), `after the fix: ${T(`score ${name} --only layout,states`)}`]);
+  }
   if (c.key === 'interactions') {
     const rep = await json('compare/interact/report.json', { scenarios: [] });
     const bad = rep.scenarios.find((s) => !s.notBehaviour && s.expect && !s.expect.pass);
@@ -147,6 +153,10 @@ done.push('checks pass');
 // ---- 7. the review, by eye ----
 const sizes = ['wide', 'laptop', 'tablet', 'mobile'];
 for (const size of sizes) if (!(await stat(`compare/review/${size}/frames.json`))) next(T(`review ${name} --size ${size}`), `no side-by-side frames at ${size} yet: the clone is judged by eye at every size`, ['give every frame a verdict under ## Review in notes.md ("- <frame> <size>: same" or "differs: <what>")']);
+// every other route by eye too: the widest held-out size and a phone
+for (const r of (meta.routes || []).filter((x) => x.slug)) {
+  for (const size of ['wide', 'mobile']) if (!(await stat(`compare/review/routes/${r.slug}/${size}/frames.json`))) next(T(`review ${name} --route ${r.path} --size ${size}`), `route ${r.path} has not been looked at side by side at ${size}`, ['its frames are named "' + r.slug + '/<frame>": verdicts under ## Review as for the others']);
+}
 if (reviewCheck && !reviewCheck.pass) {
   const open = reviewCheck.failing.filter((f) => !f.verdict);
   next(`write review verdicts in notes.md for ${open.length} frame(s) (${open.slice(0, 3).map((f) => `${f.frame} ${f.viewport}`).join(', ')}…)`, 'every frame needs a verdict; "differs" is fixed, "same" closes it', [`look at compare/review/<size>/index.md`, T(`report ${name}`)]);

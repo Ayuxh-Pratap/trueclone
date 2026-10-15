@@ -104,6 +104,20 @@ function tokensInPage() {
 
 const browser = await openBrowser(flags.cdp);
 const manifest = [];
+// every asset a captured page loads (the captured page, and each separate page of the site), saved once
+const recordAsset = async (res) => {
+  const rawType = res.request().resourceType();
+  if (!keepResponse(rawType, res.url()) || res.status() >= 300 || manifest.some((m) => m.url === res.url())) return;
+  const type = SAVED_TYPES.has(rawType) ? rawType : 'media';
+  try {
+    const body = await res.body();
+    if (body.length > MAX_ASSET_BYTES) return;
+    const file = path.join('assets', type, assetName(res.url(), type, res.headers()['content-type']));
+    await fs.mkdir(path.join(ref, 'assets', type), { recursive: true });
+    await fs.writeFile(path.join(ref, file), body);
+    manifest.push({ url: res.url(), type, file: file.replaceAll('\\', '/'), contentType: res.headers()['content-type'], bytes: body.length });
+  } catch { /* redirects, data: urls, aborted */ }
+};
 const summary = [];
 const rootFontSize = {};
 const inlineStyles = {};
@@ -113,27 +127,14 @@ const autoScenarios = []; // interaction scenarios found on the page (interactio
 const locale = typeof flags.locale === 'string' ? flags.locale : LOCALE;
 const asked = { locale, extraHTTPHeaders: { 'accept-language': `${locale},${locale.split('-')[0]};q=0.9` } };
 let finalUrl = null; // where the page ended up, when that is not the URL asked for (a geo or consent redirect)
+let linkHrefs = []; // the page's links, for the routes
 try {
   // the seed sizes and the held-out sizes: the held-out ones are shot and measured for scoring, nothing else
   for (const vp of SCORED) {
     const desktop = vp.name === 'desktop';
     const { context, page } = await newPage(browser, vp, { ...asked, ...(desktop ? { recordHar: { path: path.join(ref, 'desktop.har'), content: 'omit' } } : {}) });
     await page.addInitScript(recordMediaQueries);
-    if (desktop) {
-      page.on('response', async (res) => {
-        const rawType = res.request().resourceType();
-        if (!keepResponse(rawType, res.url()) || res.status() >= 300) return;
-        const type = SAVED_TYPES.has(rawType) ? rawType : 'media';
-        try {
-          const body = await res.body();
-          if (body.length > MAX_ASSET_BYTES) return;
-          const file = path.join('assets', type, assetName(res.url(), type, res.headers()['content-type']));
-          await fs.mkdir(path.join(ref, 'assets', type), { recursive: true });
-          await fs.writeFile(path.join(ref, file), body);
-          manifest.push({ url: res.url(), type, file: file.replaceAll('\\', '/'), contentType: res.headers()['content-type'], bytes: body.length });
-        } catch { /* redirects, data: urls, aborted */ }
-      });
-    }
+    if (desktop) page.on('response', recordAsset);
     // desktop: the page's own scripts and what ran, saved as evidence (reference/scripts/)
     const finishEvidence = desktop ? await startScriptEvidence(page, url).catch(() => null) : null;
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
@@ -166,6 +167,8 @@ try {
       }).observe(document.body, { subtree: true, childList: true });
     });
     await settle(page, hide);
+    // every link on the page, hidden views' included: the site's routes are found from them (and sitemap.xml)
+    if (desktop) linkHrefs = await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => []);
     // inline styles at this size, by element path: scripts size and place things from the viewport (a grid's computed
     // cells, a pin's distance), and the rendered HTML only keeps one size's values. With the extra sizes read below,
     // the seed tells a function of the viewport from a constant. Read here, settled and before any screenshot, in the
@@ -177,7 +180,7 @@ try {
     if (!vp.heldOut) {
       const top = await page.evaluate(() => scrollY);
       await page.evaluate(() => scrollTo(0, 0));
-      autoScenarios.push(...await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 10]).catch((e) => { console.warn(`WARNING interactions not detected at ${vp.name}: ${e.message.split('\n')[0]}`); return []; }));
+      autoScenarios.push(...await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 16]).catch((e) => { console.warn(`WARNING interactions not detected at ${vp.name}: ${e.message.split('\n')[0]}`); return []; }));
       await page.evaluate((y) => scrollTo(0, y), top);
     }
     if (finishEvidence) {
@@ -200,45 +203,7 @@ try {
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     rootFontSize[vp.name] = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
     if (desktop) {
-      const html = await page.evaluate(() => {
-        // restore view-mounted content (see above): only elements that are empty again now
-        const restore = [];
-        let i = 0;
-        for (const [el, best] of window.__tcRich || []) {
-          if (!el.isConnected || el.getElementsByTagName('*').length > 0) continue;
-          el.setAttribute('data-tc-rich', String(i));
-          restore[i++] = best.html;
-        }
-        // open shadow roots (web components, a Webflow code island) are not part of outerHTML: each becomes a
-        // declarative <template shadowrootmode="open"> inside its host, which the browser turns back into a shadow
-        // root while parsing, no script needed. Deepest first, so a host inside a shadow root is carried too.
-        // Constructed stylesheets (adoptedStyleSheets) are written out as a <style> at the top of the template.
-        const hosts = [];
-        (function find(scope) { for (const el of scope.querySelectorAll('*')) if (el.shadowRoot) { find(el.shadowRoot); hosts.push(el); } })(document);
-        for (const host of hosts) {
-          const t = document.createElement('template');
-          t.setAttribute('shadowrootmode', 'open');
-          t.setAttribute('shadowrootserializable', '');
-          const adopted = (host.shadowRoot.adoptedStyleSheets || []).map((s) => { try { return [...s.cssRules].map((r) => r.cssText).join('\n'); } catch { return ''; } }).filter(Boolean);
-          if (adopted.length) { const st = document.createElement('style'); st.textContent = adopted.join('\n'); t.content.appendChild(st); }
-          for (const n of host.shadowRoot.childNodes) t.content.appendChild(n.cloneNode(true));
-          host.prepend(t);
-          host.setAttribute('data-tc-shadow', '');
-        }
-        if (hosts.length) console.log(`tc-shadow: serialised ${hosts.length} open shadow root(s) as declarative shadow DOM`);
-        const doc = document.documentElement.cloneNode(true);
-        for (const el of document.querySelectorAll('[data-tc-rich]')) el.removeAttribute('data-tc-rich');
-        for (const el of doc.querySelectorAll('[data-tc-rich]')) {
-          el.innerHTML = restore[Number(el.getAttribute('data-tc-rich'))];
-          el.removeAttribute('data-tc-rich');
-          // marked for the layout diff: a full-page still can't show view-mounted content on either side, so its box
-          // is excluded there (the scroll-state check, with a real viewport, scores it)
-          el.setAttribute('data-tc-viewmount', '');
-        }
-        doc.querySelector('style[data-lab-freeze]')?.remove();
-        console.log(`tc-rich: restored ${restore.length} view-mounted element(s)`);
-        return '<!DOCTYPE html>\n' + doc.outerHTML;
-      });
+      const html = await page.evaluate(serializeInPage);
       await fs.writeFile(path.join(ref, 'rendered.html'), html);
       await fs.writeFile(path.join(ref, 'tokens.json'), JSON.stringify(await page.evaluate(tokensInPage), null, 2));
     }
@@ -252,6 +217,98 @@ try {
 }
 
 await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
+
+// ---------- Routes: a website is more than one page ----------
+// The site's routes: same-host links on the page (every view's) and sitemap.xml, the captured page first, capped
+// (--routes N, or --routes "/,/about" for an exact list, --routes 1 for this page only). Each route's raw HTML is
+// compared with the captured page's: one document for every address is a single-page app (a script shows the view
+// for the address), different documents are separate pages. Every other route gets a reference of its own at all five
+// sizes in reference/routes/<slug>/ (shots, sections, masks), shot exactly like the captured page.
+const home = new URL(finalUrl || url);
+const hostOf = (h) => h.replace(/^www\./, '');
+const routePath = (p) => p.replace(/\/+$/, '') || '/';
+const skipRoute = (p) => /\.(pdf|png|jpe?g|gif|svg|webp|avif|xml|txt|json|zip|mp4|webm|mp3|ico|css|js)$/i.test(p) || p.startsWith('/cdn-cgi/');
+let routes;
+if (typeof flags.routes === 'string' && !/^\d+$/.test(flags.routes)) routes = [...new Set(flags.routes.split(',').map((s) => routePath(s.trim())))];
+else {
+  const cap = flags.routes !== undefined && flags.routes !== true ? Math.max(1, Number(flags.routes) || 1) : 12;
+  const found = [routePath(home.pathname)];
+  const add = (u) => { try { const x = new URL(u, home); if (/^https?:$/.test(x.protocol) && hostOf(x.host) === hostOf(home.host) && !skipRoute(x.pathname) && !found.includes(routePath(x.pathname))) found.push(routePath(x.pathname)); } catch { /* not a URL */ } };
+  for (const h of linkHrefs) add(h);
+  const sitemap = await fetch(new URL('/sitemap.xml', home), { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' }, signal: AbortSignal.timeout(15000) }).then((r) => (r.ok ? r.text() : ''), () => '');
+  for (const m of sitemap.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)) add(m[1]);
+  if (found.length > cap) console.log(`routes: ${found.length} found, the first ${cap} captured (--routes <n> for more): not captured ${found.slice(cap).join(', ')}`);
+  routes = found.slice(0, cap);
+}
+const slugOf = (p) => (p === routePath(home.pathname) ? '' : p.replace(/^\//, '').replace(/\//g, '__').replace(/[^a-z0-9_-]/gi, '_') || 'index');
+// one document for every address, or separate documents: the raw HTML of each route (nonces aside)
+const rawOf = (p) => fetch(new URL(p, home), { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', 'accept-language': asked.extraHTTPHeaders['accept-language'] }, signal: AbortSignal.timeout(20000) })
+  .then((r) => r.text(), () => null).then((t) => (t === null ? null : crypto.createHash('sha1').update(t.replace(/nonce="[^"]*"/g, '')).digest('hex')));
+const homeDoc = await rawOf(routePath(home.pathname));
+const routeInfo = [];
+for (const p of routes) {
+  const doc = p === routePath(home.pathname) ? homeDoc : await rawOf(p);
+  routeInfo.push({ path: p, slug: slugOf(p), dir: slugOf(p) ? `reference/routes/${slugOf(p)}` : 'reference', sameDocument: Boolean(doc && doc === homeDoc) });
+}
+const appKind = routeInfo.length < 2 ? 'single page' : routeInfo.every((r) => r.sameDocument) ? 'single-page app' : 'pages';
+const others = routeInfo.filter((r) => r.slug);
+const routeScenarios = []; // what a visitor operates on each other route
+if (others.length) {
+  const jobs = others.flatMap((r) => SCORED.map((vp) => ({ r, vp })));
+  const browser3 = await openBrowser(flags.cdp);
+  try {
+    await Promise.all(Array.from({ length: 3 }, async () => {
+      for (let job = jobs.shift(); job; job = jobs.shift()) {
+        const { r, vp } = job;
+        const dir = path.join(root, r.dir);
+        await fs.mkdir(dir, { recursive: true });
+        const { context, page } = await newPage(browser3, vp, asked);
+        // a separate page (its own document): its assets and its rendered HTML too, at desktop, for its own mirror
+        const ownPage = !r.sameDocument && vp.name === 'desktop';
+        if (ownPage) page.on('response', recordAsset);
+        try {
+          await page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
+          await settle(page, hide);
+          if (ownPage) await fs.writeFile(path.join(dir, 'rendered.html'), await page.evaluate(serializeInPage));
+          let shot = await page.screenshot({ fullPage: true });
+          for (let tries = 0; tries < 3; tries++) {
+            await page.waitForTimeout(2000);
+            const again = await page.screenshot({ fullPage: true });
+            const same = again.equals(shot);
+            shot = again;
+            if (same) break;
+          }
+          await fs.writeFile(path.join(dir, `${vp.name}.png`), shot);
+          const sections = await sectionsOf(page);
+          await fs.writeFile(path.join(dir, `${vp.name}.sections.json`), JSON.stringify(sections, null, 2));
+          (r.viewports ||= []).push({ viewport: vp.name, width: vp.width, height: vp.height, ...(vp.heldOut ? { heldOut: true } : {}), pageHeight: await page.evaluate(() => document.documentElement.scrollHeight), sections: sections.length });
+          // what a visitor operates on this route (a case study's links, a view's own carousel), started from it
+          if (!vp.heldOut) {
+            const top = await page.evaluate(() => scrollY);
+            await page.evaluate(() => scrollTo(0, 0));
+            routeScenarios.push(...(await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 16]).catch(() => [])).map((s) => ({ ...s, path: r.path, name: `${r.path}: ${s.name}` })));
+            await page.evaluate((y) => scrollTo(0, y), top);
+          }
+          await mask(page);
+          await page.screenshot({ path: path.join(dir, `${vp.name}.mask.png`), fullPage: true });
+        } catch (e) { console.warn(`WARNING route ${r.path} at ${vp.name} not captured: ${e.message.split('\n')[0]}`); }
+        finally { await context.close(); }
+      }
+    }));
+  } finally {
+    if (!flags.cdp) await browser3.close();
+  }
+}
+// a route's scenarios join the captured page's, except links the captured page already goes to at that size (the
+// same sidebar on every route would otherwise draft the same navigation once per route)
+const homeNav = new Set(autoScenarios.filter((s) => s.navigation).map((s) => `${s.viewport}:${s.name.replace(/^go to (\S+).*/, '$1')}`));
+for (const s of routeScenarios) {
+  const target = s.navigation ? s.name.replace(/^.*: go to (\S+).*/, '$1') : null;
+  if (target && (homeNav.has(`${s.viewport}:${target}`) || target === routePath(home.pathname))) continue;
+  if (target) homeNav.add(`${s.viewport}:${target}`);
+  autoScenarios.push(s);
+}
+console.log(`routes: ${routeInfo.length} (${appKind}): ${routeInfo.map((r) => r.path).join(', ')}${others.length ? `; each captured at ${SCORED.length} sizes in reference/routes/` : ''}`);
 
 // The site's own breakpoints (its @media width queries) and extra sizes inside every range they make: inline styles
 // read there let the seed fit each value a script set as a function of the viewport (a·vw + b·vh + c) per range, or
@@ -281,8 +338,28 @@ await fs.writeFile(path.join(ref, 'interactions.auto.json'), JSON.stringify(auto
 console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
+// Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
+// with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.
+const ownPages = routeInfo.filter((r) => r.slug && !r.sameDocument);
+for (const r of ownPages) {
+  const rendered = path.join(root, r.dir, 'rendered.html');
+  if (!(await fs.stat(rendered).catch(() => null))) { console.warn(`WARNING ${r.path}: no rendered page captured, not mirrored`); continue; }
+  const pageUrl = new URL(r.path, home).href;
+  const note = mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.";
+  const mirrorDir = path.join(ref, 'mirror');
+  let out = await renderMirror(manifest, pageUrl, note, mirrorDir, rendered);
+  const missing = findRemoteMedia(out);
+  if (missing.length && (await fetchMissing(missing, manifest, pageUrl))) out = await renderMirror(manifest, pageUrl, note, mirrorDir, rendered);
+  for (const [file, css] of out.css) await fs.writeFile(path.join(mirrorDir, 'css', file), css);
+  await fs.mkdir(path.join(mirrorDir, 'routes'), { recursive: true });
+  await fs.writeFile(path.join(mirrorDir, 'routes', `${r.slug}.html`), out.html);
+}
+if (ownPages.length) {
+  await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
+  console.log(`mirror: ${ownPages.length} separate page(s) mirrored in reference/mirror/routes/ (${ownPages.map((r) => r.path).join(', ')})`);
+}
 console.table(summary);
 console.log(`${manifest.length} assets saved. Reference: ${path.relative(process.cwd(), ref)}, mirror in reference/mirror${mode === 'exact' ? ` (exact mode, authorised by: ${permission})` : ''}`);
 
@@ -312,7 +389,7 @@ async function buildMirror(manifest, url, note) {
   console.log(`mirror: reference/mirror/index.html (${manifest.length} local assets${left.length ? `, ${left.length} remote media left: ${left.slice(0, 3).join(', ')}` : ''})`);
 }
 
-async function renderMirror(manifest, url, note, mirror) {
+async function renderMirror(manifest, url, note, mirror, renderedFile = path.join(ref, 'rendered.html')) {
   const byUrl = new Map(manifest.map((m) => [m.url.split('#')[0], m]));
   const abs = (u, base) => { try { return new URL(u.trim().replace(/^['"]|['"]$/g, '').replaceAll('&amp;', '&'), base).href.split('#')[0]; } catch { return null; } };
   const cssName = (m) => path.basename(m.file);
@@ -335,7 +412,7 @@ async function renderMirror(manifest, url, note, mirror) {
     if (text !== null) css.set(cssName(m), rewriteCssUrls(text, m.url, path.join(mirror, 'css')));
   }
 
-  let html = await fs.readFile(path.join(ref, 'rendered.html'), 'utf8');
+  let html = await fs.readFile(renderedFile, 'utf8');
   html = html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<script\b[^>]*\/>/gi, '')
@@ -504,4 +581,49 @@ function sizesForFit(breakpoints) {
   // would have one point at most on its width side. Two make it checkable (see fitCover in viewport-fit.mjs).
   for (const [w, h] of [[2400, 760], [2200, 900]]) if (!taken.has(`${w}x${h}`)) { taken.add(`${w}x${h}`); out.push({ width: w, height: h }); }
   return out;
+}
+
+// The rendered page as HTML, for the mirror: view-mounted content restored, open shadow roots as declarative shadow
+// DOM, and none of trueclone's own measuring aids. Used for the captured page and for every separate page of the site.
+function serializeInPage() {
+  // restore view-mounted content (see above): only elements that are empty again now
+  const restore = [];
+  let i = 0;
+  for (const [el, best] of window.__tcRich || []) {
+    if (!el.isConnected || el.getElementsByTagName('*').length > 0) continue;
+    el.setAttribute('data-tc-rich', String(i));
+    restore[i++] = best.html;
+  }
+  // open shadow roots (web components, a Webflow code island) are not part of outerHTML: each becomes a
+  // declarative <template shadowrootmode="open"> inside its host, which the browser turns back into a shadow
+  // root while parsing, no script needed. Deepest first, so a host inside a shadow root is carried too.
+  // Constructed stylesheets (adoptedStyleSheets) are written out as a <style> at the top of the template.
+  const hosts = [];
+  (function find(scope) { for (const el of scope.querySelectorAll('*')) if (el.shadowRoot) { find(el.shadowRoot); hosts.push(el); } })(document);
+  for (const host of hosts) {
+    const t = document.createElement('template');
+    t.setAttribute('shadowrootmode', 'open');
+    t.setAttribute('shadowrootserializable', '');
+    const adopted = (host.shadowRoot.adoptedStyleSheets || []).map((s) => { try { return [...s.cssRules].map((r) => r.cssText).join('\n'); } catch { return ''; } }).filter(Boolean);
+    if (adopted.length) { const st = document.createElement('style'); st.textContent = adopted.join('\n'); t.content.appendChild(st); }
+    for (const n of host.shadowRoot.childNodes) t.content.appendChild(n.cloneNode(true));
+    host.prepend(t);
+    host.setAttribute('data-tc-shadow', '');
+  }
+  if (hosts.length) console.log(`tc-shadow: serialised ${hosts.length} open shadow root(s) as declarative shadow DOM`);
+  const doc = document.documentElement.cloneNode(true);
+  for (const el of document.querySelectorAll('[data-tc-rich]')) el.removeAttribute('data-tc-rich');
+  for (const el of doc.querySelectorAll('[data-tc-rich]')) {
+    el.innerHTML = restore[Number(el.getAttribute('data-tc-rich'))];
+    el.removeAttribute('data-tc-rich');
+    // marked for the layout diff: a full-page still can't show view-mounted content on either side, so its box
+    // is excluded there (the scroll-state check, with a real viewport, scores it)
+    el.setAttribute('data-tc-viewmount', '');
+  }
+  doc.querySelector('style[data-lab-freeze]')?.remove();
+  // the measuring aids never reach the saved page: the app-shell unroll (lib.mjs unrollInPage)
+  doc.querySelector('#tc-unroll')?.remove();
+  for (const el of doc.querySelectorAll('[data-tc-unroll]')) el.removeAttribute('data-tc-unroll');
+  console.log(`tc-rich: restored ${restore.length} view-mounted element(s)`);
+  return '<!DOCTYPE html>\n' + doc.outerHTML;
 }
