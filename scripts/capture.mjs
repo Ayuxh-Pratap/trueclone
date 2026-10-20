@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 import { detectInPage } from './interactions-auto.mjs';
 
@@ -142,6 +142,7 @@ let finalUrl = null; // where the page ended up, when that is not the URL asked 
 let linkHrefs = []; // the page's links, for the routes
 let overlaysAtLoad = []; // dialogs over the page at load that were not hidden (see the warning below)
 let canvasApp = null; // a full-window canvas driven by input, the document not scrolling (see below)
+let bundleDone = null; // own-bundle recording (exact mode, desktop)
 try {
   // the seed sizes and the held-out sizes: the held-out ones are shot and measured for scoring, nothing else
   for (const vp of SCORED) {
@@ -152,6 +153,9 @@ try {
     page.on('response', recordAsset);
     // desktop: the page's own scripts and what ran, saved as evidence (reference/scripts/)
     const finishEvidence = desktop ? await startScriptEvidence(page, url).catch(() => null) : null;
+    // exact mode, desktop: everything the page loads, at its own address (kept only for a canvas app, or --bundle:
+    // the clone then runs the site's own code; see lib.mjs recordBundle)
+    if (desktop && mode === 'exact') { await fs.rm(path.join(ref, 'bundle'), { recursive: true, force: true }); bundleDone = recordBundle(page, ref); }
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
     if (desktop) {
       const norm = (u) => { const x = new URL(u); return `${x.host.replace(/^www\./, '')}${x.pathname.replace(/\/$/, '')}`; };
@@ -229,7 +233,7 @@ try {
         if (!c) return null;
         return { canvas: `canvas${c.id ? `#${c.id}` : ''}${c.getAttribute('data-engine') ? `[data-engine="${c.getAttribute('data-engine')}"]` : ''}`, engine: c.getAttribute('data-engine') || (window.__THREE__ ? `three.js r${window.__THREE__}` : null), bodyOverflow: getComputedStyle(document.body).overflow };
       }).catch(() => null);
-      if (canvasApp) console.warn(`WARNING this page is a canvas app: ${canvasApp.canvas}${canvasApp.engine ? ` (${canvasApp.engine})` : ''} fills the window and the page does not scroll; what a visitor sees is drawn by the site's code from wheel, touch and pointer input. trueclone 0.5 clones document sites: the checks would measure one frame. See the status step.`);
+      if (canvasApp) console.warn(`WARNING this page is a canvas app: ${canvasApp.canvas}${canvasApp.engine ? ` (${canvasApp.engine})` : ''} fills the window and the page does not scroll; what a visitor sees is drawn by the site's code from wheel, touch and pointer input. It takes the app path: its states are the checkpoints of a journey (status names the steps, journey --draft first)${mode === 'exact' ? '; exact mode keeps the site\'s own bundle for the clone' : '; template mode: the scenes are ported'}.`);
     }
     // every link on the page, hidden views' included: the site's routes are found from them (and sitemap.xml)
     if (desktop) linkHrefs = await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => []);
@@ -278,6 +282,7 @@ try {
     await mask(page);
     await page.screenshot({ path: path.join(ref, `${vp.name}.mask.png`), fullPage: true });
     summary.push({ viewport: vp.name, width: vp.width, height: vp.height, ...(vp.heldOut ? { heldOut: true } : {}), pageHeight: height, sections: sections.length });
+    if (desktop && bundleDone) await bundleDone();
     await context.close(); // flushes the HAR
   }
 } finally {
@@ -468,7 +473,12 @@ await fs.writeFile(path.join(ref, 'interactions.auto.json'), JSON.stringify(auto
 console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
+// The own-bundle recording is kept for a canvas app in exact mode (or --bundle): the clone runs the site's own code
+// on its own files (the owner's permission covers their code). Any other capture drops it: a document is rebuilt.
+const ownBundle = mode === 'exact' && (Boolean(canvasApp) || Boolean(flags.bundle)) && await fs.stat(path.join(ref, 'bundle', 'manifest.json')).then(() => true, () => false);
+if (!ownBundle) await fs.rm(path.join(ref, 'bundle'), { recursive: true, force: true });
+else console.log(`own bundle: ${Object.keys(JSON.parse(await fs.readFile(path.join(ref, 'bundle', 'manifest.json'), 'utf8')).entries).length} files the app loaded, kept in reference/bundle/ (exact mode: the clone runs the site's own code)`);
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
 // with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.

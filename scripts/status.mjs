@@ -44,13 +44,13 @@ const next = (cmd, why, then = []) => {
 // ---- 1. capture and what it reads ----
 const meta = await json('reference/meta.json');
 if (!meta) next(T(`capture <url> ${name}`), 'nothing captured yet (add --mode exact --permission "<owner>" only with the owner\'s permission)');
-// A canvas app (capture: meta.canvasApp) is not a document: the seed holds a loading screen and every scroll measure
-// sees one frame, so the numbers would look good while the clone does not. 0.5 says so and stops, unless the user
-// asked for a partial clone anyway (Findings says "canvas app: partial").
-if (meta.canvasApp && !/canvas app:\s*partial/i.test(await text('notes.md'))) {
-  console.log(`trueclone status: ${name}\n\nThis site is a canvas app: ${meta.canvasApp.canvas}${meta.canvasApp.engine ? ` (${meta.canvasApp.engine})` : ''} fills the window, the page does not scroll, and the site's own code draws every state from wheel, touch and pointer input.\ntrueclone 0.5 clones document sites (sections, scroll, DOM): its checks would measure a single frame here and read high while the clone shows a loading screen. App mode (input-driven states, recorded gestures, the site's own bundle in exact mode) is the next release.\nTell the user this. To build a partial clone anyway (the shell, the first scene ported by hand), they can ask for it: write "- canvas app: partial (the user asked for it)" under ## Findings in notes.md and run status again.`);
-  process.exit(4);
-}
+// App mode: a canvas app (capture: meta.canvasApp) is not a document. Its states are the checkpoints of a journey
+// (journey.json: the input a visitor makes, gates included), read on the reference and scored on the clone. In exact
+// mode with the owner's permission the clone is the site's own bundle (meta.bundle: nothing to port); in template mode
+// the agent ports the scenes stage by stage from the recorded scene graph, shaders and the site's code.
+const app = Boolean(meta.canvasApp);
+const ownBundle = Boolean(meta.bundle);
+if (app && !(await stat('journey.json'))) next(T(`journey ${name} --draft`), `this site is a canvas app (${meta.canvasApp.canvas}${meta.canvasApp.engine ? `, ${meta.canvasApp.engine}` : ''}): a visitor reaches its states by input (wheel, touch, a gesture, holding a button), not by scrolling a page; the draft finds that journey on the live site, gates included`, ['then read journey.json: every checkpoint a state you saw on the live site; a gate the draft could not pass, write by hand (the steps are listed at the top of scripts/journey.mjs)']);
 // a dialog over the page at load (capture's warning, meta.overlays): every check would compare the clone with it, so
 // it is hidden by a re-capture first; one a visitor always sees stays when Findings names it (and why)
 const notesNow = await text('notes.md');
@@ -58,7 +58,10 @@ const overlays = (meta.overlays || []).filter((o) => !notesNow.includes(o.sel));
 if (overlays.length) next(T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${meta.permission}"` : ''}${meta.routes?.length === 1 ? ' --routes 1' : ''} --hide "${[...(meta.hide || []), ...overlays.map((o) => o.sel)].join(',')}"`), `the capture saw ${overlays.map((o) => `\`${o.sel}\` (${o.share}% of the window)`).join(', ')} over the page at load: hidden, every check compares the page itself. If visitors always see it, say so under ## Findings in notes.md naming it, and status moves on`);
 done.push('capture');
 const mode = meta.mode || 'template';
-const reads = [
+const reads = app ? [
+  [`reference/motion.desktop.json`, `motion ${name}`, 'the animation runtime (GSAP, three.js)'],
+  ['reference/journey/journey.json', `journey ${name}`, 'the reference\'s checkpoints along the journey (frames, the three.js scene, its shaders)'],
+] : [
   ['reference/states/desktop.summary.json', `states ${name}`, 'the live scroll states at every size'],
   [`reference/motion.desktop.json`, `motion ${name}`, 'the animation runtime (triggers, tweens, Lenis)'],
   ['reference/desktop.spec.json', `spec ${name}`, 'measured boxes and the typography'],
@@ -73,8 +76,10 @@ for (const [f, cmd, why] of reads) {
   if (!st) missing.push([cmd, why]);
   else if (st.mtimeMs < capturedAt - 1000) missing.push([cmd, `${why.replace(/^the /, 'the ')} (read before the current capture of ${meta.capturedAt.slice(0, 16).replace('T', ' ')})`]);
 }
+// the reference journey read again when journey.json changed after it
+if (app && !missing.length) { const j = await stat('journey.json'), r = await stat('reference/journey/journey.json'); if (j && r && j.mtimeMs > r.mtimeMs + 1000) missing.push([`journey ${name}`, 'journey.json changed after the reference journey was read']); }
 // the scroll states of every other route too: a read that stopped half-way (a slow route) is not done
-if (!missing.length) {
+if (!missing.length && !app) {
   const routesWithoutStates = [];
   for (const r of (meta.routes || []).filter((x) => x.slug)) if (!(await stat(`${r.dir}/states/desktop.summary.json`))) routesWithoutStates.push(r.path);
   if (routesWithoutStates.length) missing.push([`states ${name}`, `the scroll states of ${routesWithoutStates.slice(0, 3).join(', ')}${routesWithoutStates.length > 3 ? '…' : ''} are missing (the read stopped before them)`]);
@@ -85,16 +90,19 @@ done.push('reads');
 // ---- 2. design and seed (each re-run when its inputs are newer) ----
 const spec = await stat('reference/desktop.spec.json');
 const tokens = await stat('design-tokens.json');
-if (!tokens || !(await stat('DESIGN.md'))) next(T(`design ${name}`), 'no design system drafted yet (DESIGN.md, globals.css)');
+// (a canvas app has no document typography to draft a design system from: its look is the scene)
+if (!app && (!tokens || !(await stat('DESIGN.md')))) next(T(`design ${name}`), 'no design system drafted yet (DESIGN.md, globals.css)');
 done.push('design');
 const seeded = await stat('clone/index.html');
 const seedInputs = await Promise.all(['reference/reveals.desktop.json', 'reference/widgets.desktop.json', 'reference/inline-styles.json'].map(stat));
-if (!seeded) next(T(`seed ${name}`), 'no clone yet');
+if (!seeded) next(T(`seed ${name}`), ownBundle ? 'no clone yet: the seed builds it from the site\'s own bundle (exact mode)' : 'no clone yet');
+if (ownBundle && seeded && (await stat('reference/bundle/manifest.json'))?.mtimeMs > seeded.mtimeMs + 1000) next(T(`seed ${name}`), 'the reference journey recorded more of the site\'s files since the clone was built');
 if (seedInputs.some((s) => s && s.mtimeMs > seeded.mtimeMs + 1000)) next(T(`seed ${name} --force`), 'reveals, widgets or the capture are newer than the clone\'s markup (clone/script.js and clone/patches/ are kept)');
 done.push('seed');
 
 // ---- 3. a brief per section, behaviours written from the site's code ----
-const sections = await json('reference/desktop.sections.json', []);
+// (a canvas app has no sections: its stages are the journey's checkpoints, and an own-bundle clone has nothing to port)
+const sections = app ? [] : await json('reference/desktop.sections.json', []);
 const briefs = [];
 for (let i = 1; i <= sections.length; i++) if (await stat(`compare/brief/desktop-${i}.md`)) briefs.push(i);
 const unbriefed = sections.map((_, i) => i + 1).filter((i) => !briefs.includes(i));
@@ -105,14 +113,15 @@ const sectionOf = (h) => (notes.split(/^## /m).find((s) => s.toLowerCase().start
 const scripts = await json('reference/scripts/scripts.json', { listeners: [] });
 const behaviours = sectionOf('Behaviours');
 const cites = (behaviours.match(/[\w.-]+\.js:\d+/g) || []).length;
-if (!behaviours || (scripts.listeners.length && !cites)) next('write ## Behaviours in notes.md', 'one line per behaviour (element, trigger, property, range, timing) with the file:line of the rule in reference/scripts/ (from the briefs); this is the plan script.js is written from', [`${T(`brief ${name} <n>`)} for any section you have not read`]);
-if (!sectionOf('Stack')) next('write ## Stack in notes.md', 'what the site is built with (reference/motion.desktop.md lists the libraries and where they live)');
+if (app && !ownBundle && !behaviours) next('write ## Behaviours in notes.md, one stage of the journey at a time', 'each checkpoint of journey.json (compare its frame in reference/journey/<size>/) and what draws it: the scene objects (reference/scene/<checkpoint>.json), the shader programs (reference/shaders/INDEX.md), the input that moves it, and the file:line of the site\'s code that builds it (reference/scripts/INDEX.md)', [`${T(`vendor ${name}`)} (three.js at the site's revision)`]);
+if (!ownBundle && !app && (!behaviours || (scripts.listeners.length && !cites))) next('write ## Behaviours in notes.md', 'one line per behaviour (element, trigger, property, range, timing) with the file:line of the rule in reference/scripts/ (from the briefs); this is the plan script.js is written from', [`${T(`brief ${name} <n>`)} for any section you have not read`]);
+if (!ownBundle && !sectionOf('Stack')) next('write ## Stack in notes.md', 'what the site is built with (reference/motion.desktop.md lists the libraries and where they live)');
 done.push(`behaviours (${cites} cited)`);
 
 // ---- 4. script.js ----
 const script = await text('clone/script.js');
 const ownLines = script.split('\n').filter((l) => l.trim() && !l.trim().startsWith('//')).length;
-if (ownLines < 5 && (behaviours.split('\n').filter((l) => l.trim().startsWith('-')).length > 0)) next('write clone/script.js', 'the behaviours in notes.md are not built yet: one scene at a time, each ported from its file:line, computed from the viewport; tcOwn(\'<selector>\') first for anything the recorded players drive', [T(`score ${name} --only layout,states --viewport desktop`)]);
+if (!ownBundle && ownLines < 5 && (behaviours.split('\n').filter((l) => l.trim().startsWith('-')).length > 0)) next('write clone/script.js', app ? 'the stages in notes.md are not built yet: the renderer, then one stage at a time (its scene, its shaders, the input that moves it), ported from the site\'s code, sized from the window; the captured canvas gives way to yours' : 'the behaviours in notes.md are not built yet: one scene at a time, each ported from its file:line, computed from the viewport; tcOwn(\'<selector>\') first for anything the recorded players drive', [T(app ? `score ${name} --only journey` : `score ${name} --only layout,states --viewport desktop`)]);
 done.push('script.js');
 
 // ---- 5. scores, fresh ----
@@ -123,7 +132,7 @@ if (!verdict) next(T(`score ${name}`), 'not scored yet: every check at every siz
 if (Date.parse(verdict.at) < changed - 1000) {
   if (failingChecks.length) {
     // what each failing check is measured by (routes by layout and states; notes and coverage are read, not measured)
-    const keys = [...new Set(failingChecks.flatMap((c) => ({ layout: ['layout'], scroll: ['states'], canvases: ['states'], routes: ['layout', 'states'], interactions: ['interact'], hovers: ['hovers'], detail: ['detail'], load: ['load'], motion: ['curves'], notes: [], coverage: [] }[c.key] || [c.key])))];
+    const keys = [...new Set(failingChecks.flatMap((c) => ({ journey: ['journey'], layout: ['layout'], scroll: ['states'], canvases: ['states'], routes: ['layout', 'states'], interactions: ['interact'], hovers: ['hovers'], detail: ['detail'], load: ['load'], motion: ['curves'], notes: [], coverage: [] }[c.key] || [c.key])))];
     // test what was built: a change to the clone's behaviour is checked by operating it (the interaction scenarios),
     // whatever else is re-measured, so a dead accordion or a drag that sticks shows up the moment it is written
     if (!keys.includes('interact') && (await stat('reference/interactions.auto.json') || await stat('interactions.json'))) keys.push('interact');
@@ -161,7 +170,7 @@ const sectionOfY = async (vp, y) => {
   const i = secs.findIndex((s) => y >= s.y && y < s.y + s.height);
   return i < 0 ? null : { n: i + 1, label: String(secs[i].label || secs[i].tag || '').slice(0, 40) };
 };
-const order = ['layout', 'coverage', 'scroll', 'canvases', 'routes', 'interactions', 'load', 'detail', 'hovers', 'motion'];
+const order = ['journey', 'layout', 'coverage', 'scroll', 'canvases', 'routes', 'interactions', 'load', 'detail', 'hovers', 'motion'];
 const heldOut = (f) => ['laptop', 'wide'].includes(f.viewport);
 const sorted = failingChecks.slice().sort((a, b) => (order.indexOf(a.key) - order.indexOf(b.key)) || (Number(b.failing.some(heldOut)) - Number(a.failing.some(heldOut))));
 const reviewCheck = (verdict.checks || []).find((c) => c.key === 'review');
@@ -179,7 +188,8 @@ if (layoutCheck) {
 {
   // once the layout holds (or its step is set aside), the clone is looked at by eye, at every size, not only once every
   // number passes: what the eye finds comes first (see above)
-  for (const size of ['wide', 'laptop', 'desktop', 'tablet', 'mobile']) if (!(await stat(`compare/review/${size}/frames.json`))) add(`review-size:${size}`, null, () => next(T(`review ${name} --size ${size}`), `no side-by-side frames at ${size} yet: the clone is judged by eye at every size`, ['look at every sheet and give every frame a verdict under ## Review in notes.md, with its token from index.md ("- <frame> <size> [<token>]: same" or "... : differs: <what>")']), false);
+  // (a canvas app's frames are its journey's checkpoints, shot by every score: compare/review/journey-<size>/)
+  if (!app) for (const size of ['wide', 'laptop', 'desktop', 'tablet', 'mobile']) if (!(await stat(`compare/review/${size}/frames.json`))) add(`review-size:${size}`, null, () => next(T(`review ${name} --size ${size}`), `no side-by-side frames at ${size} yet: the clone is judged by eye at every size`, ['look at every sheet and give every frame a verdict under ## Review in notes.md, with its token from index.md ("- <frame> <size> [<token>]: same" or "... : differs: <what>")']), false);
   for (const r of (meta.routes || []).filter((x) => x.slug)) {
     for (const size of ['wide', 'mobile']) if (!(await stat(`compare/review/routes/${r.slug}/${size}/frames.json`))) add(`review-route:${r.slug}:${size}`, null, () => next(T(`review ${name} --route ${r.path} --size ${size}`), `route ${r.path} has not been looked at side by side at ${size}`, ['its frames are named "' + r.slug + '/<frame>": verdicts under ## Review as for the others']), false);
   }
@@ -194,6 +204,14 @@ for (const c of sorted.filter((x) => x.key !== 'layout')) {
     const w = (sv?.worst || []).slice().sort((a, b) => a.match - b.match)[0];
     const s = w ? await sectionOfY(vp, w.y) : null;
     add(`scroll:${vp}:${w?.y ?? ''}`, w?.match ?? f.value, () => next(T(`explain ${name} ${w?.y ?? 0} --viewport ${vp}`), `${c.check} at ${vp} is ${f.value}%${w ? `; the worst frame is y ${w.y} at ${w.match}%${s ? `, in section ${s.n} "${s.label}"` : ''}` : ''}: what a visitor sees there while scrolling`, [s ? T(`brief ${name} ${s.n} --viewport ${vp}`) : T(`brief ${name}`), `compare/states/ has that frame side by side; after the fix: ${T(`score ${name} --only states --viewport ${vp}`)}`]));
+  } else if (c.key === 'journey') {
+    // the worst checkpoint of the journey: its frames side by side, then what draws it
+    const rep = await json('compare/journey/report.json', { viewports: [] });
+    const w = (rep.viewports || []).map((v) => ({ vp: v.viewport, ...(v.worst || {}) })).filter((x) => x.name).sort((a, b) => a.match - b.match)[0];
+    const file = w ? `compare/review/journey-${w.vp}/${String(w.i).padStart(2, '0')}-${String(w.name).replace(/[^a-z0-9-]+/gi, '-').slice(0, 40)}.png` : null;
+    add(`journey:${w?.vp || ''}:${w?.name || ''}`, w?.match ?? f.value, () => next(w ? `make checkpoint "${w.name}" (${w.vp}) look like the reference: ${file}` : 'make the journey match the reference', ownBundle
+      ? `the site's own code shows something else here (${w?.match ?? '-'}%): a file it asked for was not recorded (a 404 in the browser console, compare/journey/), or it depends on what the bundle stubs (a backend answer, the time); look at the frame, then record the missing stage again with ${T(`journey ${name}`)} and ${T(`seed ${name}`)}`
+      : `${w?.match ?? '-'}% like the reference (canvas ${w?.canvas ?? '-'}%, pixels ${w?.pixels ?? '-'}%): the scene at this stage is reference/scene/ ${w ? `(the checkpoint's file)` : ''}, its programs reference/shaders/INDEX.md`, [`after the fix: ${T(`score ${name} --only journey`)}`]));
   } else if (c.key === 'canvases') {
     const w = (sv?.canvasWorst || []).slice().sort((a, b) => a.similarity - b.similarity)[0];
     const s = w ? await sectionOfY(vp, w.y) : null;

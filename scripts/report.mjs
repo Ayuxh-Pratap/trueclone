@@ -25,7 +25,9 @@ if (!meta) {
 }
 
 // Targets a clone has to meet (the same ones the skill gives the agent).
-const T = { layout: 98, states: 95, canvas: 90, motion: 95, detail: 95, hovers: 90, load: 95 };
+const T = { layout: 98, states: 95, canvas: 90, motion: 95, detail: 95, hovers: 90, load: 95, journey: 95 };
+// a canvas app's journey (journey.mjs): every checkpoint must reach this too, whatever the mean
+const JOURNEY_FLOOR = 80;
 // an accepted difference never covers a value below this, and needs evidence (a file it names that exists)
 const ACCEPT_FLOOR = 95;
 // the scroll-states gate on the worst single frame, besides the mean
@@ -61,7 +63,8 @@ const accepted = notesSection('Accepted differences');
 const reviewVerdicts = notesSection('Review');
 const reviewFrames = [];
 // the captured page's frames, and each other route's (compare/review/routes/<slug>/<size>, ids "about/03-section-2")
-for (const [dir, size] of ['wide', 'laptop', 'desktop', 'tablet', 'mobile'].flatMap((s) => [[`compare/review/${s}`, s], ...(meta.routes || []).filter((r) => r.slug).map((r) => [`compare/review/routes/${r.slug}/${s}`, s])])) {
+// and a canvas app's journey checkpoints (compare/review/journey-<size>, ids "journey/03-step-2")
+for (const [dir, size] of [...['wide', 'laptop', 'desktop', 'tablet', 'mobile'].flatMap((s) => [[`compare/review/${s}`, s], ...(meta.routes || []).filter((r) => r.slug).map((r) => [`compare/review/routes/${r.slug}/${s}`, s])]), ...(meta.canvasApp ? ['desktop', 'mobile'].map((s) => [`compare/review/journey-${s}`, s]) : [])]) {
   const fr = await read(`${dir}/frames.json`);
   for (const x of fr?.frames || []) {
     // "<frame> <size> [<token>]: <verdict>": the token names the picture judged (review writes it per frame); a frame
@@ -127,6 +130,14 @@ const all = (vals, test) => (present(vals).length ? present(vals).every((v) => t
 row(`Layout (structure)`, L, (x) => x >= T.layout, `target ≥ ${T.layout}%; text and media masked`);
 if (meta.mode === 'exact') row('Layout (real pixels)', V, (x) => x >= T.layout, 'exact mode: same text and media');
 const frameNotes = VPS.map((v) => [v, worstFrame(v)]).filter(([, f]) => f && f.match < FRAME_FLOOR).map(([v, f]) => `${v} y ${f.y}: ${f.match}%`);
+// A canvas app's states: the checkpoints of its journey, both sides through the same input (journey.mjs)
+const journeyRep = await read(`${COMPARE}/journey/report.json`);
+if (journeyRep) {
+  const J = Object.fromEntries((journeyRep.viewports || []).map((v) => [v.viewport, v.match]));
+  const worstCp = (v) => (journeyRep.viewports || []).find((x) => x.viewport === v)?.worst || null;
+  const lows = VPS.map((v) => [v, worstCp(v)]).filter(([, w]) => w && w.match < JOURNEY_FLOOR).map(([v, w]) => `${v} ${w.name}: ${w.match}%`);
+  row('Journey', J, (x, v) => x >= T.journey && !((worstCp(v)?.match ?? 100) < JOURNEY_FLOOR), `target ≥ ${T.journey}% and no checkpoint below ${JOURNEY_FLOOR}%: both sides through the same input (journey.json), ${journeyRep.mode === 'exact' ? 'by pixels and by what the canvas draws' : 'by what the canvas draws (template mode)'}${lows.length ? `; checkpoints below: ${lows.join(', ')}` : ''}`);
+}
 row('Scroll states', S, (x, v) => x >= T.states && !((worstFrame(v)?.match ?? 100) < FRAME_FLOOR), `target ≥ ${T.states}% and no frame below ${FRAME_FLOOR}%${frameNotes.length ? `; frames below: ${frameNotes.slice(0, 4).join(', ')}` : ''}`);
 const CV = byVp(states, 'canvas');
 // as for the scroll states, a mean hides a scene that is wrong at one point of the page (a 96% average with a frame at
@@ -150,9 +161,11 @@ if (reviewFrames.length) {
 const behaviours = notesSection('Behaviours').join('\n');
 const cites = (behaviours.match(/[\w.-]+\.js:\d+/g) || []).length;
 const siteListeners = ((await read('reference/scripts/scripts.json'))?.listeners || []).length;
-const notesOk = Boolean(behaviours) && (!siteListeners || cites > 0);
-rows.push(`| Notes (behaviours) | ${cites} cited | – | – | – | – | ${notesOk ? 'pass' : '**below target**'} | ${notesOk ? 'notes.md Behaviours tie each behaviour to the site\'s code' : behaviours ? 'notes.md Behaviours cite no file:line of the site\'s code (trueclone brief lists them per section)' : 'notes.md has no Behaviours yet (trueclone brief <name> <n>, one section at a time)'} |`);
-checks.push({ check: 'Notes (behaviours)', key: 'notes', pass: notesOk, failing: notesOk ? [] : [{ viewport: null, value: cites }] });
+// an own-bundle clone (app mode, exact) runs the site's own code: there is no plan of behaviours to write, nothing ported
+const ownBundle = Boolean(meta.bundle);
+const notesOk = ownBundle || (Boolean(behaviours) && (!siteListeners || cites > 0));
+if (!ownBundle) rows.push(`| Notes (behaviours) | ${cites} cited | – | – | – | – | ${notesOk ? 'pass' : '**below target**'} | ${notesOk ? 'notes.md Behaviours tie each behaviour to the site\'s code' : behaviours ? 'notes.md Behaviours cite no file:line of the site\'s code (trueclone brief lists them per section)' : 'notes.md has no Behaviours yet (trueclone brief <name> <n>, one section at a time)'} |`);
+if (!ownBundle) checks.push({ check: 'Notes (behaviours)', key: 'notes', pass: notesOk, failing: notesOk ? [] : [{ viewport: null, value: cites }] });
 // Coverage: nothing the site does is left out by estimate. Every script of the site's own that ran (not a library,
 // not tracking) is cited by name in Behaviours, or named under Findings with why it is not ported; every scroll curve
 // recorded on the reference is named the same way (by its class) or driven by script.js.
@@ -168,7 +181,7 @@ const ran = [...new Set([...own.slice().sort((a, b) => b.functionsRan - a.functi
 const uncitedScripts = ran.filter((s) => !covText.includes(s.file.replace(/\.js$/, '')));
 const curvesRec = ((await read('reference/reveals.desktop.json'))?.scrubs || []).filter((c) => c.cls);
 const uncitedCurves = curvesRec.filter((c) => { const k = String(c.cls).split('.')[0]; return k && !covText.includes(k) && !scriptJs.includes(k); });
-if (ran.length || curvesRec.length) {
+if (!ownBundle && (ran.length || curvesRec.length)) {
   const covOk = !uncitedScripts.length && !uncitedCurves.length;
   rows.push(`| Coverage (site code) | ${ran.length - uncitedScripts.length}/${ran.length} scripts, ${curvesRec.length - uncitedCurves.length}/${curvesRec.length} curves | – | – | – | – | ${covOk ? 'pass' : '**below target**'} | ${covOk ? 'every script of the site that ran and every recorded scroll curve is ported (cited in Behaviours or driven by script.js) or explained under Findings' : `not cited in notes.md (Behaviours, or Findings with why not): ${[...uncitedScripts.map((s) => s.file), ...uncitedCurves.map((c) => `curve .${String(c.cls).split('.')[0]}`)].slice(0, 6).join(', ')}${uncitedScripts.length + uncitedCurves.length > 6 ? '…' : ''}`} |`);
   checks.push({ check: 'Coverage (site code)', key: 'coverage', pass: covOk, failing: [...uncitedScripts.map((s) => ({ viewport: null, script: s.file })), ...uncitedCurves.map((c) => ({ viewport: null, curve: c.cls, path: c.path }))] });

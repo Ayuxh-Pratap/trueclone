@@ -30,6 +30,7 @@ const STEPS = {
   understand: ['understand.mjs', 'optional, rarely needed: REA code evidence -> reference/code.md (capture already saves every script, ranked, in reference/scripts/)'],
   reveals: ['reveals.mjs', 'record one-shot scroll reveals frame by frame, so seed can replay them (any library)'],
   widgets: ['widgets.mjs', 'record every tab and menu state by clicking it, so seed can replay them (template mode)'],
+  journey: ['journey.mjs', 'app mode (a canvas app): --draft finds the journey (gates, wheel, holds) on the live page; then the reference checkpoints (frames, three.js scene, shaders); --clone scores the clone through it'],
   reads: ['reads.mjs', 'every read of the live page the clone is built from (states, motion, spec, widgets side by side, then reveals alone); only the missing ones'],
   states: ['states.mjs', 'live scroll states at every scored size; --clone scores the rebuild step by step (canvases too)'],
   curves: ['curves.mjs', 'motion score: sampled property curves, reference vs clone (motion-map.json)'],
@@ -87,7 +88,7 @@ async function init() {
   await fs.copyFile(path.join(PKG, 'skill', 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
   // 2. AGENTS.md block for Codex, Cursor and other agents
   const agentsFile = path.join(cwd, 'AGENTS.md');
-  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first. Then capture, and loop: run \`npx trueclone status <name>\`, do exactly the step it names, run it again. Do not end your turn or ask whether to continue while \`status\` says work is left (only a real blocker stops you: write it under Findings in notes.md). Done is \`status\` reporting that every gate passes; \`sites/<name>/REPORT.md\` is the deliverable.\n<!-- trueclone:end -->\n`;
+  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first. Then capture, and loop: run \`npx trueclone status <name>\`, do exactly the step it names, run it again. Do not end your turn or ask whether to continue while \`status\` says work is left (only a real blocker stops you: write it under Findings in notes.md). Done is \`status\` exiting 0 (every gate passes) or 3 (every step left is set aside, each written under Findings); \`sites/<name>/REPORT.md\` is the deliverable.\n\nRunning it: the steps open Chrome (Playwright) and load the live site, so they need network access and permission to start a browser (in Codex: full access, network on). Capture, reads, scores and \`next --verify\` take minutes each: give commands a timeout of at least 15 minutes, and never stop one because it is quiet. Several clones may run at once: timing checks (load, reveals, the journey) wait for each other by themselves.\n<!-- trueclone:end -->\n`;
   let agents = (await exists(agentsFile)) ? await fs.readFile(agentsFile, 'utf8') : '';
   agents = agents.includes('<!-- trueclone:start -->') ? agents.replace(/<!-- trueclone:start -->[\s\S]*?<!-- trueclone:end -->\n?/, block) : `${agents}${agents && !agents.endsWith('\n\n') ? '\n' : ''}${block}`;
   await fs.writeFile(agentsFile, agents);

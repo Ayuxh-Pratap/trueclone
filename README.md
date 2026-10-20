@@ -76,6 +76,13 @@ URL ─► capture ─► understand ─► design system ─► seed ─► bui
 6. **Score and review** (`trueclone score`, `trueclone review`): layout, scroll states, canvases, motion curves, details, hovers (outcome, not just "something changed"), interactions (same end state), load sequence, at the build sizes and the held-out sizes; then the reference and the clone side by side, frame by frame, with a verdict for each.
 7. **Report**: `REPORT.md` with every check at every size, the review, what to fix first, and what was not copied.
 
+**Canvas apps** (one full-window WebGL canvas, a page that never scrolls, states reached by wheel, touch, gestures and
+holds, like why.zero.university) take an app path: `trueclone journey <name> --draft` finds the journey on the live
+page (gates the page names, such as "draw a zero", included), the reference checkpoints come with the three.js scene
+graph and every shader, and the clone is compared checkpoint by checkpoint at desktop and phone size. In exact mode,
+with the owner's permission, the clone runs the site's own recorded bundle offline: backend writes answered locally,
+tracking dropped, nothing fetched from the live site. Otherwise the agent ports the scenes.
+
 ## REA
 
 trueclone bundles [REA](https://github.com/morluto/rea) (Reverse Engineer Anything) for the rare part no script reading explains (a bundled physics rule, a shader, WASM): `npx trueclone rea --help`. It is not part of the standard flow: the site's scripts, saved and ranked by the capture, carry what the agent needs.
@@ -109,6 +116,7 @@ npx trueclone load <name>               # load sequence on both sides: settledne
 npx trueclone score <name> [--quick]    # every check, then REPORT.md (--only detail,load --viewport tablet after a fix; unchanged checks are kept)
 npx trueclone explain <name> <y>        # one place on the page: what every check saw there, plus a reference|clone|diff crop
 npx trueclone review <name> --size wide # reference and clone side by side at a held-out size: load, every section, hover
+npx trueclone journey <name> --draft    # canvas apps: find the journey (gates, wheel, holds); then `journey <name>` shoots the reference
 npx trueclone next <name> --verify      # Next.js + Tailwind + shadcn app, scored into REPORT.next.md
 npx trueclone rea <args>                # bundled REA, for the rare deep case
 npx trueclone help                      # every step
@@ -118,7 +126,7 @@ npx trueclone help                      # every step
 
 - **Server-side behaviour** is invisible from outside: databases, accounts, payments, search. trueclone rebuilds the client and lists every API call the original makes in the report.
 - A live site is never pixel-identical twice: rotating content, A/B tests and font hinting vary.
-- One page at a time today. Multi-page crawling with shared components is next.
+- A canvas app in template mode is ported by the agent, scene by scene: a large app (dozens of shaders) is long work, and the report says which stages are not there. An exact copy of one needs the owner's permission (its own bundle).
 - Developed and tested on Windows 11 with Chrome. macOS and Linux should work but aren't tested yet.
 
 ## Requirements

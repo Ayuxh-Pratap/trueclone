@@ -36,7 +36,16 @@ const withUrl = (args) => (url ? [...args, '--url', url] : args);
 const vpOnly = typeof flags.viewport === 'string' ? flags.viewport : null;
 const vpList = vpOnly ? [vpOnly] : ['desktop', 'tablet', 'mobile'];
 const only = typeof flags.only === 'string' ? flags.only.split(',').map((s) => s.trim()).filter(Boolean) : null;
-const allSteps = [
+// App mode (a canvas app, capture's meta.canvasApp): its states are the checkpoints of a journey (journey.mjs), not a
+// document's sections; the document checks (one screen's layout, scroll states of a page that does not scroll, styles
+// of a loader) would read high on nothing, so they are not run
+const appMode = Boolean((await fs.readFile(path.join(siteDir(name), 'reference', 'meta.json'), 'utf8').then(JSON.parse).catch(() => ({}))).canvasApp);
+const appSteps = [
+  { group: 1, label: 'journey', args: ['scripts/journey.mjs', name, '--clone', ...(url ? ['--url', url] : [])], pick: /journey \((\w+)\): ([\d.]+)%/g, unit: 'journey %' },
+  { group: 3, label: 'interact', args: withUrl(['scripts/interact.mjs', name, ...refresh]), pick: /│ \d+\s+│ '([^']+)'\s+│ ([\d.]+)/g, unit: 'interaction %', fail: /FAIL/g },
+  ...(flags.quick ? [] : [{ group: 4, label: 'load', args: withUrl(['scripts/load.mjs', name, ...(vpOnly ? ['--viewport', vpOnly] : []), ...refresh]), pick: /(\w+): load match ([\d.]+)%/g, unit: 'load %' }]),
+];
+const docSteps = [
   // first and alone: has the live page changed since the capture? (the live-measured checks are then marked stale)
   ...(flags.quick ? [] : [{ group: 0, label: 'drift', args: ['scripts/drift.mjs', name, ...(vpOnly ? ['--viewport', vpOnly] : [])], pick: /(\w+): live (\d+)px/g, unit: 'live px', live: true }]),
   { group: 1, label: 'layout', args: withUrl(['scripts/diff.mjs', name, '--structure']), pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g, unit: 'layout %' },
@@ -50,6 +59,7 @@ const allSteps = [
     { group: 4, label: 'load', args: withUrl(['scripts/load.mjs', name, ...(vpOnly ? ['--viewport', vpOnly] : []), ...refresh]), pick: /(\w+): load match ([\d.]+)%/g, unit: 'load %' },
   ]),
 ];
+const allSteps = appMode ? appSteps : docSteps;
 const steps = only ? allSteps.filter((st) => only.some((o) => st.label === o || st.label.startsWith(`${o} `))) : allSteps;
 if (!steps.length) {
   console.error(`--only matched no check; checks: ${[...new Set(allSteps.map((st) => st.label.split(' ')[0]))].join(', ')}`);
@@ -75,10 +85,10 @@ async function cloneHash() {
     }
   };
   await walk(path.join(root, 'clone'));
-  for (const f of ['interactions.json', 'motion-map.json']) h.update(`${f}:${await fs.readFile(path.join(root, f), 'utf8').catch(() => '')}\n`);
+  for (const f of ['interactions.json', 'motion-map.json', 'journey.json']) h.update(`${f}:${await fs.readFile(path.join(root, f), 'utf8').catch(() => '')}\n`);
   // reference measurements other steps produce (live scroll states, reveals, motion, cached probe reads) are inputs too
   for (const e of (await fs.readdir(path.join(root, 'reference'), { withFileTypes: true }).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (['assets', 'mirror', 'load', 'tiles'].includes(e.name)) continue;
+    if (['assets', 'mirror', 'load', 'tiles', 'bundle'].includes(e.name)) continue;
     const p = path.join(root, 'reference', e.name);
     if (e.isDirectory()) await walk(p); else { const st = await fs.stat(p); h.update(`reference/${e.name}:${st.size}:${Math.round(st.mtimeMs)}\n`); }
   }

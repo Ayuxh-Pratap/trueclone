@@ -310,6 +310,21 @@ if (flags.patches) {
   console.log(`patches re-applied onto the last seed (no re-seed): ${applied.join(', ') || 'none in clone/patches/'}`);
   process.exit(0);
 }
+// App mode with the site's own bundle (exact mode, a canvas app, capture kept reference/bundle/): the clone is the
+// site's own code on its recorded files (scripts/bundle.mjs), not a rebuilt document. Seeding again is safe: nothing
+// in it is the agent's (patches/ are kept).
+if (meta.bundle && !routePage) {
+  const { seedBundle } = await import('./bundle.mjs');
+  const r = await seedBundle(root, meta);
+  // notes.md: the review's verdicts, findings and accepted differences (nothing to plan: the code is the site's own)
+  const notesFile = path.join(root, 'notes.md');
+  if (!(await fs.stat(notesFile).then(() => true, () => false))) {
+    await fs.writeFile(notesFile, `# ${name}: clone notes\n\nReference: ${meta.url}. Mode: exact (permission: ${meta.permission}), app mode with the site's own bundle. Captured ${meta.capturedAt}.\nKeep every section; the report reads them back. One line per entry, no prose.\n\n## Review\n\n<!-- one line per journey frame of compare/review/journey-<size>/index.md, with its token: "- journey/03-step-2 desktop [token]: same" -->\n\n## Accepted differences\n\n<!-- "- <check> <size> <where>: <why>; evidence: <file>" -->\n\n## Findings\n\n<!-- what the bundle could not carry (a backend answer it stubs, a file never recorded), with evidence -->\n`);
+  }
+  console.log(`seeded ${path.relative(process.cwd(), clone)} from the site's own bundle: ${r.files} files from ${r.hosts} host(s), ${r.documents} document(s), served through clone/tc-sw.js (offline: tracking answered empty, writes never sent, anything not recorded a 404)`);
+  console.log(`next: npx trueclone status ${name}`);
+  process.exit(0);
+}
 const exists = await fs.stat(path.join(clone, 'index.html')).then(() => true, () => false);
 if (exists && !flags.force && !routePage) {
   console.error(`${path.relative(process.cwd(), clone)} already has an index.html: add --force to seed again (your script.js, patches/ and notes.md are kept), or --patches to only re-apply clone/patches/`);

@@ -38,8 +38,9 @@ by `status` (it says so) and the next one comes up; write what blocks the set-as
 Re-scoring an unchanged clone is not a try, and scripting re-scores to reach a set-aside is gaming the loop: never.
 
 **The loop ends only at exit 0 (every gate passes) or exit 3 (every step left is set aside: make sure each is in
-Findings, then hand over).** Exit 4 means the site is a canvas app 0.5 does not clone: tell the user what status
-printed and stop. Stopping anywhere else is an unfinished run, and your summary must say it is unfinished.
+Findings, then hand over).** Stopping anywhere else is an unfinished run, and your summary must say it is unfinished.
+A canvas app (one full-window canvas, a page that never scrolls) takes the app path: see Apps below; `status` switches
+by itself.
 
 **Your summary to the user states what the checks and the review show, nothing more.** Not "the accordions work"
 unless the interaction check passes for them; a number you have not re-measured since your last change is not a
@@ -153,6 +154,45 @@ The Next app is held to the clone within a point everywhere, including its own r
 site's stylesheets loaded as the browser loads them, `<template>`s and every file of the clone carried; a single-page
 app is served at every address, a site of separate pages gets one route per page); done when `REPORT.next.md` matches
 `REPORT.md` within a point. A difference only the app has is a tool defect: write it in Findings.
+
+## Apps (canvas experiences)
+
+Capture marks a site a canvas app (`meta.canvasApp`) when one canvas fills the window and the page never scrolls: a
+visitor reaches its states by input (wheel or touch moving a virtual scroll, a gesture gate such as "draw a zero", a
+hold button), not by scrolling. Its states are the **checkpoints of a journey**, and its checks are the journey (every
+checkpoint, desktop and phone, worst one ≥ 80, mean ≥ 95), interactions and load; the document checks do not apply.
+`status` walks it like any site: journey draft, reads, seed, the clone, scores, review, Next.
+
+**The journey** (`sites/<name>/journey.json`): `journey <name> --draft` finds it on the live page at desktop and phone
+size: it passes gates the page names in words (draw/trace → a circle, then an ellipse; hold → a press of 2.5 s;
+start/enter → a click), then turns the wheel (a swipe on the phone) until three turns change nothing, and writes a
+checkpoint at every new state. A scene that moves on its own is measured first, so only change beyond its own drift
+counts. **Read the draft against the live site**: every checkpoint a state you saw; a gate it could not pass, write by
+hand (steps: `checkpoint`, `wheel {dy}`, `gesture {shape|path, at, size}`, `hold {at, ms}`, `click`, `pointer`, `key`,
+`wait`; points are fractions of the window; `stepsByViewport.mobile` for the phone). Passing a gate means making the
+input it asks for, never a debug route or a URL parameter the site did not give visitors. Both sides run with the same
+seeded `Math.random`.
+
+`journey <name>` (part of `reads`) shoots the reference's checkpoints and records what the app is made of:
+`reference/scene/*.json` (the three.js scene graph per checkpoint: objects, geometry, materials, cameras) and
+`reference/shaders/` (every vertex and fragment shader, `INDEX.md`). `score <name> --only journey` compares the clone.
+
+**Two ways to the clone** (decide with the user before the seed):
+- **Own bundle** (exact mode only, and only when the owner allowed copying their site: `--mode exact --permission
+  "<owner>"`; on by itself for a canvas app, `--bundle` for any other page). The clone runs the site's own code and
+  files, recorded at capture and along the journey, offline: every recorded address points at the local copy, writes
+  to a backend are answered without being sent, tracking is dropped, anything never recorded is a 404 (never the live
+  site). Your work is the review: a checkpoint that differs is usually a file the journey never loaded (re-run
+  `journey <name>` on the reference, then `seed`), or a call the site makes that needs a recorded answer (Findings).
+- **Port** (template mode, or exact without the bundle): you write the app in `clone/script.js`, stage by stage, in
+  journey order: the renderer and post chain, each stage's scene from `reference/scene/` and `reference/shaders/` (same
+  camera, geometry, material values, shader code ported), the stage machine moved by the virtual scroll with the
+  site's lerp constants (the brief and `reference/scripts/` give them, file:line), gates that pass with the same input.
+  `vendor` gives three.js at the site's revision. A whole multi-stage app is long work: the first stages to their
+  checkpoints, then the next; `status` set-asides apply.
+
+**Review**: `compare/review/journey-desktop/` and `journey-mobile/`, one frame per checkpoint; verdict lines as for any
+frame: `- journey/02-step-1 desktop [uvnuc]: same`.
 
 ## Honest limits
 

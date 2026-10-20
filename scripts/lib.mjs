@@ -90,12 +90,81 @@ export function siteName(url) {
 // --cdp attaches to the lab Chrome (npm run chrome) for sites that refuse headless browsers.
 // Installed Google Chrome by default: Playwright's bundled Chromium has no H.264/AAC, so sites that wait
 // for an HLS/MP4 video (intros, loaders) never finish loading in it. LAB_BROWSER=chromium forces the bundled one.
+// Timers and frames never slowed down for a page the browser thinks is in the background (several checks share one
+// machine; a canvas app's frames must keep coming at the same pace on both sides)
+const BROWSER_ARGS = ['--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'];
 export async function openBrowser(cdp) {
   if (cdp) return chromium.connectOverCDP(cdp === true ? 'http://127.0.0.1:9222' : cdp);
   if (process.env.LAB_BROWSER !== 'chromium') {
-    try { return await chromium.launch({ channel: 'chrome' }); } catch { /* Chrome not installed: fall back */ }
+    try { return await chromium.launch({ channel: 'chrome', args: BROWSER_ARGS }); } catch { /* Chrome not installed: fall back */ }
   }
-  return chromium.launch();
+  return chromium.launch({ args: BROWSER_ARGS });
+}
+
+// The same "random" on both sides of a canvas app: Math.random replaced, before any script runs, by a generator with a
+// fixed seed, so a scene that scatters particles or picks a colour at random draws the same on the reference and on
+// the clone, and from one run to the next (an init script: pass to page.addInitScript or context.addInitScript)
+export function seededRandomInPage(seed = 20261021) {
+  let s = seed >>> 0;
+  Math.random = function random() { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// Own-bundle recording (exact mode, a canvas app, with the owner's permission): every response the app loads (its
+// documents, scripts and modules, wasm decoders, workers, models, textures, data), saved at its own address under
+// reference/bundle/<host>/<path> with a manifest, so the clone can run the site's own code on its own files. Tracking
+// is never saved; requests that are not GET (a form, a backend write) are never saved either.
+const TRACKING_HOSTS = /google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|linkedin\.com\/px|tiktok|bat\.bing|snap\.licdn|vercel-insights|vitals\.vercel/i;
+export function recordBundle(page, refDir) {
+  const dir = path.join(refDir, 'bundle');
+  const manifestFile = path.join(dir, 'manifest.json');
+  let pending = Promise.resolve();
+  page.on('response', (res) => {
+    pending = pending.then(async () => {
+      try {
+        const req = res.request();
+        const u = new URL(res.url());
+        if (req.method() !== 'GET' || !/^https?:$/.test(u.protocol) || TRACKING_HOSTS.test(u.href) || res.status() >= 300) return;
+        const body = await res.body().catch(() => null);
+        if (!body || body.length > 300 * 1024 * 1024) return;
+        let rel = decodeURIComponent(u.pathname);
+        if (rel.endsWith('/')) rel += 'index.html';
+        const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map((p) => p.replace(/[<>:"|?*\\]/g, '_'));
+        if (!parts.length) parts.push('index.html');
+        const file = path.join(dir, u.host.replace(/[:]/g, '_'), ...parts);
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await fs.writeFile(file, body);
+        const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8').catch(() => '{"entries":{}}'));
+        manifest.entries[`${u.origin}${u.pathname}`] = { file: path.relative(dir, file).split(path.sep).join('/'), type: res.headers()['content-type'] || '', kind: req.resourceType(), document: req.isNavigationRequest() && req.frame() === page.mainFrame() };
+        await fs.writeFile(manifestFile, JSON.stringify(manifest, null, 1));
+      } catch { /* a response that cannot be read is left out */ }
+    });
+  });
+  return () => pending; // await it before closing the page
+}
+
+// One timing-sensitive measurement at a time across every trueclone process on this machine (load sequences, reveals
+// and other frame-timed reads): several clones scored in parallel share the CPU and GPU, and a frame-timed check run
+// beside another heavy one measures the contention, not the page. A lock file in the system temp folder; a lock older
+// than its holder's limit is taken over (a crashed process). Everything else runs in parallel as before.
+export async function withMachineLock(label, fn, { limitMs = 20 * 60 * 1000 } = {}) {
+  const os = await import('node:os');
+  const file = path.join(os.tmpdir(), 'trueclone-timing.lock');
+  const me = `${process.pid}:${label}:${Date.now()}`;
+  let waited = 0, said = false;
+  for (;;) {
+    try {
+      await fs.writeFile(file, me, { flag: 'wx' });
+      break;
+    } catch {
+      const held = await fs.readFile(file, 'utf8').catch(() => '');
+      const since = Number(held.split(':').pop()) || 0;
+      if (Date.now() - since > limitMs) { await fs.rm(file, { force: true }); continue; }
+      if (!said && waited > 2000) { console.log(`waiting for another trueclone measurement to finish (${held.split(':')[1] || 'timing'}), so the two do not distort each other`); said = true; }
+      await new Promise((r) => setTimeout(r, 1000));
+      waited += 1000;
+    }
+  }
+  try { return await fn(); } finally { if ((await fs.readFile(file, 'utf8').catch(() => '')) === me) await fs.rm(file, { force: true }); }
 }
 
 // One locale for every page, so a site that picks its variant by language or region (stripe.com -> /in) shows the
@@ -393,6 +462,10 @@ const MIME = {
   '.webp': 'image/webp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2',
   '.ttf': 'font/ttf', '.otf': 'font/otf', '.mp4': 'video/mp4', '.webm': 'video/webm', '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json', '.m3u8': 'application/vnd.apple.mpegurl', '.ts': 'video/mp2t',
+  // what a canvas app loads besides images: decoders, compressed textures, models, audio
+  '.wasm': 'application/wasm', '.ktx2': 'image/ktx2', '.basis': 'application/octet-stream', '.bin': 'application/octet-stream',
+  '.drc': 'application/octet-stream', '.hdr': 'application/octet-stream', '.exr': 'application/octet-stream',
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.txt': 'text/plain', '.xml': 'application/xml',
 };
 
 // Port 0 = a free port picked by the OS, so several scoring tools can run side by side; use server.url.

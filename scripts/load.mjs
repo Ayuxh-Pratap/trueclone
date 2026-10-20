@@ -9,7 +9,7 @@
 //   -> sites/<name>/compare/load.json, frames in compare/load/ and reference/load/
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, readCache, PNG, withTimeout, COMPARE, siteDir } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, readCache, PNG, withTimeout, COMPARE, siteDir, withMachineLock } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -86,8 +86,11 @@ try {
   for (const vp of vps) {
     // a reference run with a moment still missing is measured again next time, never kept as the reference
     const refKey = { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 3 };
-    const ref = await cached(root, refKey, () => twice(meta.url, path.join(root, 'reference', 'load'), vp), Boolean(flags['refresh-ref']) || Boolean((await readCache(root, refKey))?.incomplete));
-    const clone = await twice(cloneUrl || `${server.url}index.html`, path.join(root, COMPARE, 'load'), vp);
+    // timed frames: one such measurement at a time on this machine (lib.mjs withMachineLock), whatever else runs
+    const { ref, clone } = await withMachineLock(`load ${name} ${vp.name}`, async () => ({
+      ref: await cached(root, refKey, () => twice(meta.url, path.join(root, 'reference', 'load'), vp), Boolean(flags['refresh-ref']) || Boolean((await readCache(root, refKey))?.incomplete)),
+      clone: await twice(cloneUrl || `${server.url}index.html`, path.join(root, COMPARE, 'load'), vp),
+    }));
     // the moments measured on both sides (a missing frame is left out, never scored as blank)
     const both = (curve) => TIMES.filter((t) => ref.curve[t] !== null && curve[t] !== null);
     const gap = Object.fromEntries(both(clone.curve).map((t) => [t, +Math.abs(ref.curve[t] - clone.curve[t]).toFixed(2)]));

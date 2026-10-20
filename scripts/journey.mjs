@@ -1,0 +1,498 @@
+// App mode (a canvas app: capture's meta.canvasApp): what a visitor sees is reached by input, not by scrolling a
+// document, so states are the checkpoints of a journey, a list of inputs the visitor makes (wheel, touch swipes, a
+// pointer path, a gesture a gate asks for, holding a button, a click, a key) and the moments to look at.
+//
+//   sites/<name>/journey.json
+//   { "viewports": ["desktop", "mobile"], "steps": [
+//       { "checkpoint": "load", "settle": 10000 },
+//       { "gesture": { "shape": "circle", "at": [0.5, 0.5], "size": 0.22 } },   (also "ellipse", or "path": [[x, y], ...])
+//       { "checkpoint": "after-gate" },
+//       { "wheel": { "dy": 1200, "at": [0.5, 0.5] } },                            (a touch swipe of the same length on a phone)
+//       { "hold": { "at": "#hold" | [x, y], "ms": 2000 } },
+//       { "click": "selector" | [x, y] }, { "key": "Enter" }, { "wait": 1500 }, { "checkpoint": "final" } ] }
+// Points are fractions of the window. A checkpoint waits until the screen holds still (or `settle` ms) and shoots it.
+// Both sides run with the same seeded Math.random (lib.mjs), never throttled.
+//
+// usage: trueclone journey <name> --draft            find the journey on the live reference -> journey.json
+//        trueclone journey <name>                    the reference's checkpoints -> reference/journey/ (frames, the
+//                                                    three.js scene at each, every shader program)
+//        trueclone journey <name> --clone [--url u]  the clone through the same journey, compared -> compare/journey/
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, canvasSimilarity, PNG, crop, COMPARE, siteDir, openUrl, seededRandomInPage, withMachineLock, recordBundle } from './lib.mjs';
+
+const { pos, flags } = parseArgs(process.argv.slice(2));
+const [name] = pos;
+if (!name) { console.error('usage: trueclone journey <name> [--draft | --clone [--url <app>]]'); process.exit(1); }
+const root = siteDir(name);
+const ref = path.join(root, 'reference');
+const meta = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8').catch(() => 'null'));
+if (!meta) { console.error(`no capture for ${name}`); process.exit(1); }
+const journeyFile = path.join(root, 'journey.json');
+const vpOf = (n) => VIEWPORTS.find((v) => v.name === n) || VIEWPORTS.find((v) => v.name === 'desktop');
+
+// ---------- in the page ----------
+// three.js announces every Scene and WebGLRenderer it creates to window.__THREE_DEVTOOLS__ (its own devtools hook),
+// bundled or not; and every shader program passes through shaderSource. Both are listened to from the first byte.
+function inventoryInPage() {
+  window.__tcScenes = [];
+  window.__tcRenderers = [];
+  window.__tcShaders = [];
+  const hook = new EventTarget();
+  // what is drawn now: every render call, by scene, with its camera and time (an app that swaps its stage content or
+  // draws each stage from a scene made later is read from what its renderer draws, not from the first scene made)
+  window.__tcRendered = new Map();
+  hook.addEventListener('observe', (e) => {
+    const o = e.detail;
+    if (!o) return;
+    if (o.isScene) window.__tcScenes.push(o);
+    else if (o.isWebGLRenderer) {
+      window.__tcRenderers.push(o);
+      const render = o.render;
+      if (typeof render === 'function') o.render = function (scene, camera) { if (scene) window.__tcRendered.set(scene, { camera, t: performance.now() }); return render.apply(this, arguments); };
+    }
+  });
+  Object.defineProperty(window, '__THREE_DEVTOOLS__', { value: hook, configurable: true });
+  for (const C of [window.WebGLRenderingContext, window.WebGL2RenderingContext].filter(Boolean)) {
+    const orig = C.prototype.shaderSource;
+    C.prototype.shaderSource = function shaderSource(shader, src) {
+      try { const type = this.getShaderParameter(shader, this.SHADER_TYPE) === this.VERTEX_SHADER ? 'vert' : 'frag'; if (window.__tcShaders.length < 400 && !window.__tcShaders.some((s) => s.src === src)) window.__tcShaders.push({ type, src }); } catch { /* not readable */ }
+      return orig.call(this, shader, src);
+    };
+  }
+}
+function sceneInPage() {
+  const round = (v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);
+  let count = 0;
+  const ser = (o, depth) => {
+    if (count++ > 3000) return { type: o.type, truncated: true };
+    const m = o.material && (Array.isArray(o.material) ? o.material[0] : o.material);
+    const g = o.geometry;
+    return {
+      type: o.type, ...(o.name ? { name: o.name } : {}), ...(o.visible === false ? { visible: false } : {}),
+      position: o.position ? [o.position.x, o.position.y, o.position.z].map(round) : undefined,
+      rotation: o.rotation ? [o.rotation.x, o.rotation.y, o.rotation.z].map(round) : undefined,
+      scale: o.scale && (o.scale.x !== 1 || o.scale.y !== 1 || o.scale.z !== 1) ? [o.scale.x, o.scale.y, o.scale.z].map(round) : undefined,
+      ...(o.isCamera ? { camera: { fov: o.fov, near: o.near, far: o.far, zoom: o.zoom, aspect: round(o.aspect) } } : {}),
+      ...(o.isLight ? { light: { color: o.color?.getHexString?.(), intensity: o.intensity } } : {}),
+      ...(g ? { geometry: { type: g.type, parameters: g.parameters, vertices: g.attributes?.position?.count, instances: o.count } } : {}),
+      ...(m ? { material: { type: m.type, color: m.color?.getHexString?.(), opacity: m.opacity, transparent: m.transparent, blending: m.blending, map: Boolean(m.map), uniforms: m.uniforms ? Object.fromEntries(Object.entries(m.uniforms).slice(0, 40).map(([k, u]) => [k, typeof u.value === 'number' ? round(u.value) : u.value?.isColor ? `#${u.value.getHexString()}` : u.value?.isVector2 ? [round(u.value.x), round(u.value.y)] : u.value?.isVector3 ? [round(u.value.x), round(u.value.y), round(u.value.z)] : u.value?.isTexture ? 'texture' : typeof u.value])) : undefined } } : {}),
+      ...(depth < 14 && o.children?.length ? { children: o.children.slice(0, 300).map((c) => ser(c, depth + 1)) } : o.children?.length ? { children: o.children.length } : {}),
+    };
+  };
+  const r = (window.__tcRenderers || [])[0];
+  // the scenes drawn in the last half second (a stage plus its post-processing passes), newest first; else every
+  // scene announced
+  const rendered = [...(window.__tcRendered || new Map()).entries()].sort((a, b) => b[1].t - a[1].t);
+  const latest = rendered[0]?.[1].t ?? 0;
+  const drawn = rendered.filter(([, x]) => x.t > latest - 500).slice(0, 8);
+  return {
+    renderer: r ? { size: r.domElement ? [r.domElement.width, r.domElement.height] : null, pixelRatio: r.getPixelRatio?.(), toneMapping: r.toneMapping, outputColorSpace: r.outputColorSpace } : null,
+    scenes: drawn.length
+      ? drawn.map(([s, x]) => ({ drawnWith: x.camera ? ser(x.camera, 14) : null, ...ser(s, 0) }))
+      : (window.__tcScenes || []).slice(0, 6).map((s) => ser(s, 0)),
+    announced: (window.__tcScenes || []).length,
+  };
+}
+// what the page says to the visitor now (the DOM layer over the canvas): visible text, a gate's instruction
+function uiTextInPage() {
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (el.children.length) continue;
+    const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 120) continue;
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    if (r.width < 2 || r.height < 2 || s.visibility === 'hidden' || r.bottom < 0 || r.top > innerHeight) continue;
+    // faded out with an ancestor (a gate's instruction after the gate) is not on screen
+    let o = 1;
+    for (let e = el; e && o >= 0.05; e = e.parentElement) o *= Number(getComputedStyle(e).opacity);
+    if (o < 0.05) continue;
+    out.push(t);
+    if (out.length > 40) break;
+  }
+  return out.join(' | ');
+}
+function canvasBoxInPage() {
+  const c = [...document.querySelectorAll('canvas')].map((x) => x.getBoundingClientRect()).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+  return c ? { x: Math.max(0, Math.round(c.left)), y: Math.max(0, Math.round(c.top)), w: Math.round(Math.min(c.width, innerWidth)), h: Math.round(Math.min(c.height, innerHeight)) } : null;
+}
+
+// ---------- running a journey ----------
+async function openSide(browser, url, vp, withInventory, record = false) {
+  const touch = vp.name === 'mobile' || vp.name === 'tablet';
+  const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference', ...(touch ? { hasTouch: true, isMobile: vp.name === 'mobile' } : {}) });
+  await context.addInitScript(seededRandomInPage);
+  if (withInventory) await context.addInitScript(inventoryInPage);
+  const cdp = await context.newCDPSession(page);
+  // the reference of an own-bundle capture: what each stage loads joins the bundle (models and textures load late)
+  const bundleDone = record ? recordBundle(page, ref) : null;
+  await openUrl(page, url);
+  // an own-bundle clone registers its service worker on the first load and reloads once: the app is the second load
+  await page.waitForFunction(() => !document.getElementById('tc-sw-bootstrap'), null, { timeout: 20000 }).catch(() => {});
+  return { context, page, cdp, touch, bundleDone };
+}
+const px = (vp, [x, y]) => [Math.round(x * vp.width), Math.round(y * vp.height)];
+// the screen held still: two shots in a row alike, or the limit (a scene that never stops moving)
+async function settle(page, maxMs = 6000) {
+  const t0 = Date.now();
+  let last = null;
+  while (Date.now() - t0 < maxMs) {
+    await page.waitForTimeout(250);
+    const buf = await page.screenshot();
+    if (last && (buf.equals(last) || matchPct(PNG.sync.read(last), PNG.sync.read(buf)).pct >= 99.5)) return { still: true, ms: Date.now() - t0, buf };
+    last = buf;
+  }
+  return { still: false, ms: Date.now() - t0, buf: last || await page.screenshot() };
+}
+async function touchDrag(cdp, from, to, steps = 12) {
+  const pt = ([x, y]) => [{ x, y, id: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: pt(from) });
+  for (let i = 1; i <= steps; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: pt([from[0] + (to[0] - from[0]) * i / steps, from[1] + (to[1] - from[1]) * i / steps]) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+async function pointAt(page, vp, at) {
+  if (Array.isArray(at)) return px(vp, at);
+  const box = await page.locator(at).first().boundingBox().catch(() => null);
+  return box ? [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)] : null;
+}
+async function doStep(side, vp, st) {
+  const { page, cdp, touch } = side;
+  if (st.wheel) {
+    const [x, y] = px(vp, st.wheel.at || [0.5, 0.5]);
+    const dy = st.wheel.dy ?? vp.height;
+    if (touch) {
+      // a swipe up of the same length (the page scrolls its content up), in strokes of at most 60% of the window
+      for (let left = Math.abs(dy); left > 0; left -= vp.height * 0.6) {
+        const d = Math.min(left, vp.height * 0.6) * Math.sign(dy);
+        await touchDrag(cdp, [x, Math.round(vp.height * 0.8)], [x, Math.round(vp.height * 0.8 - d)]);
+        await page.waitForTimeout(120);
+      }
+    } else {
+      await page.mouse.move(x, y);
+      const n = Math.max(4, Math.ceil(Math.abs(dy) / 120));
+      for (let i = 0; i < n; i++) { await page.mouse.wheel(0, dy / n); await page.waitForTimeout(40); }
+    }
+  } else if (st.gesture) {
+    const g = st.gesture;
+    const [cx, cy] = px(vp, g.at || [0.5, 0.5]);
+    const r = Math.round((g.size || 0.22) * Math.min(vp.width, vp.height));
+    const pts = g.path ? g.path.map((p) => px(vp, p)) : Array.from({ length: 49 }, (_, i) => { const a = -Math.PI / 2 + (i / 48) * Math.PI * 2; return [Math.round(cx + Math.cos(a) * r * (g.shape === 'ellipse' ? 0.7 : 1)), Math.round(cy + Math.sin(a) * r)]; });
+    if (touch) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pts[0][0], y: pts[0][1], id: 1 }] });
+      for (const [x, y] of pts.slice(1)) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y, id: 1 }] }); await page.waitForTimeout(16); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else {
+      await page.mouse.move(...pts[0]);
+      await page.mouse.down();
+      for (const p of pts.slice(1)) { await page.mouse.move(...p, { steps: 2 }); await page.waitForTimeout(16); }
+      await page.mouse.up();
+    }
+  } else if (st.pointer) {
+    for (const p of st.pointer) await page.mouse.move(...px(vp, p), { steps: 8 });
+  } else if (st.hold) {
+    const at = await pointAt(page, vp, st.hold.at || [0.5, 0.5]);
+    if (!at) return `hold: nothing at ${st.hold.at}`;
+    if (touch) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at[0], y: at[1], id: 1 }] });
+      await page.waitForTimeout(st.hold.ms || 2000);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else {
+      await page.mouse.move(...at);
+      await page.mouse.down();
+      await page.waitForTimeout(st.hold.ms || 2000);
+      await page.mouse.up();
+    }
+  } else if (st.click) {
+    const at = await pointAt(page, vp, st.click);
+    if (!at) return `click: nothing at ${st.click}`;
+    if (touch) await page.touchscreen.tap(...at); else await page.mouse.click(...at);
+  } else if (st.key) await page.keyboard.press(st.key);
+  else if (st.wait) await page.waitForTimeout(st.wait);
+  return null;
+}
+
+// runs every step; at each checkpoint, calls shoot(index, name, settled)
+async function runJourney(side, vp, steps, shoot) {
+  const errors = [];
+  let n = 0;
+  for (const st of steps) {
+    if (st.checkpoint) { const s = await settle(side.page, st.settle || 6000); await shoot(n++, st.checkpoint, s); continue; }
+    const err = await doStep(side, vp, st).catch((e) => e.message.split('\n')[0]);
+    if (err) errors.push(err);
+  }
+  return errors;
+}
+const cpFile = (i, cp) => `${String(i).padStart(2, '0')}-${String(cp).replace(/[^a-z0-9-]+/gi, '-').slice(0, 40)}.png`;
+
+// ---------- --draft: find the journey on the reference ----------
+if (flags.draft) {
+  // Drafted at each size the journey runs at: a phone reaches its states with swipes of its own length (half a window),
+  // which may not land where the desktop's wheel turns do, so every size gets the steps that stop at each of its states.
+  const draftAt = async (browser, vp) => {
+    const touch = vp.name === 'mobile' || vp.name === 'tablet';
+    const steps = [{ checkpoint: 'load', settle: 12000 }];
+    const side = await openSide(browser, meta.finalUrl || meta.url, vp, false);
+    const { page } = side;
+    const loaded = await settle(page, 12000);
+    // a scene that never holds still (ambient motion, a ticking counter): how far it drifts on its own, with no input,
+    // so only a change beyond that drift counts as a new state, and its checkpoints wait a short fixed time
+    const animated = !loaded.still;
+    const pause = animated ? 2500 : 6000;
+    const ui0 = await page.evaluate(uiTextInPage);
+    // each state's own drift (a calm scene, then one with film grain or particles): two shots with no input, a pause
+    // apart; a later shot below that, less a margin, is somewhere else
+    const driftOf = async () => {
+      const a = await page.screenshot();
+      await page.waitForTimeout(pause);
+      const b = await page.screenshot();
+      const pct = matchPct(PNG.sync.read(a), PNG.sync.read(b)).pct;
+      return { buf: b, pct, cut: Math.min(98, pct - 4) };
+    };
+    const d0 = await driftOf();
+    const ticking = (await page.evaluate(uiTextInPage)) !== ui0;
+    const words = (t) => ticking ? t.replace(/\d+/g, '#') : t;
+    if (animated) console.log(`${vp.name}: the scene moves on its own (${d0.pct.toFixed(1)}% alike over ${pause} ms${ticking ? ', its text ticks' : ''}): each state's own drift is measured`);
+    let last = d0.buf, cut = d0.cut;
+    let lastUi = words(await page.evaluate(uiTextInPage));
+    // every state reached so far: input that leads back to one of them (an app that loops after its last stage, a
+    // toggle) reached nothing new
+    const seen = [{ buf: last, ui: lastUi, cut }];
+    const alike = (a, b, c) => matchPct(PNG.sync.read(a), PNG.sync.read(b)).pct >= c;
+    // a new state: the picture moved beyond the scene's own drift, or what the page says changed (a gate's instruction
+    // gone, a stage label), to somewhere not seen before
+    const changed = async () => {
+      const s = await settle(page, pause);
+      const ui = words(await page.evaluate(uiTextInPage));
+      if (alike(last, s.buf, cut) && ui === lastUi) return false;
+      lastUi = ui;
+      const back = seen.find((x) => x.ui === ui && alike(x.buf, s.buf, x.cut));
+      if (back) { last = s.buf; cut = back.cut; return false; }
+      const d = await driftOf();
+      last = d.buf; cut = d.cut;
+      seen.push({ buf: last, ui, cut });
+      return true;
+    };
+    // each checkpoint's frame beside the draft, to check it against the live site by eye
+    const shots = path.join(ref, 'journey-draft', vp.name);
+    await fs.rm(shots, { recursive: true, force: true });
+    await fs.mkdir(shots, { recursive: true });
+    await fs.writeFile(path.join(shots, cpFile(0, 'load')), loaded.buf);
+    let shot = 1;
+    const cp = (name) => {
+      console.log(`  ${vp.name}: ${name}`);
+      fs.writeFile(path.join(shots, cpFile(shot++, name)), last).catch(() => {});
+      return animated ? { checkpoint: name, settle: pause } : { checkpoint: name };
+    };
+    // a gate tried and not passed is not tried again while the page says the same
+    const failed = new Set();
+    let quiet = 0, k = 0, gates = 0;
+    const centreOf = async (sel) => { const box = await page.locator(sel).first().boundingBox().catch(() => null); return box ? [+((box.x + box.width / 2) / vp.width).toFixed(3), +((box.y + box.height / 2) / vp.height).toFixed(3)] : null; };
+    // a gate the page asks for in words, tried in order: draw (a gesture), hold, press a button
+    const tryGate = async () => {
+      const ui = await page.evaluate(uiTextInPage);
+      if (failed.has(words(ui))) return false;
+      // a gate is passed when its instruction leaves the screen; input that changed the picture with the instruction
+      // still there is kept as a step (the replay makes it too), not counted as the gate
+      const gone = async (re) => !re.test(await page.evaluate(uiTextInPage));
+      const DRAW = /\b(draw|trace|sketch)\b/i, HOLD = /\bhold\b/i;
+      if (DRAW.test(ui)) {
+        for (const g of [{ shape: 'circle', at: [0.5, 0.5], size: 0.22 }, { shape: 'ellipse', at: [0.5, 0.5], size: 0.25 }, { shape: 'circle', at: [0.5, 0.55], size: 0.3 }]) {
+          await doStep(side, vp, { gesture: g });
+          if (await changed()) {
+            if (await gone(DRAW)) { steps.push({ gesture: g }, cp(`gate-${++gates}`)); return true; }
+            steps.push({ gesture: g });
+          }
+        }
+      }
+      // the control a "hold" label names: often a ring or button beside the words, not the words themselves; pressed
+      // for 4 s (holds are commonly 2-3 s)
+      const holdSel = await page.evaluate(() => {
+        for (const e of document.querySelectorAll('[data-tc-journey-hold]')) e.removeAttribute('data-tc-journey-hold');
+        const shown = (e) => {
+          const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+          if (r.width <= 10 || r.height <= 10 || s.visibility === 'hidden' || s.display === 'none') return false;
+          let o = 1;
+          for (let x = e; x && o >= 0.05; x = x.parentElement) o *= Number(getComputedStyle(x).opacity);
+          return o >= 0.05;
+        };
+        const label = [...document.querySelectorAll('button, [role="button"], a, div, span, p')].find((e) => /\bhold\b/i.test(e.textContent || '') && e.children.length < 4 && shown(e));
+        if (!label) return null;
+        const pressable = (e) => e.matches('button, [role="button"]') || ['pointer', 'grab'].includes(getComputedStyle(e).cursor) || getComputedStyle(e).touchAction === 'none';
+        let el = label.closest('button, [role="button"]');
+        for (let up = label, i = 0; !el && up && i < 3; up = up.parentElement, i++) el = [...up.querySelectorAll('*')].find((e) => e !== label && shown(e) && pressable(e)) || null;
+        el ||= label;
+        el.setAttribute('data-tc-journey-hold', '');
+        return '[data-tc-journey-hold]';
+      });
+      const holdAt = holdSel ? await centreOf(holdSel) : null;
+      if (holdAt) {
+        await doStep(side, vp, { hold: { at: holdAt, ms: 4000 } });
+        if (await changed()) {
+          if (await gone(HOLD)) { steps.push({ hold: { at: holdAt, ms: 4000 } }, cp(`hold-${++gates}`)); return true; }
+          steps.push({ hold: { at: holdAt, ms: 4000 } });
+        }
+      }
+      const pressSel = await page.evaluate(() => { for (const e of document.querySelectorAll('[data-tc-journey-press]')) e.removeAttribute('data-tc-journey-press'); const el = [...document.querySelectorAll('button, [role="button"], a')].find((e) => /\b(start|enter|begin|explore|continue|tap|click|let'?s go)\b/i.test(e.textContent || '') && e.getBoundingClientRect().width > 10); if (!el) return null; el.setAttribute('data-tc-journey-press', ''); return '[data-tc-journey-press]'; });
+      const pressAt = pressSel ? await centreOf(pressSel) : null;
+      if (pressAt) {
+        await doStep(side, vp, { click: pressAt });
+        if (await changed()) { steps.push({ click: pressAt }, cp(`press-${++gates}`)); return true; }
+      }
+      failed.add(words(ui));
+      return false;
+    };
+    // a long app (a phone swipes half a window at a time) has many turns: ten minutes and 80 turns per size at most
+    const deadline = Date.now() + 10 * 60 * 1000;
+    let i = 0;
+    for (; i < 80 && quiet < 3 && Date.now() < deadline; i++) {
+      if (await tryGate()) { quiet = 0; continue; }
+      const dy = Math.round(vp.height * (touch ? 0.5 : 1.2));
+      await doStep(side, vp, { wheel: { dy } });
+      if (await changed()) { steps.push({ wheel: { dy } }, cp(`step-${++k}`)); quiet = 0; } else { quiet++; steps.push({ wheel: { dy } }); }
+    }
+    if (quiet < 3) console.warn(`WARNING at ${vp.name} the draft stopped at its limit (${i} turns, ${Math.round((Date.now() - deadline) / 1000 + 600)} s) while input still changed the page: the journey may go on; add the remaining steps to journey.json by hand`);
+    // trailing input that changed nothing is left out
+    while (steps.length && steps[steps.length - 1].wheel) steps.pop();
+    await side.context.close();
+    return steps;
+  };
+  const browser = await openBrowser(flags.cdp);
+  const byViewport = {};
+  try {
+    for (const vpName of ['desktop', 'mobile']) byViewport[vpName] = await draftAt(browser, vpOf(vpName));
+  } finally { if (!flags.cdp) await browser.close(); }
+  const journey = { viewports: ['desktop', 'mobile'], drafted: new Date().toISOString(), steps: byViewport.desktop, stepsByViewport: { mobile: byViewport.mobile } };
+  const exists = await fs.stat(journeyFile).then(() => true, () => false);
+  await fs.writeFile(exists ? path.join(root, 'journey.draft.json') : journeyFile, JSON.stringify(journey, null, 2));
+  for (const [vpName, steps] of Object.entries(byViewport)) {
+    const cps = steps.filter((s) => s.checkpoint).map((s) => s.checkpoint);
+    console.log(`journey drafted at ${vpName}: ${cps.length} checkpoints (${cps.join(', ')})`);
+    if (cps.length < 3) console.warn(`WARNING at ${vpName} the journey reached few states: a gate the instrument could not pass (a gesture it did not recognise), or input it does not make. Write the steps in journey.json (see the top of scripts/journey.mjs).`);
+  }
+  console.log(`-> ${path.relative(process.cwd(), exists ? path.join(root, 'journey.draft.json') : journeyFile)}${exists ? ' (journey.json exists: the draft is beside it)' : ''}; each checkpoint's frame: ${path.relative(process.cwd(), path.join(ref, 'journey-draft'))}/<size>/`);
+  process.exit(0);
+}
+
+// ---------- the reference's checkpoints, or the clone's compared with them ----------
+const journey = JSON.parse(await fs.readFile(journeyFile, 'utf8').catch(() => 'null'));
+if (!journey?.steps?.length) { console.error(`no journey.json for ${name}: trueclone journey ${name} --draft`); process.exit(1); }
+const clone = Boolean(flags.clone || flags.url);
+const server = clone && typeof flags.url !== 'string' ? await serve(path.join(root, 'clone')) : null;
+const url = clone ? (typeof flags.url === 'string' ? flags.url : server.url) : meta.finalUrl || meta.url;
+const outRoot = clone ? path.join(root, COMPARE, 'journey') : path.join(ref, 'journey');
+const browser = await openBrowser(flags.cdp);
+const result = { name, at: new Date().toISOString(), side: clone ? 'clone' : 'reference', viewports: [] };
+try {
+  // checkpoints are timed frames: one such run at a time on this machine
+  await withMachineLock(`journey ${name}`, async () => {
+    for (const vpName of journey.viewports || ['desktop']) {
+      const vp = vpOf(vpName);
+      const dir = path.join(outRoot, vp.name);
+      await fs.rm(dir, { recursive: true, force: true });
+      await fs.mkdir(dir, { recursive: true });
+      const inventory = !clone && vp.name === 'desktop';
+      const side = await openSide(browser, url, vp, inventory, !clone && Boolean(meta.bundle));
+      const cps = [];
+      const errors = await runJourney(side, vp, journey.stepsByViewport?.[vp.name] || journey.steps, async (i, cp, s) => {
+        const file = cpFile(i, cp);
+        await fs.writeFile(path.join(dir, file), s.buf);
+        const entry = { i, name: cp, file, still: s.still, ms: s.ms, canvas: await side.page.evaluate(canvasBoxInPage).catch(() => null), ui: await side.page.evaluate(uiTextInPage).catch(() => '') };
+        if (inventory) {
+          const scene = await side.page.evaluate(sceneInPage).catch(() => null);
+          if (scene?.scenes?.length) { await fs.mkdir(path.join(ref, 'scene'), { recursive: true }); await fs.writeFile(path.join(ref, 'scene', file.replace(/\.png$/, '.json')), JSON.stringify(scene, null, 1)); entry.scene = `reference/scene/${file.replace(/\.png$/, '.json')}`; }
+        }
+        cps.push(entry);
+      });
+      if (inventory) {
+        const shaders = await side.page.evaluate(() => window.__tcShaders || []).catch(() => []);
+        if (shaders.length) {
+          const sdir = path.join(ref, 'shaders');
+          await fs.rm(sdir, { recursive: true, force: true });
+          await fs.mkdir(sdir, { recursive: true });
+          const index = [];
+          for (const [k, sh] of shaders.entries()) {
+            const f = `${String(k).padStart(3, '0')}-${crypto.createHash('sha1').update(sh.src).digest('hex').slice(0, 6)}.${sh.type}`;
+            await fs.writeFile(path.join(sdir, f), sh.src);
+            const uniforms = [...sh.src.matchAll(/uniform\s+\w+\s+(\w+)/g)].map((m) => m[1]);
+            index.push(`| ${f} | ${sh.type} | ${sh.src.split('\n').length} | ${uniforms.slice(0, 12).join(', ')} |`);
+          }
+          await fs.writeFile(path.join(sdir, 'INDEX.md'), `# Shader programs the reference compiled (evidence: port the effect, never paste)\n\n| file | stage | lines | uniforms |\n|---|---|---|---|\n${index.join('\n')}\n`);
+          console.log(`shaders: ${shaders.length} recorded -> reference/shaders/INDEX.md`);
+        }
+      }
+      if (side.bundleDone) await side.bundleDone();
+      await side.context.close();
+      result.viewports.push({ viewport: vp.name, checkpoints: cps, errors });
+      console.log(`${vp.name}: ${cps.length} checkpoint(s)${errors.length ? `; steps that failed: ${errors.join('; ')}` : ''}`);
+    }
+  });
+} finally {
+  if (!flags.cdp) await browser.close();
+  server?.close();
+}
+await fs.mkdir(outRoot, { recursive: true });
+await fs.writeFile(path.join(outRoot, 'journey.json'), JSON.stringify(result, null, 2));
+if (!clone) { console.log(`reference journey -> ${path.relative(process.cwd(), outRoot)}`); process.exit(0); }
+
+// ---------- the comparison ----------
+// at each checkpoint: what the canvas draws (colours and coverage, tolerant to a frame's phase) and the whole screen by
+// pixels (the DOM layer, the exact picture); exact mode holds the clone to both, template mode (placeholder art) to the
+// canvas's look and the screen's layout only
+const refRun = JSON.parse(await fs.readFile(path.join(ref, 'journey', 'journey.json'), 'utf8').catch(() => 'null'));
+if (!refRun) { console.error(`no reference journey: trueclone journey ${name} first`); process.exit(1); }
+const exact = meta.mode === 'exact';
+const report = { name, at: new Date().toISOString(), mode: exact ? 'exact' : 'template', viewports: [] };
+const reviewLines = {};
+for (const v of result.viewports) {
+  const rv = refRun.viewports.find((x) => x.viewport === v.viewport);
+  if (!rv) continue;
+  const cps = [];
+  for (const c of rv.checkpoints) {
+    const mine = v.checkpoints.find((x) => x.i === c.i);
+    if (!mine) { cps.push({ i: c.i, name: c.name, match: 0, note: 'not reached on the clone' }); continue; }
+    const a = PNG.sync.read(await fs.readFile(path.join(ref, 'journey', v.viewport, c.file)));
+    const b = PNG.sync.read(await fs.readFile(path.join(outRoot, v.viewport, mine.file)));
+    const pixels = matchPct(a, b).pct;
+    const box = c.canvas;
+    const canvas = box && box.w > 8 && box.h > 8 ? canvasSimilarity(crop(a, box.y, Math.min(box.h, a.height - box.y)), crop(b, box.y, Math.min(box.h, b.height - box.y))) : null;
+    const match = +(exact ? (canvas === null ? pixels : (pixels + canvas) / 2) : (canvas ?? pixels)).toFixed(2);
+    cps.push({ i: c.i, name: c.name, match, pixels, canvas, uiRef: c.ui, uiClone: mine.ui });
+    (reviewLines[v.viewport] ||= []).push({ c, mine, pixels });
+  }
+  const mean = cps.length ? +(cps.reduce((s, x) => s + x.match, 0) / cps.length).toFixed(2) : null;
+  const worst = cps.length ? cps.reduce((x, y) => (y.match < x.match ? y : x)) : null;
+  report.viewports.push({ viewport: v.viewport, match: mean, worst, checkpoints: cps, errors: v.errors });
+  console.log(`journey (${v.viewport}): ${mean}% over ${cps.length} checkpoints; worst ${worst ? `${worst.name} ${worst.match}%` : '-'}`);
+}
+await fs.writeFile(path.join(outRoot, 'report.json'), JSON.stringify(report, null, 2));
+
+// the checkpoints side by side for the review, in review's format (tokens, frames.json, index.md): verdicts in notes.md
+// as for any frame ("- journey/03-step-2 desktop [token]: same")
+for (const [vpName, lines] of Object.entries(reviewLines)) {
+  const dir = path.join(root, COMPARE, 'review', `journey-${vpName}`);
+  await fs.rm(dir, { recursive: true, force: true });
+  await fs.mkdir(dir, { recursive: true });
+  const frames = [];
+  for (const { c, mine, pixels } of lines) {
+    const a = PNG.sync.read(await fs.readFile(path.join(ref, 'journey', vpName, c.file)));
+    const b = PNG.sync.read(await fs.readFile(path.join(outRoot, vpName, mine.file)));
+    const scale = 0.5, w = Math.round(a.width * scale), h = Math.round(a.height * scale);
+    const img = new PNG({ width: w * 2 + 12, height: h });
+    img.data.fill(255);
+    [a, b].forEach((src, k) => {
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const si = (Math.min(src.height - 1, Math.round(y / scale)) * src.width + Math.min(src.width - 1, Math.round(x / scale))) * 4, di = (y * img.width + x + k * (w + 12)) * 4;
+        img.data[di] = src.data[si]; img.data[di + 1] = src.data[si + 1]; img.data[di + 2] = src.data[si + 2]; img.data[di + 3] = 255;
+      }
+    });
+    let hsh = 2166136261;
+    for (let gy = 0; gy < 10; gy++) for (let gx = 0; gx < 16; gx++) { const i = (Math.floor((gy + 0.5) * img.height / 10) * img.width + Math.floor((gx + 0.5) * img.width / 16)) * 4; hsh = Math.imul(hsh ^ (((img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3) >> 5), 16777619) >>> 0; }
+    const file = c.file.replace(/\.png$/, '');
+    await fs.writeFile(path.join(dir, `${file}.png`), PNG.sync.write(img));
+    frames.push({ id: `journey/${file}`, file, pct: pixels, token: hsh.toString(36).slice(0, 5) });
+  }
+  await fs.writeFile(path.join(dir, 'frames.json'), JSON.stringify({ size: vpName, at: new Date().toISOString(), frames }, null, 2));
+  await fs.writeFile(path.join(dir, 'index.md'), `# Journey review at ${vpName}: reference left, clone right, at each checkpoint\n\nIn notes.md under "## Review", one line per frame with its token: \`- <frame> ${vpName} [<token>]: same\` (below 85% pixel match, say why), \`differs: <what>\`, or \`tool: <why>; evidence: <file>\`.\n\n| frame | token | pixel match |\n|---|---|---|\n${frames.map((f) => `| [${f.id}](${f.file}.png) | ${f.token} | ${f.pct}% |`).join('\n')}\n`);
+}
+console.log(`-> ${path.relative(process.cwd(), path.join(outRoot, 'report.json'))}; review frames in ${COMPARE}/review/journey-<size>/`);

@@ -18,7 +18,7 @@
 // usage: node scripts/reveals.mjs <name> [--viewport desktop]   -> sites/<name>/reference/reveals.<vp>.json
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo, siteDir, unroll } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo, siteDir, unroll, withMachineLock } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -288,4 +288,5 @@ async function record(vp) {
   console.log(`-> ${path.relative(process.cwd(), out)}`);
 }
 
-await Promise.all(vps.map(record));
+// frames timed while scrolling: one such measurement at a time on this machine (lib.mjs withMachineLock)
+await withMachineLock(`reveals ${name}`, () => Promise.all(vps.map(record)));

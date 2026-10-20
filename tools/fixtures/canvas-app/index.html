@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas app fixture</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="ui">
+  <div id="loader">Loading <span id="count">0</span></div>
+  <div id="gate" hidden>Draw a circle to begin</div>
+  <div id="stage-label" hidden>Stage <span id="stage-n">1</span></div>
+  <button id="hold" hidden>Hold to continue</button>
+  <div id="final" hidden>The end</div>
+</div>
+<script type="module" src="/main.js"></script>
+</body>
+</html>

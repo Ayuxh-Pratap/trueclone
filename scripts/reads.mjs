@@ -17,15 +17,23 @@ const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.jso
 if (!meta) { console.error(`no capture for ${name}: trueclone capture <url> ${name} first`); process.exit(1); }
 const capturedAt = Date.parse(meta.capturedAt || 0) || 0;
 const fresh = async (rel) => { const st = await fs.stat(path.join(root, rel)).catch(() => null); return Boolean(st && st.mtimeMs >= capturedAt - 1000); };
-const READS = [
+// a canvas app (app mode) is read along its journey: the motion runtime, then the reference's checkpoints (frames,
+// the three.js scene, its shaders, and in an own-bundle capture what each stage loads); a document by its scroll
+const READS = meta.canvasApp ? [
+  { step: 'motion', out: 'reference/motion.desktop.json' },
+  { step: 'journey', out: 'reference/journey/journey.json', alone: true, after: 'journey.json' },
+] : [
   { step: 'states', out: 'reference/states/desktop.summary.json' },
   { step: 'motion', out: 'reference/motion.desktop.json' },
   { step: 'spec', out: 'reference/desktop.spec.json' },
   { step: 'widgets', out: 'reference/widgets.desktop.json' },
   { step: 'reveals', out: 'reference/reveals.desktop.json', alone: true },
 ];
+if (meta.canvasApp && !(await fs.stat(path.join(root, 'journey.json')).catch(() => null))) { console.error(`a canvas app is read along its journey: trueclone journey ${name} --draft first`); process.exit(1); }
+// a read older than what it reads (journey.json changed after the reference journey ran) is read again
+const newerInput = async (r) => { if (!r.after) return false; const a = await fs.stat(path.join(root, r.after)).catch(() => null), b = await fs.stat(path.join(root, r.out)).catch(() => null); return Boolean(a && b && a.mtimeMs > b.mtimeMs + 1000); };
 const todo = [];
-for (const r of READS) if (flags.all || !(await fresh(r.out))) todo.push(r);
+for (const r of READS) if (flags.all || !(await fresh(r.out)) || (await newerInput(r))) todo.push(r);
 if (!todo.length) { console.log('reads: all current (--all to read again)'); process.exit(0); }
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const run = (r) => new Promise((resolve) => {

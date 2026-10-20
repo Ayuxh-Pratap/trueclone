@@ -13,6 +13,23 @@ pointer and gestures. why.zero.university is the reference case (analysis: docs/
 
 0.5 detects this class at capture (`meta.canvasApp`) and stops with an honest message (status exit 4). 0.6 clones it.
 
+## Status (2026-10-21, shipped in 0.5.0-rc.4 ahead of 0.6)
+
+Built: J1 in part (seeded `Math.random`, background throttling off; settle-until-still at each checkpoint instead of a
+controlled clock), J2 (`journey.json`, per-viewport steps), J3 (`journey --draft`: worded gates, wheel/swipe until
+quiet, each state's own drift, a gate passed when its instruction leaves the screen, revisited states ignored, a frame
+per checkpoint), E1 (`__THREE_DEVTOOLS__`: the scenes the renderer draws at each checkpoint), E2 (shader sources),
+E3 (every GET recorded, wasm/KTX2/GLB/audio types served), C1 (journey check, worst-checkpoint floor 80), C4 (load,
+measured under a machine-wide lock), C5 (journey review frames with tokens), C6 (document checks off for apps), B1-B4
+(own bundle: `scripts/bundle.mjs`, `tc-net` guard, service worker, Next serves the bundle from `public/`), S1, S2.
+Proof so far: a canvas app of our own (`tools/fixtures/canvas-app`, gate + 3 stages + hold + CDN fetch + backend POST +
+beacon): own bundle with both servers down, journey 100 at desktop and phone, a planted difference caught, zero
+external requests, Next equal. Live why.zero.university (template, read only): the draft walks the whole site unaided
+(desktop 26 checkpoints: the zero gate, both 3 s holds, every stage to "Hired"; the phone the same by swipes), and the
+reference run records each checkpoint's drawn scenes (skinned hands with 48 bones, points, plane stacks) and 47 shader
+programs. Open: J4 (a recorded journey), J5, C2, C3, E4, E5, P1-P4 beyond the skill's port recipe, a port run on
+zero.university, and an own-bundle run on a third-party app (only with its owner's permission).
+
 ## Principles (unchanged, sharpened for apps)
 
 1. Accuracy first: a state is what the visitor sees after the same input, not after the same scroll position.
