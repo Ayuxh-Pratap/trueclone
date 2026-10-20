@@ -1,6 +1,6 @@
 {
   "name": "@trueclone/cli",
-  "version": "0.5.0-rc.3",
+  "version": "0.5.0-rc.4",
   "description": "A working twin of any website from its URL: HTML clone, Next.js + Tailwind + shadcn app, DESIGN.md and globals.css, proven by layout, motion, interaction and style scores. Bundles REA.",
   "type": "module",
   "bin": {
