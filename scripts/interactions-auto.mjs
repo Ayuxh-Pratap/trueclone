@@ -14,8 +14,13 @@ export function detectInPage([vpName, compare, max]) {
     const s = getComputedStyle(el);
     return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) > 0.05;
   };
+  // An id is used only when it reads like a name a developer gave (letters first, words): component libraries mint
+  // ids per load ("2qrqcsbptab1", ":r3:", "radix-…"), and a selector built on one finds nothing on the next load.
+  // words only: an id with a digit anywhere ("qdvimntab1", "tab-2qrqc") may be minted per load, and the element's
+  // classes and position find it as well
+  const stableId = (id) => /^[a-z]+([-_][a-z]+)*$/i.test(id);
   const selOf = (el) => {
-    if (el.id && !/\d{3,}|[:]|^radix|^headlessui|^react/.test(el.id) && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`;
+    if (el.id && stableId(el.id) && !/^(radix|headlessui|react|mui|chakra|aria|tab|panel)[-_]/i.test(el.id) && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`;
     const cls = [...el.classList].filter((c) => !/^(is-|has-|active|open|current|w--|swiper-slide-(active|next|prev))/.test(c) && !/[[\]:/]/.test(c)).slice(0, 2);
     const base = `${el.tagName.toLowerCase()}${cls.map((c) => `.${CSS.escape(c)}`).join('')}`;
     const all = [...document.querySelectorAll(base)];
@@ -101,7 +106,8 @@ export function detectInPage([vpName, compare, max]) {
   const seenRoutes = new Set();
   let navs = 0;
   for (const a of document.querySelectorAll('a[href]')) {
-    if (navs >= 8 || !visible(a)) continue;
+    // every link to another route is drafted here (the caller keeps the ones to captured routes, then the first 8)
+    if (navs >= 40 || !visible(a)) continue;
     let u;
     try { u = new URL(a.href); } catch { continue; }
     const to = u.pathname.replace(/\/+$/, '') || '/';

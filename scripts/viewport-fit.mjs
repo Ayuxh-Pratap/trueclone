@@ -155,6 +155,23 @@ export function planInlineStyles(data, viewports) {
     for (const k of props) {
       const vals = per.map((x) => ({ w: x.w, h: x.h, v: x.d.get(k) }));
       if (vals.every((x) => x.v !== undefined && x.v === vals[0].v)) { constant++; continue; } // same everywhere: as captured
+      // One value wherever it is set, unset at the other sizes (display: none written on a dialog, or on a phone menu's
+      // backdrop, at some widths only): the value is kept in each range of the site's breakpoints where most captured
+      // sizes have it, and only there. Dropped, a closed dialog would show open; kept everywhere, a desktop-only
+      // "none" would hide a phone menu. Without breakpoints, the captured page's value stays as it is.
+      const defined = vals.filter((x) => x.v !== undefined);
+      if (defined.length && defined.every((x) => x.v === defined[0].v)) {
+        if (ranges.length < 2) { constant++; continue; }
+        const kept = [];
+        for (const r of ranges) {
+          const inR = vals.filter((x) => x.w >= r.lo && x.w <= r.hi);
+          if (inR.length && inR.filter((x) => x.v !== undefined).length * 2 >= inR.length) kept.push({ media: mediaOf(r), prop: k, value: defined[0].v });
+        }
+        entry.inline[k] = null;
+        entry.rules.push(...kept);
+        fitted++;
+        continue;
+      }
       // one function for every size
       if (vals.every((x) => x.v !== undefined)) {
         const css = fitValue(vals);
@@ -190,7 +207,7 @@ export function planInlineStyles(data, viewports) {
       if (anyRule) entry.rules.push(...rules);
       entry.inline[k] = null; // the captured constant no longer applies
       if (anyRule) fitted++;
-      if (anyDrop || !anyRule) { entry.dropped.push(k); owned.push({ path: p, prop: k, samples: vals.slice(0, 5).map((x) => `${x.w}x${x.h}: ${x.v ?? '(unset)'}`) }); }
+      if (anyDrop || !anyRule) { entry.dropped.push(k); owned.push({ path: p, prop: k, samples: [...vals.filter((x) => x.v !== undefined).slice(0, 4), ...vals.filter((x) => x.v === undefined).slice(0, 2)].map((x) => `${x.w}x${x.h}: ${x.v ?? '(unset)'}`) }); }
     }
     if (Object.keys(entry.inline).length || entry.rules.length || entry.dropped.length) plan[p] = entry;
   }

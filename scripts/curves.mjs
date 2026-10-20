@@ -88,8 +88,16 @@ if (flags.draft) {
     entries.push({ name: `scrub ${s.cls || s.path}`, ref: `path:${s.path}`, clone: 'TODO', props, viewports: [vp.name], scroll: { from: samples[0].y, to: samples.at(-1).y, steps: Math.min(12, Math.max(4, samples.length - 1)) } });
   }
   const out = path.join(root, 'motion-map.draft.json');
+  // A seeded clone keeps the original's markup: its elements are the reference's, at the same selectors and paths,
+  // so the map is complete as drafted and becomes motion-map.json (when there is none yet). A hand-built clone's
+  // selectors are the agent's to fill in.
+  const seededClone = await fs.stat(path.join(root, 'clone', 'css')).then(() => true, () => false);
+  if (seededClone) for (const e of entries) { e.clone = e.ref; if (e.scroll?.of) e.scroll.of.clone = e.scroll.of.ref; }
   await fs.writeFile(out, JSON.stringify(entries, null, 2));
-  console.log(`${entries.length} entries (${fromScrubs} from recorded scroll curves) -> ${path.relative(process.cwd(), out)}. Fill in the clone selectors, then save as motion-map.json.`);
+  const mapFile = path.join(root, 'motion-map.json');
+  const hasMap = await fs.stat(mapFile).then(() => true, () => false);
+  if (seededClone && !hasMap) await fs.writeFile(mapFile, JSON.stringify(entries, null, 2));
+  console.log(`${entries.length} entries (${fromScrubs} from recorded scroll curves) -> ${path.relative(process.cwd(), seededClone && !hasMap ? mapFile : out)}${seededClone ? (hasMap ? ' (motion-map.json exists: the draft is beside it)' : ' (a seeded clone: the same elements on both sides)') : '. Fill in the clone selectors, then save as motion-map.json.'}`);
   process.exit(0);
 }
 

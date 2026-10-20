@@ -226,9 +226,38 @@ const RUNTIME = `(() => {
         g.removeAttribute('data-tc-gsap');
       }
       for (const r of [el, ...el.querySelectorAll('[data-tc-reveal]')]) if (r.hasAttribute('data-tc-reveal')) (window.__tcSettle || ((x) => x.removeAttribute('data-tc-reveal')))(r);
+      // a captured canvas (an empty element: a canvas keeps no pixels in HTML) gives way to the scene the clone's
+      // script mounts: the moment a canvas of the script's own appears beside or inside its host, it is removed, so
+      // the two never stack (a script that draws into the captured canvas itself keeps it)
+      for (const c of [el, ...el.querySelectorAll('canvas[data-tc-runtime="canvas"]')].filter((x) => x.matches('canvas[data-tc-runtime="canvas"]'))) {
+        const host = c.parentElement;
+        if (!host) continue;
+        new MutationObserver((records, mo) => {
+          for (const r of records) for (const n of r.addedNodes) {
+            if (n.nodeType === 1 && (n.matches('canvas:not([data-tc-runtime])') || n.querySelector('canvas:not([data-tc-runtime])'))) { c.remove(); mo.disconnect(); return; }
+          }
+        }).observe(host, { childList: true, subtree: true });
+      }
     }
   };
-  const boot = window.tcBoot = { holds: 1, hold() { this.holds++; }, release() { if (--this.holds <= 0) requestAnimationFrame(() => document.documentElement.classList.remove('tc-boot')); } };
+  // tcBoot.hold() returns its own release (call it when ready); a hold never released is released after 5 s with a
+  // warning, so a script that forgets can never leave the page hidden
+  const pending = [];
+  const drop = () => { if (--boot.holds <= 0) requestAnimationFrame(() => document.documentElement.classList.remove('tc-boot')); };
+  const boot = window.tcBoot = {
+    holds: 1,
+    hold() {
+      this.holds++;
+      const h = { done: false };
+      const free = () => { if (h.done) return; h.done = true; clearTimeout(h.timer); pending.splice(pending.indexOf(h), 1); drop(); };
+      h.timer = setTimeout(() => { if (!h.done) { console.warn('trueclone: a tcBoot.hold() was not released within 5 s; released'); free(); } }, 5000);
+      pending.push(h);
+      h.free = free;
+      return free;
+    },
+    // release() without a hold's own function frees the oldest hold still open (or the boot's own first hold)
+    release() { if (pending.length) pending[0].free(); else drop(); },
+  };
   if (!window.__tcInjected) { if (document.readyState === 'loading') addEventListener('DOMContentLoaded', () => boot.release()); else boot.release(); }
 })();`;
 
@@ -257,12 +286,21 @@ if (typeof flags['route-page'] === 'string' && !routePage) { console.error(`no s
 const passFile = routePage ? `.page-${routePage.slug}.html` : 'index.html';
 const t0 = Date.now();
 const step = (msg) => console.log(`seed ${String(Math.round((Date.now() - t0) / 1000)).padStart(4)}s  ${msg}`);
+// The captured page lives at the clone's root and at its own address too (/products/x, /en/getting-started):
+// a link or Back to it, or a reload there, finds the same page, as on the site.
+const startParts = (() => { try { return new URL(meta.finalUrl || meta.url).pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch { return []; } })();
+const writeStartAlias = async (doc) => {
+  if (!startParts.length || startParts.some((p) => /^\.+$|[\\:*?"<>|]/.test(p))) return;
+  await fs.mkdir(path.join(clone, ...startParts), { recursive: true });
+  await fs.writeFile(path.join(clone, ...startParts, 'index.html'), rebaseHtml(doc, startParts.length));
+};
 // --patches: re-apply clone/patches/ onto the last seed output in a second, without seeding again
 if (flags.patches) {
   const base = await fs.readFile(path.join(clone, '.seed-base.html'), 'utf8').catch(() => null);
   if (base === null) { console.error(`no seed output to patch in ${path.relative(process.cwd(), clone)}: run trueclone seed ${name} first`); process.exit(1); }
   const { html: patched, applied } = await applyPatches(base);
   await fs.writeFile(path.join(clone, 'index.html'), patched);
+  await writeStartAlias(patched);
   for (const r of (meta.routes || []).filter((x) => x.slug && !x.sameDocument)) {
     const pageBase = await fs.readFile(path.join(clone, `.seed-base-${r.slug}.html`), 'utf8').catch(() => null);
     if (pageBase === null) continue;
@@ -394,6 +432,9 @@ if (marked || classMarked || scrubMarked) {
 // (--hide-until-boot "<selectors>") stay invisible meanwhile, so a visitor never sees their captured, pre-script state;
 // a 3 s failsafe shows everything if no script ever runs.
 html = html.replace(/<html\b([^>]*)>/i, (all, attrs) => (/\bclass=/.test(attrs) ? `<html${attrs.replace(/\bclass=(["'])([^"']*)\1/, (m, q, v) => `class=${q}${v.trim() ? `${v.trim()} ` : ''}tc-boot${q}`)}>` : `<html${attrs} class="tc-boot">`));
+// What capture hid (--hide: a region popup, a cookie banner a visitor dismisses) is hidden in the clone too: the saved
+// page still holds it, and every check compares against the page without it
+if ((meta.hide || []).length) html = html.replace(/<\/head>/i, () => `<style id="tc-hide">/* trueclone seed: hidden at capture (--hide) */${meta.hide.join(',')}{display:none!important}</style>\n</head>`);
 html = html.replace(/<\/head>/i, () => `<style id="tc-boot-styles">/* trueclone seed: boot contract */@keyframes tc-boot-failsafe{to{visibility:visible}}html.tc-boot [data-tc-boot-hide]{visibility:hidden;animation:tc-boot-failsafe 0s 3s forwards}</style>\n<script id="tc-runtime">${RUNTIME}</script>\n</head>`);
 // the clone's own behaviour script, loaded once the DOM is parsed
 if (!/<script[^>]+src="script\.js"/.test(html)) html = html.replace(/<\/body>/i, '<script src="script.js" defer></script>\n</body>');
@@ -410,7 +451,8 @@ if (routePage) {
   process.exit(0);
 }
 await fs.writeFile(path.join(clone, 'index.html'), html);
-step('index.html written');
+await writeStartAlias(html);
+step(`index.html written${startParts.length ? ` (and at its own address, clone/${startParts.join('/')}/index.html)` : ''}`);
 
 // notes.md: the agent's record, with the sections the report reads back (Findings, Accepted differences). Written once.
 const notesFile = path.join(root, 'notes.md');
@@ -473,7 +515,16 @@ for (const r of ownPages) {
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------
+// the names (ids, classes) the site's own scripts mention: an SVG holding one of them is moved by a script and keeps its
+// shapes in template mode (placeholdersInPage)
+async function scriptNames() {
+  const dir = path.join(ref, 'scripts');
+  const text = (await Promise.all((await fs.readdir(dir).catch(() => [])).filter((f) => /\.js$/.test(f) && !/\.pretty\.js$/.test(f)).map((f) => fs.readFile(path.join(dir, f), 'utf8').catch(() => '')))).join('\n');
+  return [...new Set(text.match(/['"`][#.]?[a-zA-Z][\w-]{2,40}['"`]/g) || [])].map((t) => t.slice(1, -1).replace(/^[#.]/, ''));
+}
+
 async function browserPass(template, reveals, classes, groups = [], scrubs = []) {
+  const scriptedNames = template ? await scriptNames() : [];
   // served from sites/<name>/ so the pass can reach reference/assets (see `forPass`)
   const server = await serve(root);
   const browser = await openBrowser(flags.cdp);
@@ -515,7 +566,7 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
     }
     if (template) {
       step('template placeholders: measuring every text run (the longest part on a big page)');
-      await page.evaluate(placeholdersInPage, [LOREM, null]);
+      await page.evaluate(placeholdersInPage, [LOREM, null, scriptedNames]);
       step('placeholders done');
     }
     // last, because the recorded paths above were taken on the live page, pin-spacers included
@@ -854,15 +905,20 @@ function cleanRuntimeInPage() {
     const clip = clipOf(el);
     const flat = (moved.width < 0.5 || moved.height < 0.5) && home.width >= 0.5 && home.height >= 0.5;
     const away = (!meets(moved, pageBox) && meets(home, pageBox)) || (clip && !meets(moved, clip) && meets(home, clip));
-    el.setAttribute('data-tc-gsap', flat || away ? 'state' : '');
-    if (flat || away) log.gsapState = (log.gsapState || 0) + 1;
+    // and by the value itself, which holds at every size: an element with no box at this size (a phone menu at desktop
+    // width) has no geometry to judge, but scale 0 on an axis, or a full-size move (±100%), is a closed state anywhere
+    let byValue = /translate[XY3d]*\([^)]*-?100%/.test(t);
+    try { const m = new DOMMatrixReadOnly(t); byValue ||= Math.abs(m.a) < 1e-3 || Math.abs(m.d) < 1e-3; } catch { /* a % translate: read above */ }
+    const state = flat || away || byValue;
+    el.setAttribute('data-tc-gsap', state ? 'state' : '');
+    if (state) log.gsapState = (log.gsapState || 0) + 1;
     log.gsap++;
   }
   return log;
 }
 
 
-function placeholdersInPage([lorem, rootSel]) {
+function placeholdersInPage([lorem, rootSel, scripted = []]) {
   // the whole page, or one region (a widget's recorded state placed into the page to be measured)
   const root = rootSel ? document.querySelector(rootSel) : document.body;
   if (!root) return null;
@@ -1001,9 +1057,28 @@ function placeholdersInPage([lorem, rootSel]) {
 
   // media: same box, placeholder content, opaque like the image (text an image covers stays covered)
   const box = (w, h) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(w) || 16}" height="${Math.round(h) || 16}" viewBox="0 0 16 16" preserveAspectRatio="none"><rect width="16" height="16" fill="#8c8c8c"/></svg>`)}`;
+  // An image with transparency (a cut-out product shot, a logo) becomes its silhouette in the same grey: its shape,
+  // not a box (a box would cover what showed around and through it). Read from the image itself, shrunk to 256 px.
+  const silhouette = (img) => {
+    try {
+      if (!img.complete || !img.naturalWidth) return null;
+      const k = Math.min(1, 256 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0, c.width, c.height);
+      const d = g.getImageData(0, 0, c.width, c.height);
+      let clear = 0;
+      for (let i = 3; i < d.data.length; i += 4) if (d.data[i] < 250) clear++;
+      if (clear < d.data.length / 4 * 0.02) return null; // opaque: a box is its shape
+      for (let i = 0; i < d.data.length; i += 4) { d.data[i] = 140; d.data[i + 1] = 140; d.data[i + 2] = 140; }
+      g.putImageData(d, 0, 0);
+      return c.toDataURL('image/png');
+    } catch { return null; } // a cross-origin image cannot be read: the box
+  };
   for (const img of root.querySelectorAll('img')) {
     const r = img.getBoundingClientRect();
-    img.setAttribute('src', box(img.naturalWidth || r.width, img.naturalHeight || r.height));
+    img.setAttribute('src', silhouette(img) || box(img.naturalWidth || r.width, img.naturalHeight || r.height));
     for (const a of ['srcset', 'sizes', 'data-src', 'data-srcset']) img.removeAttribute(a);
   }
   root.querySelectorAll('picture source, video source, audio source, track').forEach((s) => s.remove());
@@ -1014,15 +1089,25 @@ function placeholdersInPage([lorem, rootSel]) {
     v.setAttribute('preload', 'none');
   }
   for (const f of root.querySelectorAll('iframe, embed, object')) f.setAttribute(f.tagName === 'OBJECT' ? 'data' : 'src', 'about:blank');
-  // inline SVG: small ones are interface icons and stay; large ones (logos, illustrations) become a same-size box
+  // inline SVG: small ones are interface icons and stay; large ones (logos, illustrations) become a same-size box,
+  // except a drawing the site's scripts move (an id or class inside it that a script names: rings, a motion path):
+  // its shapes stay, recoloured grey, so the clone's script has the same elements to animate
   for (const svg of root.querySelectorAll('svg')) {
     if (svg.parentElement?.closest('svg')) continue;
     const r = svg.getBoundingClientRect();
     if (r.width <= 48 && r.height <= 48) continue;
+    const named = [...svg.querySelectorAll('[id], [class]')].flatMap((n) => [n.id, ...String(n.getAttribute('class') || '').split(/\s+/)]).filter((t) => t && t.length > 2);
+    if (named.some((t) => scripted.includes(t))) {
+      for (const n of svg.querySelectorAll('*')) {
+        for (const a of ['fill', 'stroke', 'stop-color']) if (n.getAttribute(a) && !/^(none|transparent|currentColor)$/i.test(n.getAttribute(a)) && !/^url\(/.test(n.getAttribute(a))) n.setAttribute(a, '#8c8c8c');
+        if (n.tagName.toLowerCase() === 'text' || n.tagName.toLowerCase() === 'tspan') n.textContent = n.textContent.replace(/\S/g, 'x');
+      }
+      continue;
+    }
     if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${Math.round(r.width) || 16} ${Math.round(r.height) || 16}`);
     svg.setAttribute('preserveAspectRatio', 'none');
     const [, , w, h] = svg.getAttribute('viewBox').split(/[\s,]+/).map(Number);
-    svg.innerHTML = `<rect width="${w || 16}" height="${h || 16}" fill="#8884"/>`;
+    svg.innerHTML = `<rect width="${w || 16}" height="${h || 16}" fill="#8c8c8c"/>`;
   }
   for (const el of root.querySelectorAll('[style*="url("]')) el.setAttribute('style', el.getAttribute('style').replace(/url\((['"]?)(?!data:)[^)'"]+\1\)/g, 'url("assets/placeholder.svg")'));
 

@@ -30,6 +30,8 @@ const T = { layout: 98, states: 95, canvas: 90, motion: 95, detail: 95, hovers: 
 const ACCEPT_FLOOR = 95;
 // the scroll-states gate on the worst single frame, besides the mean
 const FRAME_FLOOR = 80;
+// the same for canvases, lower: a scene's frames vary more (time, physics, random seeds)
+const CANVAS_FLOOR = 60;
 const mark = (ok, acceptedNote) => (ok === null ? '–' : ok ? 'pass' : acceptedNote ? `accepted (${acceptedNote})` : '**below target**');
 const pct = (v) => (v === undefined || v === null ? '–' : `${v}%`);
 // the seed sizes, then the held-out sizes (captured and scored, never used to build the clone)
@@ -62,14 +64,21 @@ const reviewFrames = [];
 for (const [dir, size] of ['wide', 'laptop', 'desktop', 'tablet', 'mobile'].flatMap((s) => [[`compare/review/${s}`, s], ...(meta.routes || []).filter((r) => r.slug).map((r) => [`compare/review/routes/${r.slug}/${s}`, s])])) {
   const fr = await read(`${dir}/frames.json`);
   for (const x of fr?.frames || []) {
-    const v = reviewVerdicts.find((l) => l.startsWith(`${x.id} ${size}:`) || l.startsWith(`${x.id} ${size} :`));
-    reviewFrames.push({ size, id: x.id, pct: x.pct, verdict: v ? v.slice(v.indexOf(':') + 1).trim() : null });
+    // "<frame> <size> [<token>]: <verdict>": the token names the picture judged (review writes it per frame); a frame
+    // shot again that looks different has a new token, and the old verdict no longer holds for it
+    const at = new RegExp(`^${x.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} ${size}(?:\\s*\\[([a-z0-9]+)\\])?\\s*:`, 'i');
+    const v = reviewVerdicts.find((l) => at.test(l));
+    const token = v ? at.exec(v)[1] || null : null;
+    reviewFrames.push({ size, id: x.id, pct: x.pct, token: x.token || null, verdict: v ? v.slice(v.indexOf(':', v.search(/\]|:/)) + 1).trim() : null, stale: Boolean(v && x.token && token !== x.token) });
   }
 }
-// a frame is closed when it is "same", or "tool: <why>; evidence: <file>" with the file there (a difference proved to
-// be the instrument's, not the clone's); "differs" and frames without a verdict are open
-const reviewClosed = (v) => Boolean(v) && (/^same\b/i.test(v) || (/^tool\b/i.test(v) && /evidence:\s*([^\s;,)]+)/i.test(v) && fsSync.existsSync(path.resolve(root, /evidence:\s*([^\s;,)]+)/i.exec(v)[1]))));
-const reviewOpen = reviewFrames.filter((x) => !reviewClosed(x.verdict));
+// A frame is closed when it is "same" (with the reason, below SAME_REASON pixel match), or "tool: <why>; evidence:
+// <file>" with the file there and made to prove it (a crop, a measurement: not one of the site's stylesheets or
+// scripts); "differs", frames without a verdict, and verdicts given to another picture of the frame are open.
+const SAME_REASON = 85;
+const evidenceOk = (v) => { const m = /evidence:\s*([^\s;,)]+)/i.exec(v); return Boolean(m && !/\.(css|m?js)$/i.test(m[1]) && fsSync.existsSync(path.resolve(root, m[1]))); };
+const reviewClosed = (x) => Boolean(x.verdict) && !x.stale && ((/^same\b/i.test(x.verdict) && (x.pct === undefined || x.pct >= SAME_REASON || x.verdict.replace(/^same\b[\s:,-]*/i, '').length >= 12)) || (/^tool\b/i.test(x.verdict) && evidenceOk(x.verdict)));
+const reviewOpen = reviewFrames.filter((x) => !reviewClosed(x));
 // findings under any heading that says so ("## Findings", "## Progress / findings", "## Tool findings")
 const findings = [...notes.matchAll(/^## [^\n]*finding[^\n]*\n([\s\S]*?)(?=^## |(?![\s\S]))/gim)]
   .flatMap((m) => m[1].replace(/<!--[\s\S]*?-->/g, '').split('\n').map((l) => l.trim()).filter((l) => /^[-*]\s+\S/.test(l)).map((l) => l.replace(/^[-*]\s+/, '')));
@@ -120,16 +129,22 @@ if (meta.mode === 'exact') row('Layout (real pixels)', V, (x) => x >= T.layout, 
 const frameNotes = VPS.map((v) => [v, worstFrame(v)]).filter(([, f]) => f && f.match < FRAME_FLOOR).map(([v, f]) => `${v} y ${f.y}: ${f.match}%`);
 row('Scroll states', S, (x, v) => x >= T.states && !((worstFrame(v)?.match ?? 100) < FRAME_FLOOR), `target ≥ ${T.states}% and no frame below ${FRAME_FLOOR}%${frameNotes.length ? `; frames below: ${frameNotes.slice(0, 4).join(', ')}` : ''}`);
 const CV = byVp(states, 'canvas');
-if (present(CV).length) row('Canvases', CV, (x) => x >= T.canvas, `target ≥ ${T.canvas}%; what each scene draws, compared in the scroll-state frames (colours and coverage)`);
-row('Motion curves', C, (x) => x >= T.motion, present(C).length ? `target ≥ ${T.motion}%` : 'no motion map (no scroll or time animation to score)');
+// as for the scroll states, a mean hides a scene that is wrong at one point of the page (a 96% average with a frame at
+// 38%): every canvas frame must reach CANVAS_FLOOR too
+const worstCanvas = (v) => { const w = (states?.viewports || []).find((x) => x.viewport === v)?.canvasWorst || []; return w.length ? w.reduce((a, b) => (b.similarity < a.similarity ? b : a)) : null; };
+const canvasNotes = VPS.map((v) => [v, worstCanvas(v)]).filter(([, f]) => f && f.similarity < CANVAS_FLOOR).map(([v, f]) => `${v} y ${f.y}: ${f.similarity}%`);
+if (present(CV).length) row('Canvases', CV, (x, v) => x >= T.canvas && !((worstCanvas(v)?.similarity ?? 100) < CANVAS_FLOOR), `target ≥ ${T.canvas}% and no frame below ${CANVAS_FLOOR}%; what each scene draws, compared in the scroll-state frames (colours and coverage)${canvasNotes.length ? `; frames below: ${canvasNotes.slice(0, 4).join(', ')}` : ''}`);
+// recorded scroll curves with no map to score them: not "nothing to score", but not measured yet
+const recordedCurves = ((await read('reference/reveals.desktop.json'))?.scrubs || []).length;
+row('Motion curves', C, (x) => x >= T.motion, present(C).length ? `target ≥ ${T.motion}%` : recordedCurves ? `not measured: ${recordedCurves} scroll curve(s) recorded on the reference and no motion map (trueclone curves ${name} --draft)` : 'no motion map (no scroll or time animation to score)');
 row('Detail (styles)', D, (x) => x >= T.detail, `target ≥ ${T.detail}%; font, size, weight, line height, colour, boxes`);
-row('Hovers', { desktop: hovers?.score }, hovers ? hovers.score >= T.hovers : null, `target ≥ ${T.hovers}% of the reference hover effects`);
+row('Hovers', { desktop: hovers?.score }, hovers && hovers.score !== null && hovers.score !== undefined ? hovers.score >= T.hovers : null, hovers && hovers.score === null ? `not measurable: no hover effect to compare${hovers.blocked ? `; the reference is covered by \`${hovers.blocked}\` (capture again with --hide)` : ''}` : `target ≥ ${T.hovers}% of the reference hover effects`);
 const LD = byVp(load, 'score');
 const tts = (side) => VPS.map((v) => load?.viewports.find((x) => x.viewport === v)).filter(Boolean).map((x) => (x[side]?.settledAt === null ? '>4000' : x[side]?.settledAt)).filter((x) => x !== undefined);
 row('Load sequence', LD, (x) => x >= T.load, present(LD).length ? `target ≥ ${T.load}%; how settled each side is at 0.25 to 4 s, cold cache, same network (settled at: reference ${tts('ref').map((x) => `${x}ms`).join(' / ') || '–'}, clone ${tts('clone').map((x) => `${x}ms`).join(' / ') || '–'})` : 'not measured (trueclone load <name>)');
 if (reviewFrames.length) {
   const sizes = [...new Set(reviewFrames.map((x) => x.size))];
-  rows.push(`| Review (by eye) | ${VPS.map((v) => (sizes.includes(v) ? `${reviewFrames.filter((x) => x.size === v && reviewClosed(x.verdict)).length}/${reviewFrames.filter((x) => x.size === v).length}` : '–')).join(' | ')} | ${reviewOpen.length ? '**below target**' : 'pass'} | frames closed in notes.md: "same", or "tool" with an evidence file (trueclone review) |`);
+  rows.push(`| Review (by eye) | ${VPS.map((v) => (sizes.includes(v) ? `${reviewFrames.filter((x) => x.size === v && reviewClosed(x)).length}/${reviewFrames.filter((x) => x.size === v).length}` : '–')).join(' | ')} | ${reviewOpen.length ? '**below target**' : 'pass'} | frames closed in notes.md: "same", or "tool" with an evidence file (trueclone review) |`);
 } else rows.push(`| Review (by eye) | – | – | – | – | – | **below target** | not done: run trueclone review <name> and give every frame a verdict in notes.md |`);
 // the written plan: behaviours in notes.md, each tied to the site's own code (file:line) when the site has handlers
 const behaviours = notesSection('Behaviours').join('\n');
@@ -159,12 +174,17 @@ if (ran.length || curvesRec.length) {
   checks.push({ check: 'Coverage (site code)', key: 'coverage', pass: covOk, failing: [...uncitedScripts.map((s) => ({ viewport: null, script: s.file })), ...uncitedCurves.map((c) => ({ viewport: null, curve: c.cls, path: c.path }))] });
 }
 // scenarios the capture found where the reference itself does not react are not behaviour: not counted
-const scenarios = (interact?.scenarios || []).filter((s) => !s.notBehaviour);
+// and those on a route the reference draws differently every load are not scored either (interact.mjs: unstable)
+const scenarios = (interact?.scenarios || []).filter((s) => !s.notBehaviour && !s.unstable);
+const unstableScenarios = (interact?.scenarios || []).filter((s) => s.unstable);
+const brokenScenarios = scenarios.filter((s) => s.broken);
 const failed = scenarios.filter((s) => s.expect && !s.expect.pass);
 const autoCount = scenarios.filter((s) => s.auto).length;
 const retired = interact?.skipped || [];
-row('Interactions', { desktop: scenarios.length ? +(scenarios.reduce((n, s) => n + (s.score || 0), 0) / scenarios.length).toFixed(2) : undefined }, scenarios.length ? failed.length === 0 : null,
-  scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios change on both sides and end in the reference's state (≥ 95)${autoCount ? `; ${autoCount} found by the capture` : ''}${failed.length ? `; failing: ${failed.slice(0, 4).map((s) => s.name).join(', ')}${failed.length > 4 ? '…' : ''}` : ''}${retired.length ? `; retired: ${retired.map((s) => `${s.name} (${s.why})`).join(', ')}` : ''}` : 'no scenarios (interactions.json, or reference/interactions.auto.json from capture)');
+// the value is the share of scenarios that pass, the number the verdict rests on (an average end-state match next to
+// "0/28 pass" reads as a contradiction)
+row('Interactions', { desktop: scenarios.length ? +(100 * (scenarios.length - failed.length) / scenarios.length).toFixed(1) : undefined }, scenarios.length ? failed.length === 0 : null,
+  scenarios.length ? `${scenarios.length - failed.length}/${scenarios.length} scenarios pass: they change on both sides and end in the reference's state (≥ 95)${autoCount ? `; ${autoCount} found by the capture` : ''}${brokenScenarios.length ? `; ${brokenScenarios.length} could not run on the reference (see Findings)` : ''}${unstableScenarios.length ? `; ${unstableScenarios.length} on a route random on every load, not scored` : ''}${failed.length ? `; failing: ${failed.slice(0, 4).map((s) => s.name).join(', ')}${failed.length > 4 ? '…' : ''}` : ''}${retired.length ? `; retired: ${retired.map((s) => `${s.name} (${s.why})`).join(', ')}` : ''}` : 'no scenarios (interactions.json, or reference/interactions.auto.json from capture)');
 
 // The site's other routes (meta.routes): layout and scroll states of each, at each size, worst route first. One
 // route below target fails the check: exact means every page, not the one captured first.
@@ -192,7 +212,7 @@ if (routeRows.length) {
   rows.push(`| Routes | ${VPS.map(() => '').join(' | ')} | ${routeFailing.length ? '**below target**' : 'pass'} | ${routeRows.length} other route(s): layout ≥ ${T.layout} and scroll states ≥ ${T.states} at every size (see Routes below) |`);
   checks.push({ check: 'Routes', key: 'routes', pass: !routeFailing.length, failing: routeFailing.sort((a, b) => (a.value ?? -1) - (b.value ?? -1)) });
 }
-checks.push({ check: 'Review (by eye)', key: 'review', pass: reviewFrames.length > 0 && !reviewOpen.length, failing: reviewFrames.length ? reviewOpen.map((x) => ({ viewport: x.size, frame: x.id, verdict: x.verdict })) : [{ viewport: null, frame: null, verdict: 'not done' }] });
+checks.push({ check: 'Review (by eye)', key: 'review', pass: reviewFrames.length > 0 && !reviewOpen.length, failing: reviewFrames.length ? reviewOpen.map((x) => ({ viewport: x.size, frame: x.id, token: x.token, verdict: x.stale ? `given to an earlier picture of this frame: look again (token ${x.token})` : x.verdict && /^same/i.test(x.verdict) ? `same, without the reason a ${x.pct}% frame needs` : x.verdict && /^tool/i.test(x.verdict) ? `tool, without evidence made to prove it` : x.verdict })) : [{ viewport: null, frame: null, verdict: 'not done' }] });
 await fs.mkdir(path.join(root, COMPARE), { recursive: true });
 // a report regenerated only to follow the notes (TC_KEEP_AT, below) keeps the time its scores were taken
 const priorAt = process.env.TC_KEEP_AT ? (await read(`${COMPARE}/verdict.json`))?.at : null;
@@ -208,7 +228,7 @@ for (const v of VPS) for (const e of (curves[v]?.entries || []).filter((x) => x.
 for (const s of failed) weak.push(s.expect.ref !== null && !(s.expect.ref && s.expect.clone)
   ? `- Interaction "${s.name}": the expected change happened on ${s.expect.ref ? 'the reference' : 'neither side'}${s.expect.clone ? '' : ', not on the clone'}`
   : `- Interaction "${s.name}": the clone ends in a different state (${s.score}% like the reference's)`);
-for (const v of (load?.viewports || []).filter((x) => x.score < T.load)) {
+for (const v of (load?.viewports || []).filter((x) => typeof x.score === 'number' && x.score < T.load)) { // a size not scored (unstable) has nothing to fix
   const worst = Object.entries(v.gap || {}).sort((a, b) => b[1] - a[1])[0];
   if (worst) weak.push(`- Load ${v.viewport}: at ${worst[0]}ms the clone is ${v.clone.curve[worst[0]]}% settled, the reference ${v.ref.curve[worst[0]]}% (settled at ${v.clone.settledAt ?? '>4000'}ms vs ${v.ref.settledAt ?? '>4000'}ms)`);
 }
@@ -228,10 +248,14 @@ try {
 const TRACKING = /google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|linkedin\.com\/px|tiktok|challenges\.cloudflare|cdn-cgi\/rum|recaptcha|hcaptcha|turnstile/i;
 const tracking = calls.filter((c) => TRACKING.test(c.url));
 const data = calls.filter((c) => !TRACKING.test(c.url));
+// the calls the clone's own code makes too (script.js and patches name their address): ported, not left out
+const ownCode = [await fs.readFile(path.join(root, 'clone', 'script.js'), 'utf8').catch(() => ''), ...await Promise.all((await fs.readdir(path.join(root, 'clone', 'patches')).catch(() => [])).filter((f) => /\.(m?js|html)$/.test(f)).map((f) => fs.readFile(path.join(root, 'clone', 'patches', f), 'utf8').catch(() => '')))].join('\n');
+const calledByClone = (c) => { try { const u = new URL(c.url); return ownCode.includes(u.host + u.pathname.split('/').slice(0, 3).join('/')) || (u.pathname.length > 8 && ownCode.includes(u.pathname)); } catch { return false; } };
 const host = (u) => { try { return new URL(u).host; } catch { return u; } };
 const uniq = (list) => [...new Map(list.map((c) => [`${c.method} ${c.url.split('?')[0]}`, c])).values()];
 
-const libs = motionInv ? Object.entries(motionInv.libs || {}).filter(([, v]) => v).map(([k]) => k) : [];
+// the libraries by name: a list of runtimes (gsaps, engines) or where one was found (…At) is not one
+const libs = motionInv ? Object.entries(motionInv.libs || {}).filter(([k, v]) => v && !Array.isArray(v) && !/At$/.test(k)).map(([k, v]) => (v === true ? k : `${k} ${v}`)) : [];
 const md = `# trueclone report: ${name}${COMPARE === 'compare' ? '' : ' (Next.js app; the review is the HTML clone\'s, which the app is generated from)'}
 
 | | |
@@ -262,7 +286,7 @@ ${motionInv ? `Libraries: ${libs.length ? libs.join(', ') : 'none (no GSAP, Leni
 
 - **Server-side behaviour** is never visible from the outside: databases, accounts, payments, search indexes. The clone reproduces the client.
 - **Tracking, analytics and bot protection** are left out on purpose${tracking.length ? `: ${[...new Set(tracking.map((c) => { try { const u = new URL(c.url); return `${u.host}${u.pathname.split('/').slice(0, 3).join('/')}`; } catch { return host(c.url); } }))].join(', ')}` : ''}.
-${data.length ? `- **Data and API calls** the reference makes (${uniq(data).length}), which the clone does not call; their captured responses are in reference/desktop.har:\n${uniq(data).slice(0, 15).map((c) => `  - \`${c.method} ${c.url.split('?')[0].slice(0, 110)}\` → ${c.status} ${c.type.split(';')[0]}`).join('\n')}` : '- **Data and API calls**: none seen during the capture (static content).'}
+${data.length ? `- **Data and API calls** the reference makes (${uniq(data).length})${uniq(data).some(calledByClone) ? `; the clone calls ${uniq(data).filter(calledByClone).length} of them itself (marked), the others not` : ', which the clone does not call'}; their captured responses are in reference/desktop.har:\n${uniq(data).slice(0, 15).map((c) => `  - \`${c.method} ${c.url.split('?')[0].slice(0, 110)}\` → ${c.status} ${c.type.split(';')[0]}${calledByClone(c) ? ' (called by the clone too)' : ''}`).join('\n')}` : '- **Data and API calls**: none seen during the capture (static content).'}
 `;
 // rows left out of the summary table (an empty optional row) must not leave a blank line that splits it
 const [head, ...rest] = md.split('\n## Scores');

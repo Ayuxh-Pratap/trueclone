@@ -18,7 +18,7 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl, mediaReady, inkShare } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -56,16 +56,24 @@ if (flags.auto) {
   const { detectInPage } = await import('./interactions-auto.mjs');
   const browser = await openBrowser(flags.cdp);
   const found = [];
+  // the captured page and every other captured route, as capture does: a route's scenarios start at its address
+  const captured = new Set((meta.routes || [{ path: '/' }]).map((r) => r.path));
+  const pages = [{ path: null, url: meta.url }, ...(meta.routes || []).filter((r) => r.slug).map((r) => ({ path: r.path, url: new URL(r.path, meta.finalUrl || meta.url).href }))];
   try {
-    for (const vp of VIEWPORTS) {
-      const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
-      await openUrl(page, meta.url);
-      await waitStill(page, { timeout: 15000, interval: 200 });
-      await page.evaluate(() => scrollTo(0, 0));
-      // navigation only to the routes this capture has (the others have nothing to compare with)
-      const captured = new Set((meta.routes || [{ path: '/' }]).map((r) => r.path));
-      found.push(...(await page.evaluate(detectInPage, [vp.name, meta.mode === 'exact' ? 'visual' : 'structure', 10])).filter((s) => !s.navigation || captured.has(s.name.replace(/^go to (\S+).*/, '$1'))));
-      await context.close();
+    for (const pg of pages) {
+      for (const vp of VIEWPORTS) {
+        const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
+        try {
+          await openUrl(page, pg.url);
+          await waitStill(page, { timeout: 15000, interval: 200 });
+          await page.evaluate(() => scrollTo(0, 0));
+          // navigation only to the routes this capture has (the others have nothing to compare with), at most 8 links
+          // per page and size, counted among those
+          let navs = 0;
+          const here = (await page.evaluate(detectInPage, [vp.name, meta.mode === 'exact' ? 'visual' : 'structure', 40])).filter((s) => !s.navigation || (captured.has(s.name.replace(/^go to (\S+).*/, '$1')) && ++navs <= 8));
+          found.push(...(pg.path ? here.map((s) => ({ ...s, path: pg.path, name: `${pg.path}: ${s.name}` })) : here));
+        } catch (e) { console.warn(`WARNING ${pg.path || 'the captured page'} at ${vp.name}: ${e.message.split('\n')[0]}`); } finally { await context.close(); }
+      }
     }
   } finally { if (!flags.cdp) await browser.close(); }
   await fs.writeFile(autoFile, JSON.stringify(found, null, 2));
@@ -117,6 +125,9 @@ async function runSide(url, side, list) {
     {
       const vp = VIEWPORTS.find((v) => v.name === (sc.viewport || 'desktop'));
       const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
+      // the HTTP status of the last document this tab loaded: a link that lands on a 404 is not the site's page
+      let docStatus = null;
+      page.on('response', (r) => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) docStatus = r.status(); });
       // a scenario on another route of the site starts at that route's address, on both sides
       const startUrl = sc.path && sc.path !== '/' ? new URL(side === 'ref' ? sc.path : sc.path.replace(/^\//, ''), url).href : url;
       await openUrl(page, startUrl); // a load event that never comes is not a failed scenario (lib.mjs)
@@ -145,16 +156,20 @@ async function runSide(url, side, list) {
       const before = expectSel ? await stateOf(page, expectSel) : null;
       const shots = {};
       const paths = {};
+      const statuses = {};
       const states = [];
       const shot = async (label) => {
+        // the view as a visitor sees it once its media are in (both sides alike, whichever network is faster)
+        await mediaReady(page, 8000);
         if (expectSel) states.push(await stateOf(page, expectSel));
         const file = path.join(outDir, `${sc.name.replace(/[^a-z0-9]+/gi, '-')}.${label}.${side}${sc.compare === 'structure' ? '.mask' : ''}.png`);
         if (sc.compare === 'structure') await maskToggle(page, true);
         await page.screenshot({ path: file });
         if (sc.compare === 'structure') await maskToggle(page, false);
         shots[label] = file;
-        // the address at this moment: a link must take both sides to the same route (the clone is served at its root)
+        // the address at this moment: a link must take both sides to the same route
         paths[label] = new URL(page.url()).pathname.replace(/\/index\.html$/, '/').replace(/\/+$/, '') || '/';
+        statuses[label] = docStatus;
       };
       await shot('before');
       for (const st of sc.steps) {
@@ -204,7 +219,7 @@ async function runSide(url, side, list) {
       }
       const after = expectSel ? await stateOf(page, expectSel) : null;
       const changed = expectSel ? before !== null && [...states, after].some((s) => s !== null && s !== before) : null;
-      results.push({ name: sc.name, shots, paths, changed, before, after });
+      results.push({ name: sc.name, shots, paths, statuses, changed, before, after });
       await context.close();
     }
   };
@@ -225,7 +240,7 @@ const server = typeof flags.url === 'string' ? null : await serve(path.join(root
 const cloneUrl = server ? server.url : flags.url;
 // Reference results are cached per scenario (reference side + viewport + capture time) as long as the shot
 // files still exist; only new or edited scenarios touch the live site. --refresh-ref re-measures all.
-const refKey = (sc) => ({ tool: 'interact', v: 3, path: sc.path || '/', name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
+const refKey = (sc) => ({ tool: 'interact', v: 4, path: sc.path || '/', name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
 const refRes = [];
 const missing = [];
 for (const sc of scenarios) {
@@ -234,24 +249,43 @@ for (const sc of scenarios) {
   if (hit && filesOk) refRes.push(hit); else missing.push(sc);
 }
 if (missing.length) console.log(`measuring ${missing.length} reference scenario(s) (${scenarios.length - missing.length} cached)`);
-for (const r of await runSide(meta.url, 'ref', missing)) {
+const refRun = await runSide(meta.url, 'ref', missing);
+for (const r of refRun) {
   refRes.push(r);
   const sc = missing.find((m) => m.name === r.name);
-  if (sc && r.shots) await cached(root, refKey(sc), async () => r, true);
+  // a step that could not run on the reference (its element not there) is kept with the result, cached or not
+  if (sc && r.shots) { r.refErrors = refRun.filter((x) => x.name === r.name && x.error).map((x) => x.error); await cached(root, refKey(sc), async () => r, true); }
 }
 const cloneRes = await runSide(cloneUrl, 'clone', scenarios);
 server?.close();
 
 const report = { name, at: new Date().toISOString(), scenarios: [] };
 const END_STATE_MIN = 95; // the shots after the action must match this well
+// The captured page is the clone's start page: served at the clone's root, at its own address too (seed, serve(),
+// Next). Addresses are compared relative to it: the reference at /products/x and the clone at / are the same place.
+const routePathOf = (u) => { try { return new URL(u).pathname.replace(/\/index\.html$/, '/').replace(/\/+$/, '') || '/'; } catch { return '/'; } };
+const startPath = routePathOf(meta.finalUrl || meta.url);
+const canon = (p) => (p === startPath ? '/' : p);
+const unstableRoutes = new Set((meta.routes || []).filter((r) => r.unstable).map((r) => r.path));
+// a shot this much emptier than the reference's (its share of drawn pixels) shows no page: a 404, a blank route
+const EMPTY_SHARE = 0.3;
 for (const sc of scenarios) {
   const a = refRes.find((r) => r.name === sc.name && r.shots), b = cloneRes.find((r) => r.name === sc.name && r.shots);
-  const errors = [...refRes, ...cloneRes].filter((r) => r.name === sc.name && r.error).map((r) => r.error);
+  const refErrors = [...new Set([...(a?.refErrors || []), ...refRes.filter((r) => r.name === sc.name && r.error).map((r) => r.error)])];
+  const errors = [...refErrors.map((e) => `reference: ${e}`), ...cloneRes.filter((r) => r.name === sc.name && r.error).map((r) => `clone: ${r.error}`)];
   const shots = {};
+  const empty = [];
   for (const label of Object.keys(a?.shots || {})) {
     if (!b?.shots[label]) continue;
-    shots[label] = matchPct(PNG.sync.read(await fs.readFile(a.shots[label])), PNG.sync.read(await fs.readFile(b.shots[label]))).pct;
+    const pa = PNG.sync.read(await fs.readFile(a.shots[label])), pb = PNG.sync.read(await fs.readFile(b.shots[label]));
+    shots[label] = matchPct(pa, pb).pct;
+    const ia = inkShare(pa), ib = inkShare(pb);
+    if (ia > 0.04 && ib < ia * EMPTY_SHARE) empty.push(label);
   }
+  for (const l of empty) errors.push(`${l}: the clone shows an almost empty page where the reference shows content`);
+  // a document that answered with an error (a 404 after a link or Back) is not the site's page, whatever it looks like
+  const badStatus = Object.keys(b?.statuses || {}).filter((l) => b.statuses[l] >= 400 && !(a?.statuses?.[l] >= 400));
+  for (const l of badStatus) errors.push(`${l}: the clone answered HTTP ${b.statuses[l]}`);
   const labels = Object.keys(shots).filter((l) => l !== 'before');
   const score = labels.length ? +(labels.reduce((n, l) => n + shots[l], 0) / labels.length).toFixed(2) : null;
   // a scenario passes when the change happens on both sides AND the clone ends up where the reference does: a wrong
@@ -259,14 +293,27 @@ for (const sc of scenarios) {
   const endOk = score !== null && score >= END_STATE_MIN;
   // a scenario the capture found, where the reference itself does not react, is not a behaviour of the site
   // (a scroller that only scrolls by touch, a disclosure a script never wires): set aside, not failed
+  // A step that could not run (its element is on neither side, a selector that changes on every load) is not "the
+  // reference does not react": the scenario failed to run, and says so.
+  const couldNotRun = refErrors.length > 0;
+  if (couldNotRun && sc.auto && a && a.changed !== true) { report.scenarios.push({ name: sc.name, auto: true, broken: true, score, shots, expect: { ref: a.changed ?? null, clone: b?.changed ?? null, endState: score, pass: false }, errors: [...errors, 'could not run on the reference: a selector found nothing (re-detect with trueclone interact <name> --auto, or write the scenario in interactions.json)'] }); continue; }
   if (sc.auto && a && a.changed === false) { report.scenarios.push({ name: sc.name, auto: true, notBehaviour: true, score: null, shots, expect: { ref: false, clone: b?.changed ?? null, endState: score, pass: true }, errors }); continue; }
   // the address at every shot must be the reference's: a link that shows the right view at the wrong address (or
   // stays on the same address) is not the same site
-  const wrongAddress = Object.keys(a?.paths || {}).filter((l) => b?.paths && l in b.paths && a.paths[l] !== b.paths[l]);
+  const wrongAddress = Object.keys(a?.paths || {}).filter((l) => b?.paths && l in b.paths && canon(a.paths[l]) !== canon(b.paths[l]));
   for (const l of wrongAddress) errors.push(`${l}: the clone is at ${b.paths[l]}, the reference at ${a.paths[l]}`);
+  const visibleFail = empty.length > 0 || badStatus.length > 0;
   const expect = sc.expectChange
-    ? { ref: a?.changed, clone: b?.changed, endState: score, pass: a?.changed === true && b?.changed === true && endOk && !wrongAddress.length }
-    : { ref: null, clone: null, endState: score, pass: endOk && !wrongAddress.length };
+    ? { ref: a?.changed, clone: b?.changed, endState: score, pass: a?.changed === true && b?.changed === true && endOk && !wrongAddress.length && !visibleFail }
+    : { ref: null, clone: null, endState: score, pass: endOk && !wrongAddress.length && !visibleFail };
+  // On a route that differs from itself on every load (meta.routes[].unstable: a shuffled gallery), a scenario that
+  // starts or arrives there compares two draws of the randomness: it is reported as unstable and not scored, unless
+  // the clone shows no page there at all (a 404 or an empty page fails anywhere).
+  const navTo = /^(?:.*: )?go to (\S+)/.exec(sc.name)?.[1];
+  if (!expect.pass && !visibleFail && !wrongAddress.length && (unstableRoutes.has(sc.path) || unstableRoutes.has(navTo))) {
+    report.scenarios.push({ name: sc.name, ...(sc.auto ? { auto: true } : {}), ...(sc.path ? { path: sc.path } : {}), unstable: true, score, shots, expect: { ...expect, pass: true }, errors: [...errors, 'on a route the reference itself draws differently every load: not scored'] });
+    continue;
+  }
   report.scenarios.push({ name: sc.name, ...(sc.auto ? { auto: true } : {}), ...(sc.path ? { path: sc.path } : {}), score, shots, ...(a?.paths ? { paths: { ref: a.paths, clone: b?.paths || {} } } : {}), expect, errors });
 }
 report.skipped = skipped.map((s) => ({ name: s.name, why: s.skip }));

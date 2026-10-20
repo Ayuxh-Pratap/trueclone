@@ -121,6 +121,16 @@ async function hoverAll(browser, url, list, shotDir) {
   const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
   await openUrl(page, url); // a load event that never comes is not a failed check (lib.mjs)
   await settle(page);
+  // a layer fixed over most of the window at its centre (a region or cookie dialog): every pointer lands on it, so
+  // no hover of the page behind can be measured
+  const blocked = await page.evaluate(() => {
+    for (let n = document.elementFromPoint(innerWidth / 2, innerHeight / 2); n && n !== document.body; n = n.parentElement) {
+      if (getComputedStyle(n).position !== 'fixed') continue;
+      const r = n.getBoundingClientRect();
+      if (r.width * r.height >= innerWidth * innerHeight * 0.5) return `${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}${[...n.attributes].filter((a) => /^data-(testid|section-type|modal|popup)/.test(a.name)).map((a) => `[${a.name}='${a.value}']`).join('')}`;
+    }
+    return null;
+  }).catch(() => null);
   let listened = 0;
   if (!list) { listened = await markListened(page); list = await page.evaluate(targets, MAX); }
   else await markListened(page);
@@ -171,7 +181,7 @@ async function hoverAll(browser, url, list, shotDir) {
   }
   const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight).catch(() => null);
   await context.close();
-  return { list, out, pageHeight, listened };
+  return { list, out, pageHeight, listened, blocked };
 }
 
 const browser = await openBrowser(flags.cdp);
@@ -179,7 +189,7 @@ let ref, cl;
 try {
   // reference hovers are cached until the next capture (--refresh-ref to re-measure); read twice, so a hover effect
   // that comes and goes by timing on the reference itself is set aside as unstable rather than demanded of the clone
-  ref = await cached(root, { tool: 'hovers', vp: vp.name, max: MAX, v: 9 }, async () => {
+  ref = await cached(root, { tool: 'hovers', vp: vp.name, max: MAX, v: 10 }, async () => {
     const dir = path.join(root, 'reference', 'cache', `hovers-${vp.name}`);
     const first = await hoverAll(browser, meta.url, null, path.join(dir, 'a'));
     const captured = meta.viewports?.find((v) => v.viewport === vp.name)?.pageHeight;
@@ -217,10 +227,13 @@ for (const [i, t] of ref.list.entries()) {
 const scored = rows.filter((r) => r.status !== 'static' && r.status !== 'unstable');
 const unstable = rows.filter((r) => r.status === 'unstable').length;
 const ok = scored.filter((r) => r.status === 'ok').length;
-const report = { name, viewport: vp.name, at: new Date().toISOString(), score: +(100 * ok / Math.max(1, scored.length)).toFixed(1), unstable, listened: ref.listened ?? null, rows };
+// nothing to score is not a score of 0: no hover effect on the reference (or none reachable) leaves the check
+// unmeasured, with the reason (an overlay over the page at the reference's load: capture with --hide)
+const report = { name, viewport: vp.name, at: new Date().toISOString(), score: scored.length ? +(100 * ok / scored.length).toFixed(1) : null, unstable, listened: ref.listened ?? null, blocked: ref.blocked || null, rows };
 const out = path.join(root, COMPARE, `hovers.${vp.name}.json`);
 await fs.mkdir(path.dirname(out), { recursive: true });
 await fs.writeFile(out, JSON.stringify(report, null, 2));
-console.log(`hover match (${vp.name}): ${report.score}% of ${scored.length} hover effects reproduced with the same outcome (${rows.length} elements probed, ${rows.filter((r) => r.found === 'listener').length} found by their mouse listeners${unstable ? `, ${unstable} unstable on the reference itself, not scored` : ''})`);
+if (report.score === null) console.log(`hover match (${vp.name}): not measurable: no hover effect to compare${ref.blocked ? ` (the reference's page is covered by ${ref.blocked}: capture again with --hide "${ref.blocked}")` : ''}`);
+else console.log(`hover match (${vp.name}): ${report.score}% of ${scored.length} hover effects reproduced with the same outcome (${rows.length} elements probed, ${rows.filter((r) => r.found === 'listener').length} found by their mouse listeners${unstable ? `, ${unstable} unstable on the reference itself, not scored` : ''})`);
 console.table(rows.filter((r) => !['static', 'ok', 'unstable'].includes(r.status)).slice(0, 25));
 console.log(`-> ${path.relative(process.cwd(), out)}`);

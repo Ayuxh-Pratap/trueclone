@@ -9,7 +9,7 @@
 //   -> sites/<name>/compare/load.json, frames in compare/load/ and reference/load/
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, PNG, withTimeout, COMPARE, siteDir } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, readCache, PNG, withTimeout, COMPARE, siteDir } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -44,7 +44,10 @@ async function sequence(browser, url, vp, dir) {
       // the frame may be blank before the first byte (a valid part of the sequence)
       const shot = await withTimeout(page.screenshot({ fullPage: false, animations: 'allow' }), 5000, `load shot ${t}`).catch(() => null);
       frames[t] = shot ? PNG.sync.read(shot) : null;
+      // a shot that did not come back in time is a missing frame, not a blank one (and an older file of that moment
+      // must not stand in for it)
       if (shot) await fs.writeFile(path.join(dir, `${vp.name}-${t}.png`), shot);
+      else await fs.rm(path.join(dir, `${vp.name}-${t}.png`), { force: true });
     }
     await nav;
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
@@ -54,7 +57,7 @@ async function sequence(browser, url, vp, dir) {
     await fs.writeFile(path.join(dir, `${vp.name}-final.png`), finalShot);
     const final = PNG.sync.read(finalShot);
     const curve = {};
-    for (const t of TIMES) curve[t] = frames[t] ? matchPct(frames[t], final).pct : 0;
+    for (const t of TIMES) curve[t] = frames[t] ? matchPct(frames[t], final).pct : null;
     const settledAt = TIMES.find((t) => curve[t] >= SETTLED) ?? null;
     return { curve, settledAt };
   } finally {
@@ -70,24 +73,32 @@ try {
   // each side twice: a load is never the same twice (an image that arrives a frame later moves an intro), so the
   // curve is the mean of two runs and the spread between them is reported as the measurement's own noise
   const twice = async (url, dir, vp) => {
-    const a = await sequence(browser, url, vp, dir);
-    const b = await sequence(browser, url, vp, dir);
-    const curve = Object.fromEntries(TIMES.map((t) => [t, +((a.curve[t] + b.curve[t]) / 2).toFixed(2)]));
-    const noise = +Math.max(...TIMES.map((t) => Math.abs(a.curve[t] - b.curve[t]))).toFixed(2);
-    return { curve, noise, settledAt: TIMES.find((t) => curve[t] >= SETTLED) ?? null, runs: [a, b] };
+    // a run with a missing frame (a screenshot that timed out) gets one more run to fill it; a moment missing from
+    // every run is left out of the comparison, never counted as a blank screen
+    const runs = [await sequence(browser, url, vp, dir), await sequence(browser, url, vp, dir)];
+    if (runs.some((r) => TIMES.some((t) => r.curve[t] === null))) runs.push(await sequence(browser, url, vp, dir));
+    const curve = Object.fromEntries(TIMES.map((t) => { const v = runs.map((r) => r.curve[t]).filter((x) => x !== null); return [t, v.length ? +(v.slice(0, 2).reduce((x, y) => x + y, 0) / Math.min(2, v.length)).toFixed(2) : null]; }));
+    const pairs = TIMES.map((t) => runs.map((r) => r.curve[t]).filter((x) => x !== null)).filter((v) => v.length >= 2);
+    const noise = pairs.length ? +Math.max(...pairs.map((v) => Math.abs(v[0] - v[1]))).toFixed(2) : 0;
+    const incomplete = TIMES.some((t) => curve[t] === null);
+    return { curve, noise, settledAt: TIMES.find((t) => curve[t] !== null && curve[t] >= SETTLED) ?? null, runs, ...(incomplete ? { incomplete: true } : {}) };
   };
   for (const vp of vps) {
-    const ref = await cached(root, { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 2 }, () => twice(meta.url, path.join(root, 'reference', 'load'), vp), Boolean(flags['refresh-ref']));
+    // a reference run with a moment still missing is measured again next time, never kept as the reference
+    const refKey = { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 3 };
+    const ref = await cached(root, refKey, () => twice(meta.url, path.join(root, 'reference', 'load'), vp), Boolean(flags['refresh-ref']) || Boolean((await readCache(root, refKey))?.incomplete));
     const clone = await twice(cloneUrl || `${server.url}index.html`, path.join(root, COMPARE, 'load'), vp);
-    const gap = Object.fromEntries(TIMES.map((t) => [t, +Math.abs(ref.curve[t] - clone.curve[t]).toFixed(2)]));
+    // the moments measured on both sides (a missing frame is left out, never scored as blank)
+    const both = (curve) => TIMES.filter((t) => ref.curve[t] !== null && curve[t] !== null);
+    const gap = Object.fromEntries(both(clone.curve).map((t) => [t, +Math.abs(ref.curve[t] - clone.curve[t]).toFixed(2)]));
     const noise = +Math.max(ref.noise, clone.noise).toFixed(2);
-    const match = (curve) => +(100 - TIMES.reduce((s, t) => s + Math.abs(ref.curve[t] - curve[t]), 0) / TIMES.length).toFixed(2);
+    const match = (curve) => { const ts = both(curve); return ts.length ? +(100 - ts.reduce((s, t) => s + Math.abs(ref.curve[t] - curve[t]), 0) / ts.length).toFixed(2) : null; };
     // Only the reference not agreeing with itself (an intro that starts a second later in one run) leaves nothing to
     // score against: that width is reported as unstable, like a probe. A clone that loads differently from one run to
     // the next is a defect, not noise: it is scored by its worse run (a visitor may get that one).
     const unstable = ref.noise > NOISE_LIMIT;
     const cloneUnstable = !unstable && clone.noise > NOISE_LIMIT;
-    const score = unstable ? null : cloneUnstable ? Math.min(...clone.runs.map((r) => match(r.curve))) : match(clone.curve);
+    const score = unstable ? null : cloneUnstable ? Math.min(...clone.runs.map((r) => match(r.curve)).filter((x) => x !== null)) : match(clone.curve);
     viewports.push({ viewport: vp.name, score, unstable, cloneUnstable, noise, gap, ref, clone });
     const curves = `curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${clone.runs.map((r) => TIMES.map((t) => r.curve[t]).join('/')).join(' | ')}`;
     console.log(unstable

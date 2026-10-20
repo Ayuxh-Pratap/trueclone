@@ -142,7 +142,7 @@ try {
   for (const r of routes) {
     const result = await runRoute(r);
     if (!r.slug) report.viewports = result;
-    else report.routes.push({ path: r.path, slug: r.slug, viewports: result.map(({ steps, ...v }) => v) });
+    else report.routes.push({ path: r.path, slug: r.slug, viewports: result.map(({ steps, ...v }) => ({ ...v, stepCount: steps?.length ?? 0 })) });
   }
 } finally {
   if (!flags.cdp) await browser.close();
@@ -153,7 +153,7 @@ try {
 const outRoot = path.join(cloneMode ? path.join(root, COMPARE) : ref, 'states');
 await fs.mkdir(outRoot, { recursive: true });
 await fs.writeFile(path.join(outRoot, cloneMode ? `report${structure ? '.mask' : ''}.json` : 'report.json'), JSON.stringify(report, null, 2));
-for (const r of report.routes) console.log(`route ${r.path}: ${r.viewports.map((v) => `${v.viewport} ${v.match ?? `${v.steps} steps`}`).join('  ')}`);
+for (const r of report.routes) console.log(`route ${r.path}: ${r.viewports.map((v) => `${v.viewport} ${v.match ?? `${v.stepCount ?? 0} steps`}`).join('  ')}`);
 if (cloneMode) {
   console.log(`state match (${report.mode}) - average over scroll steps`);
   console.table(report.viewports.map((v) => ({ viewport: v.viewport, 'match %': v.match, 'canvas %': v.canvas ?? '-', worst: v.worst.map((s) => `#${s.i} y${s.y} ${s.match}%`).join('  ') })));

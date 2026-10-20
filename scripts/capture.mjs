@@ -1,6 +1,7 @@
 // Capture a live page as the clone's reference: full-page screenshots, sections, design tokens,
 // rendered HTML, CSS/image/font files and a HAR.
-// usage: node scripts/capture.mjs <url> [name] [--hide ".cookie-banner,#popup"] [--cookie "consent=1; region=us"] [--cdp [endpoint]] [--mode exact --permission "<owner>"]
+// usage: node scripts/capture.mjs <url> [name] [--routes <n> | --routes "/,/about"] [--locale en-US] [--hide ".cookie-banner,#popup"]
+//        [--cookie "consent=1; region=us"] [--mode exact --permission "<owner>"] [--cdp [endpoint]]
 //        node scripts/capture.mjs <url> <name> --mirror-only   (rebuild reference/mirror from the saved capture)
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -12,7 +13,7 @@ import { detectInPage } from './interactions-auto.mjs';
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [url, nameArg] = pos;
 if (!url) {
-  console.error('usage: npm run capture -- <url> [name] [--hide "<css selectors>"] [--cookie "<name=value; ...>"] [--cdp]');
+  console.error('usage: trueclone capture <url> [name] [--routes <n>|"/,/about"] [--locale en-US] [--hide "<css selectors>"] [--cookie "<name=value; ...>"] [--mode exact --permission "<owner>"] [--cdp]');
   process.exit(1);
 }
 const name = nameArg || siteName(url);
@@ -139,6 +140,8 @@ const locale = typeof flags.locale === 'string' ? flags.locale : LOCALE;
 const asked = { locale, extraHTTPHeaders: { 'accept-language': `${locale},${locale.split('-')[0]};q=0.9` } };
 let finalUrl = null; // where the page ended up, when that is not the URL asked for (a geo or consent redirect)
 let linkHrefs = []; // the page's links, for the routes
+let overlaysAtLoad = []; // dialogs over the page at load that were not hidden (see the warning below)
+let canvasApp = null; // a full-window canvas driven by input, the document not scrolling (see below)
 try {
   // the seed sizes and the held-out sizes: the held-out ones are shot and measured for scoring, nothing else
   for (const vp of SCORED) {
@@ -180,22 +183,53 @@ try {
     });
     await settle(page, hide);
     // A popup over the page at load (a cookie wall, a region or newsletter dialog): every check would compare the
-    // clone with it. Fixed, visible, a dialog by its role or its name, and covering a good part of the window.
+    // clone with it. Found by what it does, not only by its name: a fixed layer over most of the window that is on top
+    // at the centre (it takes the pointer), and that is a dialog by role, says so in any of its names or data-*
+    // attributes, or dims the page behind it (a translucent backdrop: an app's own full-window pane is opaque). Looked
+    // for again a few seconds after load: region and newsletter dialogs often arrive late.
     if (desktop) {
-      const overlays = await page.evaluate(() => {
+      const findOverlays = () => page.evaluate(() => {
         const out = [];
+        const top = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+        const alpha = (c) => { const m = /rgba?\(([^)]+)\)/.exec(c || ''); if (!m) return 1; const p = m[1].split(/[,\s/]+/).filter(Boolean); return p.length > 3 ? Number(p[3]) : 1; };
         for (const el of document.body.querySelectorAll('*')) {
           const s = getComputedStyle(el);
           if (s.position !== 'fixed' || s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) < 0.1) continue;
           if (out.some((o) => o.el.contains(el))) continue;
           const r = el.getBoundingClientRect();
           const share = (Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0))) / (innerWidth * innerHeight);
-          const named = el.matches('dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]') || /modal|popup|pop-up|overlay|cookie|consent|gdpr|geo|locale|region|country|newsletter|signup/i.test(`${el.id} ${el.className}`);
-          if (share >= 0.3 && named) out.push({ el, share: Math.round(share * 100), sel: el.id ? `#${CSS.escape(el.id)}` : `${el.tagName.toLowerCase()}${[...el.classList].slice(0, 2).map((c) => `.${CSS.escape(c)}`).join('')}` });
+          if (share < 0.3) continue;
+          const names = [el.id, String(el.className?.baseVal ?? el.className), ...[...el.attributes].filter((a) => /^(data-|aria-label)/.test(a.name)).map((a) => a.value)].join(' ');
+          const dialog = el.matches('dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"]') || Boolean(el.querySelector('[role="dialog"], [aria-modal="true"], dialog[open]'));
+          const named = /modal|popup|pop-up|overlay|cookie|consent|gdpr|geo|locale|region|country|newsletter|signup|subscribe|interstitial/i.test(names);
+          const backdrop = [el, ...el.children].slice(0, 4).some((n) => { const a = alpha(getComputedStyle(n).backgroundColor); return a > 0.05 && a < 0.95; }) || /blur\(/.test(s.backdropFilter || '');
+          const onTop = Boolean(top && el.contains(top));
+          if ((dialog || named) || (onTop && share >= 0.5 && backdrop)) {
+            const dataName = [...el.attributes].find((a) => /^data-(testid|section-type|modal|popup)$/.test(a.name));
+            out.push({ el, share: Math.round(share * 100), sel: el.id ? `#${CSS.escape(el.id)}` : dataName ? `[${dataName.name}='${CSS.escape(dataName.value)}']` : `${el.tagName.toLowerCase()}${[...el.classList].slice(0, 2).map((c) => `.${CSS.escape(c)}`).join('')}` });
+          }
         }
         return out.map(({ sel, share }) => ({ sel, share }));
       }).catch(() => []);
-      for (const o of overlays) console.warn(`WARNING \`${o.sel}\` covers ${o.share}% of the window at load (a popup?). If a visitor sees it only until a first choice, capture again with --hide "${o.sel}" (or --cookie "<the choice's cookie>"): otherwise every check compares the clone with it`);
+      const overlays = await findOverlays();
+      await page.waitForTimeout(4000);
+      for (const o of await findOverlays()) if (!overlays.some((x) => x.sel === o.sel)) overlays.push(o);
+      for (const o of overlays.filter((x) => !hide.includes(x.sel))) console.warn(`WARNING \`${o.sel}\` covers ${o.share}% of the window at load (a popup?). If a visitor sees it only until a first choice, capture again with --hide "${o.sel}" (or --cookie "<the choice's cookie>"): otherwise every check compares the clone with it`);
+      // kept in meta.json too: status asks for the re-capture instead of letting every check run against the popup
+      if (overlays.length) overlaysAtLoad = overlays.filter((x) => !hide.includes(x.sel));
+    }
+    // A canvas app (why.zero.university): a canvas fills the window, the document does not scroll, and the site's own
+    // code drives what a visitor sees (wheel, touch, a gesture) inside the canvas. The seed would copy a loading
+    // screen and every scroll measure one frame: recorded, so status says what 0.5 can and cannot do here.
+    if (desktop) {
+      canvasApp = await page.evaluate(() => {
+        const doc = document.scrollingElement || document.documentElement;
+        if (doc.scrollHeight > innerHeight + 40) return null;
+        const c = [...document.querySelectorAll('canvas')].find((x) => { const r = x.getBoundingClientRect(); return r.width * r.height >= innerWidth * innerHeight * 0.7; });
+        if (!c) return null;
+        return { canvas: `canvas${c.id ? `#${c.id}` : ''}${c.getAttribute('data-engine') ? `[data-engine="${c.getAttribute('data-engine')}"]` : ''}`, engine: c.getAttribute('data-engine') || (window.__THREE__ ? `three.js r${window.__THREE__}` : null), bodyOverflow: getComputedStyle(document.body).overflow };
+      }).catch(() => null);
+      if (canvasApp) console.warn(`WARNING this page is a canvas app: ${canvasApp.canvas}${canvasApp.engine ? ` (${canvasApp.engine})` : ''} fills the window and the page does not scroll; what a visitor sees is drawn by the site's code from wheel, touch and pointer input. trueclone 0.5 clones document sites: the checks would measure one frame. See the status step.`);
     }
     // every link on the page, hidden views' included: the site's routes are found from them (and sitemap.xml)
     if (desktop) linkHrefs = await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => []);
@@ -210,7 +244,7 @@ try {
     if (!vp.heldOut) {
       const top = await page.evaluate(() => scrollY);
       await page.evaluate(() => scrollTo(0, 0));
-      autoScenarios.push(...await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 16]).catch((e) => { console.warn(`WARNING interactions not detected at ${vp.name}: ${e.message.split('\n')[0]}`); return []; }));
+      autoScenarios.push(...await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 48]).catch((e) => { console.warn(`WARNING interactions not detected at ${vp.name}: ${e.message.split('\n')[0]}`); return []; }));
       await page.evaluate((y) => scrollTo(0, y), top);
     }
     if (finishEvidence) {
@@ -219,6 +253,10 @@ try {
     }
     // A full-page screenshot brings the whole page into view at once, which mounts view-mounted components and starts
     // their reveals: shoot until two shots agree, so the reference shows a settled page, not a fade caught at 0%.
+    // At the top, with what follows the scroll position settled there (a scroll-spy's "current section", a header
+    // state): the saved page (rendered.html, after the shots) and the shots show the same moment.
+    await page.evaluate(() => { scrollTo(0, 0); dispatchEvent(new Event('scroll')); });
+    await page.waitForTimeout(600);
     let shot = await page.screenshot({ fullPage: true });
     for (let tries = 0; tries < 3; tries++) {
       await page.waitForTimeout(2000);
@@ -297,10 +335,16 @@ if (others.length) {
         // screenshots); a separate page (its own document) also has its rendered HTML saved, at desktop, for its mirror
         const ownPage = !r.sameDocument && vp.name === 'desktop';
         page.on('response', recordAsset);
+        // a separate page runs scripts of its own (a table of contents, a progress tracker): their evidence too, merged
+        // into reference/scripts/ below, so briefs and the coverage check see them
+        const finishPageEvidence = ownPage ? await startScriptEvidence(page, new URL(r.path, home).href).catch(() => null) : null;
         try {
           await page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
           await settle(page, hide);
-          if (ownPage) await fs.writeFile(path.join(dir, 'rendered.html'), await page.evaluate(serializeInPage));
+          if (finishPageEvidence) await finishPageEvidence(path.join(dir, 'scripts')).catch((e) => console.warn(`WARNING scripts of ${r.path} not saved: ${e.message}`));
+          // at the top, settled there, then shot; the page is saved right after the shot, so both show one moment
+          await page.evaluate(() => { scrollTo(0, 0); dispatchEvent(new Event('scroll')); });
+          await page.waitForTimeout(600);
           let shot = await page.screenshot({ fullPage: true });
           for (let tries = 0; tries < 3; tries++) {
             await page.waitForTimeout(2000);
@@ -310,6 +354,7 @@ if (others.length) {
             if (same) break;
           }
           await fs.writeFile(path.join(dir, `${vp.name}.png`), shot);
+          if (ownPage) await fs.writeFile(path.join(dir, 'rendered.html'), await page.evaluate(serializeInPage));
           const sections = await sectionsOf(page);
           await fs.writeFile(path.join(dir, `${vp.name}.sections.json`), JSON.stringify(sections, null, 2));
           (r.viewports ||= []).push({ viewport: vp.name, width: vp.width, height: vp.height, ...(vp.heldOut ? { heldOut: true } : {}), pageHeight: await page.evaluate(() => document.documentElement.scrollHeight), sections: sections.length });
@@ -317,7 +362,7 @@ if (others.length) {
           if (!vp.heldOut) {
             const top = await page.evaluate(() => scrollY);
             await page.evaluate(() => scrollTo(0, 0));
-            routeScenarios.push(...(await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 16]).catch(() => [])).map((s) => ({ ...s, path: r.path, name: `${r.path}: ${s.name}` })));
+            routeScenarios.push(...(await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 48]).catch(() => [])).map((s) => ({ ...s, path: r.path, name: `${r.path}: ${s.name}` })));
             await page.evaluate((y) => scrollTo(0, y), top);
           }
           await mask(page);
@@ -326,14 +371,20 @@ if (others.length) {
           // better than it matches itself: loaded once more at desktop and compared, its own match is recorded
           // (meta.routes[].unstable) and the report holds the clone to that, not to a number no copy can reach.
           if (vp.name === 'desktop') {
-            const again = await newPage(browser3, vp, asked);
-            try {
-              await again.page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
-              await settle(again.page, hide);
-              await mask(again.page);
-              const self = matchPct(PNG.sync.read(maskShot), PNG.sync.read(await again.page.screenshot({ fullPage: true }))).pct;
-              if (self < 99) { r.unstable = { match: self }; console.log(`route ${r.path}: differs from itself between two loads (${self}% at desktop): random content, held to that`); }
-            } catch { /* the second load is a check, not the capture */ } finally { await again.context.close(); }
+            // two more loads: one comparison is one draw of the randomness (a shuffle can come out close by chance);
+            // the route is held to the worst of them
+            const selfs = [];
+            for (let k = 0; k < 2; k++) {
+              const again = await newPage(browser3, vp, asked);
+              try {
+                await again.page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
+                await settle(again.page, hide);
+                await mask(again.page);
+                selfs.push(matchPct(PNG.sync.read(maskShot), PNG.sync.read(await again.page.screenshot({ fullPage: true }))).pct);
+              } catch { /* a load that fails is a check missed, not the capture */ } finally { await again.context.close(); }
+            }
+            const self = selfs.length ? Math.min(...selfs) : 100;
+            if (self < 99) { r.unstable = { match: self, loads: selfs }; console.log(`route ${r.path}: differs from itself between loads (${selfs.join('%, ')}% at desktop): random content, held to ${self}%`); }
           }
         } catch (e) { console.warn(`WARNING route ${r.path} at ${vp.name} not captured: ${e.message.split('\n')[0]}`); }
         finally { await context.close(); }
@@ -350,15 +401,44 @@ if (others.length) {
 const captured = new Set(routeInfo.map((r) => r.path));
 const navTarget = (s) => s.name.replace(/^(?:.*: )?go to (\S+).*/, '$1');
 for (let i = autoScenarios.length - 1; i >= 0; i--) if (autoScenarios[i].navigation && !captured.has(navTarget(autoScenarios[i]))) autoScenarios.splice(i, 1);
+// then at most 8 links per size, in the page's order (the cap counts captured routes only)
+const navCount = {};
+for (let i = 0; i < autoScenarios.length; i++) if (autoScenarios[i].navigation && (navCount[autoScenarios[i].viewport] = (navCount[autoScenarios[i].viewport] || 0) + 1) > 8) autoScenarios.splice(i--, 1);
 const homeNav = new Set(autoScenarios.filter((s) => s.navigation).map((s) => `${s.viewport}:${navTarget(s)}`));
 for (const s of routeScenarios) {
   const target = s.navigation ? navTarget(s) : null;
   if (target && !captured.has(target)) continue;
-  if (target && (homeNav.has(`${s.viewport}:${target}`) || target === routePath(home.pathname))) continue;
+  // a link back to the captured page is kept (Back and links must find it at its own address in the clone too)
+  if (target && homeNav.has(`${s.viewport}:${target}`)) continue;
   if (target) homeNav.add(`${s.viewport}:${target}`);
   autoScenarios.push(s);
 }
 console.log(`routes: ${routeInfo.length} (${appKind}): ${routeInfo.map((r) => r.path).join(', ')}${others.length ? `; each captured at ${SCORED.length} sizes in reference/routes/` : ''}`);
+// The scripts of every separate page joined to the captured page's (reference/scripts/): a script shared by pages has
+// one name everywhere (named by its address), so it is saved once; a page's own scripts and listeners are added, the
+// listeners marked with their page
+{
+  const mainDir = path.join(ref, 'scripts');
+  const main = JSON.parse(await fs.readFile(path.join(mainDir, 'scripts.json'), 'utf8').catch(() => 'null'));
+  const added = [];
+  for (const r of others.filter((x) => !x.sameDocument)) {
+    const dir = path.join(root, r.dir, 'scripts');
+    const pageEv = JSON.parse(await fs.readFile(path.join(dir, 'scripts.json'), 'utf8').catch(() => 'null'));
+    if (!main || !pageEv) continue;
+    for (const sc of pageEv.scripts || []) {
+      if (main.scripts.some((x) => x.file === sc.file)) continue;
+      for (const f of [sc.file, sc.pretty].filter(Boolean)) await fs.copyFile(path.join(dir, f), path.join(mainDir, f)).catch(() => {});
+      main.scripts.push({ ...sc, page: r.path });
+      added.push(`${sc.file} (${r.path})`);
+    }
+    for (const l of pageEv.listeners || []) if (!main.listeners.some((x) => x.file === l.file && x.line === l.line && x.type === l.type)) main.listeners.push({ ...l, page: r.path });
+  }
+  if (added.length) {
+    await fs.writeFile(path.join(mainDir, 'scripts.json'), JSON.stringify(main, null, 2));
+    await fs.appendFile(path.join(mainDir, 'INDEX.md'), `\n## Scripts of the other pages\n\nRun on a separate page of the site, not on the captured one (their listeners are in scripts.json with the page):\n\n${added.map((a) => `- ${a}`).join('\n')}\n`);
+    console.log(`scripts: ${added.length} more from the site's other pages (reference/scripts/INDEX.md)`);
+  }
+}
 
 // The site's own breakpoints (its @media width queries) and extra sizes inside every range they make: inline styles
 // read there let the seed fit each value a script set as a function of the viewport (a·vw + b·vh + c) per range, or
@@ -388,7 +468,7 @@ await fs.writeFile(path.join(ref, 'interactions.auto.json'), JSON.stringify(auto
 console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
 // with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.
@@ -468,10 +548,24 @@ async function renderMirror(manifest, url, note, mirror, renderedFile = path.joi
   }
 
   let html = await fs.readFile(renderedFile, 'utf8');
+  // The page's small inline boot scripts in <head> are state, not behaviour, and must run before paint as on the site:
+  // history.scrollRestoration (Back lands where the site's does), a theme or "js" class on <html>. Kept (marked
+  // data-tc-boot-script); every other script is removed. Nothing that fetches, tracks or writes the document is kept.
+  const bootScripts = [];
+  html = html.replace(/<head\b[\s\S]*?<\/head>/i, (headPart) => headPart.replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (all, attrs, code) => {
+    const keep = !/\bsrc=/i.test(attrs) && !/type=["']?(application\/(ld\+)?json|text\/template)/i.test(attrs) && code.length < 4000
+      && /scrollRestoration|documentElement\.(classList|className|setAttribute|style|dataset)|prefers-color-scheme/.test(code)
+      && !/fetch\(|XMLHttpRequest|sendBeacon|gtag|dataLayer|analytics|_paq|fbq|document\.write|\.src\s*=|createElement\(\s*['"]script/.test(code);
+    if (!keep) return all;
+    bootScripts.push(`<script data-tc-boot-script${attrs.replace(/\s(nonce|integrity)=("[^"]*"|'[^']*')/gi, '')}>${code}</script>`);
+    return `<!--tc-boot-script-${bootScripts.length - 1}-->`;
+  }));
   html = html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<script\b[^>]*\/>/gi, '')
     .replace(/<link\b[^>]*rel=["']?(?:modulepreload|preload)["']?[^>]*as=["']?script["']?[^>]*>/gi, '')
+    // a module preload names a script whether or not it says as="script": the clone never loads the site's code
+    .replace(/<link\b[^>]*rel=["']?modulepreload["']?[^>]*>/gi, '')
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, '')
     .replace(/<form\b([^>]*?)\saction=("[^"]*"|'[^']*')/gi, '<form$1')
     .replace(/<form\b/gi, '<form action="#"')
@@ -503,7 +597,9 @@ async function renderMirror(manifest, url, note, mirror, renderedFile = path.joi
       const plain = value.replaceAll('&quot;', '"').replaceAll('&#39;', "'");
       return ` style="${rewriteCssUrls(plain, url, mirror).replaceAll('"', '&quot;')}"`;
     })
-    .replace(/<head([^>]*)>/i, `<head$1>\n<!-- trueclone local mirror of ${url}. ${note.replace(/--/g, '-')} Local reference only: do not deploy. -->\n<meta name="robots" content="noindex,nofollow">`);
+    .replace(/<head([^>]*)>/i, `<head$1>\n<!-- trueclone local mirror of ${url}. ${note.replace(/--/g, '-')} Local reference only: do not deploy. -->\n<meta name="robots" content="noindex,nofollow">`)
+    // the kept boot scripts back in their places
+    .replace(/<!--tc-boot-script-(\d+)-->/g, (m, i) => bootScripts[Number(i)] || '');
   return { html, css };
 }
 

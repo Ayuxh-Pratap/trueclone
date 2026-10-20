@@ -33,9 +33,13 @@ Next.js app. It exits 0 only when everything passes.
 The user asked for the finished clone. The only reason to stop is a real blocker (a login wall, a bot check, a tool
 defect you proved): write it under `## Findings` in notes.md with what you tried, then say so. A long loop is not a
 blocker; a check that is hard is not a blocker. "Large work" (a three.js scene, a carousel) is the work: see Recipes.
-A step that does not improve after three scored tries is set aside by `status` (it says so) and the next one comes
-up; write what blocks the set-aside step under `## Findings`. When `status` exits 3, every step left is set aside:
-make sure each is in Findings, then hand over.
+A step that does not improve after three real tries (you changed the clone, it was scored again, no gain) is set aside
+by `status` (it says so) and the next one comes up; write what blocks the set-aside step under `## Findings`.
+Re-scoring an unchanged clone is not a try, and scripting re-scores to reach a set-aside is gaming the loop: never.
+
+**The loop ends only at exit 0 (every gate passes) or exit 3 (every step left is set aside: make sure each is in
+Findings, then hand over).** Exit 4 means the site is a canvas app 0.5 does not clone: tell the user what status
+printed and stop. Stopping anywhere else is an unfinished run, and your summary must say it is unfinished.
 
 **Your summary to the user states what the checks and the review show, nothing more.** Not "the accordions work"
 unless the interaction check passes for them; a number you have not re-measured since your last change is not a
@@ -56,7 +60,8 @@ result.
    rebuilds or listens to (it always exists, before any script): the recorded players never touch it, or the region
    around it, again; GSAP-written motion transforms (`data-tc-gsap=""`) are cleared, so your animation starts from the
    page as it was before any script ran, as the site's did, while closed states (`data-tc-gsap="state"`, a menu at
-   `scale(1, 0)`) stay; its scroll reveals settle at their end state.
+   `scale(1, 0)`) stay; its scroll reveals settle at their end state; a captured `<canvas>` in it gives way the moment
+   your scene mounts its own (no two canvases stacked).
 4. **Test what you built.** After each behaviour, operate it: `status` re-runs the interaction scenarios with every
    re-score. Your own controls also handle `pointercancel` and `lostpointercapture` (a drag that ends outside the
    window must not stick to the cursor).
@@ -75,8 +80,12 @@ result.
 - **Behaviours**: one line per behaviour: element, trigger, property, range, timing, and the **file:line** of the rule
   from the brief, e.g. `- hero cells: scroll 0→5600 (pin), scale 1→0.58, scrub 0.3; 23-hero.pretty.js:1108`. The
   report fails while this is empty or cites nothing.
-- **Review**: one line per frame of `compare/review/<size>/index.md`: `- 03-section-2 wide: same` or
-  `- 07-section-4-hover wide: differs: the panel opens on the wrong card`.
+- **Review**: one line per frame of `compare/review/<size>/index.md`, with the frame's token from that table:
+  `- 03-section-2 wide [k3x9a]: same` or `- 07-section-4-hover wide [p02ld]: differs: the panel opens on the wrong
+  card`. A verdict holds for the picture you looked at: a frame shot again that looks different has a new token and
+  needs a new look. Below 85% pixel match, "same" says why (`same: the reference's photo arrives later`); "tool" needs
+  evidence you made (a crop, a measurement), not one of the site's files. Never write verdicts from pixel match or with
+  a script: look at every sheet.
 - **Accepted differences**: `- <check> <size> <where>: <why>; evidence: compare/explain/wide-5200.png`, only for the
   last points of a check already ≥ 95.
 - **Findings**: tool defects, with evidence; a step `status` set aside, with what blocks it; and each of the site's
@@ -90,7 +99,10 @@ same-size placeholders); inline values a script set as functions of the screen s
 `max()`/`min()`, per range of the site's and its scripts' breakpoints); pins as sticky elements (`--tc-pin`); one-shot
 reveals, scroll class changes, tabs, menus and dialogs replayed by its players; **scroll-linked curves are not
 replayed** (yours, from the brief); the boot contract (`<html class="tc-boot">` until your scripts have run;
-`seed --hide-until-boot "<selectors>"`; `tcBoot.hold()` / `tcBoot.release()` for an intro that waits).
+`seed --hide-until-boot "<selectors>"`; for an intro that waits, `const ready = tcBoot.hold()` at the top of
+`script.js` and `ready()` when it is ready; a hold never released is released after 5 s with a warning); the site's
+small inline boot scripts in `<head>` (scroll restoration, a theme class), and the captured page at its own address
+too (`clone/<path>/index.html`, so links, Back and a reload there find it).
 
 **clone/patches/** (applied on every seed; `seed <name> --patches` re-applies them in a second): `head-*.html` before
 `</head>`, `*.css` after the site's stylesheets, `body-*.html` and `*.js` (deferred) before `script.js`, in name order.
@@ -103,13 +115,17 @@ and scroll states are scored per route; navigation is scored (each link: the rig
 Back); `brief --route /about` and `review --route /about` work on one route. An app shell (a fixed sidebar and a pane
 that scrolls on its own) is measured with the pane unrolled, the same way on both sides.
 
-**The checks**: layout, scroll states (the mean and every frame: none below 80%), canvases, motion curves, detail,
-hovers, interactions (the capture finds every scroller, carousel, tab set, accordion, menu and dialog,
+**The checks**: layout, scroll states (the mean and every frame: none below 80%), canvases (every frame ≥ 60%), motion
+curves (`curves --draft` maps the recorded ones), detail, hovers ("not measurable" when the reference has none to
+compare), interactions (the capture finds every scroller, carousel, tab set, accordion, menu and dialog,
 `reference/interactions.auto.json`; your `interactions.json` adds, overrides by name, or retires one with
-`{ "name": "…", "skip": "<why>" }`), load, notes, coverage and review. Sizes: built from 390, 768, 1440; held out
+`{ "name": "…", "skip": "<why>" }`; a scenario passes on what the visitor sees: the end state, the address relative to
+the start page, a real page there, not a 404 or an empty one; one that could not run on the reference is listed for
+Findings, never counted as a pass), load, notes, coverage and review. Sizes: built from 390, 768, 1440; held out
 (scored, never built from) 1280 and 1920. Unstable probes are measured twice on the reference and excluded, and a route
-that differs from itself between two loads (random order) is held to its own match; do not chase a number inside the
-noise. If `drift` says the live site changed, re-capture.
+that differs from itself between loads (random order) is held to its own worst match, its scenarios not scored; do not
+chase a number inside the noise. If `drift` says the live site changed, re-capture (status then asks for fresh reads).
+The Next app is held to the clone within a point everywhere, including its own review frames.
 
 **Recipes** (the work that looks large is ordinary work):
 - *A canvas (three.js, WebGL, 2D)*: `motion` names the engine and its version, `vendor` puts it in `clone/patches/`.
@@ -127,7 +143,8 @@ noise. If `drift` says the live site changed, re-capture.
 - *A class change the site animates with GSAP Flip* (the brief says so): port the Flip (record state, change the
   classes, `Flip.from` with the site's duration and ease), never leave the swap as a jump.
 
-**Tools status points you to**: `brief <name> [<n>] [--viewport]`, `explain <name> <y> --viewport <size>`,
+**Tools status points you to**: `reads <name>` (every read of the live page, side by side where that is safe),
+`brief <name> [<n>] [--viewport]`, `explain <name> <y> --viewport <size>`,
 `score <name> [--only layout,states,interact,…] [--viewport <size>]`, `review <name> --size <size>`,
 `rules <name> "<selector>" [--clone]`, `tiles <name>`, `owned <name>`, `serve <name> [--next]`,
 `next <name> --verify`. REA is bundled for the rare part no script reading explains (`npx trueclone rea --help`).

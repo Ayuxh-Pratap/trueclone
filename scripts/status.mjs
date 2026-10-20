@@ -44,6 +44,18 @@ const next = (cmd, why, then = []) => {
 // ---- 1. capture and what it reads ----
 const meta = await json('reference/meta.json');
 if (!meta) next(T(`capture <url> ${name}`), 'nothing captured yet (add --mode exact --permission "<owner>" only with the owner\'s permission)');
+// A canvas app (capture: meta.canvasApp) is not a document: the seed holds a loading screen and every scroll measure
+// sees one frame, so the numbers would look good while the clone does not. 0.5 says so and stops, unless the user
+// asked for a partial clone anyway (Findings says "canvas app: partial").
+if (meta.canvasApp && !/canvas app:\s*partial/i.test(await text('notes.md'))) {
+  console.log(`trueclone status: ${name}\n\nThis site is a canvas app: ${meta.canvasApp.canvas}${meta.canvasApp.engine ? ` (${meta.canvasApp.engine})` : ''} fills the window, the page does not scroll, and the site's own code draws every state from wheel, touch and pointer input.\ntrueclone 0.5 clones document sites (sections, scroll, DOM): its checks would measure a single frame here and read high while the clone shows a loading screen. App mode (input-driven states, recorded gestures, the site's own bundle in exact mode) is the next release.\nTell the user this. To build a partial clone anyway (the shell, the first scene ported by hand), they can ask for it: write "- canvas app: partial (the user asked for it)" under ## Findings in notes.md and run status again.`);
+  process.exit(4);
+}
+// a dialog over the page at load (capture's warning, meta.overlays): every check would compare the clone with it, so
+// it is hidden by a re-capture first; one a visitor always sees stays when Findings names it (and why)
+const notesNow = await text('notes.md');
+const overlays = (meta.overlays || []).filter((o) => !notesNow.includes(o.sel));
+if (overlays.length) next(T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${meta.permission}"` : ''}${meta.routes?.length === 1 ? ' --routes 1' : ''} --hide "${[...(meta.hide || []), ...overlays.map((o) => o.sel)].join(',')}"`), `the capture saw ${overlays.map((o) => `\`${o.sel}\` (${o.share}% of the window)`).join(', ')} over the page at load: hidden, every check compares the page itself. If visitors always see it, say so under ## Findings in notes.md naming it, and status moves on`);
 done.push('capture');
 const mode = meta.mode || 'template';
 const reads = [
@@ -54,8 +66,20 @@ const reads = [
   ['reference/widgets.desktop.json', `widgets ${name}`, 'tab, menu and dialog states'],
 ];
 const missing = [];
-for (const [f, cmd, why] of reads) if (!(await stat(f))) missing.push([cmd, why]);
-if (missing.length) next(T(missing[0][0]), `${missing[0][1]} not read yet`, missing.slice(1).map(([c]) => `${T(c)} (the reads can run one after another in the background)`));
+// a read made before the current capture describes another page (a re-capture after the site changed): read again
+const capturedAt = Date.parse(meta.capturedAt || 0) || 0;
+for (const [f, cmd, why] of reads) {
+  const st = await stat(f);
+  if (!st) missing.push([cmd, why]);
+  else if (st.mtimeMs < capturedAt - 1000) missing.push([cmd, `${why.replace(/^the /, 'the ')} (read before the current capture of ${meta.capturedAt.slice(0, 16).replace('T', ' ')})`]);
+}
+// the scroll states of every other route too: a read that stopped half-way (a slow route) is not done
+if (!missing.length) {
+  const routesWithoutStates = [];
+  for (const r of (meta.routes || []).filter((x) => x.slug)) if (!(await stat(`${r.dir}/states/desktop.summary.json`))) routesWithoutStates.push(r.path);
+  if (routesWithoutStates.length) missing.push([`states ${name}`, `the scroll states of ${routesWithoutStates.slice(0, 3).join(', ')}${routesWithoutStates.length > 3 ? '…' : ''} are missing (the read stopped before them)`]);
+}
+if (missing.length) next(T(`reads ${name}`), `${missing.map(([c, why]) => `${c.split(' ')[0]}: ${why}`).join('; ')} (not read yet): the reads that only look run side by side, the reveals alone after them; only the missing ones run`, ['while it runs (in the background), read reference/scripts/INDEX.md: the site\'s scripts, ranked by what ran']);
 done.push('reads');
 
 // ---- 2. design and seed (each re-run when its inputs are newer) ----
@@ -155,7 +179,7 @@ if (layoutCheck) {
 {
   // once the layout holds (or its step is set aside), the clone is looked at by eye, at every size, not only once every
   // number passes: what the eye finds comes first (see above)
-  for (const size of ['wide', 'laptop', 'tablet', 'mobile']) if (!(await stat(`compare/review/${size}/frames.json`))) add(`review-size:${size}`, null, () => next(T(`review ${name} --size ${size}`), `no side-by-side frames at ${size} yet: the clone is judged by eye at every size`, ['give every frame a verdict under ## Review in notes.md ("- <frame> <size>: same" or "differs: <what>")']), false);
+  for (const size of ['wide', 'laptop', 'desktop', 'tablet', 'mobile']) if (!(await stat(`compare/review/${size}/frames.json`))) add(`review-size:${size}`, null, () => next(T(`review ${name} --size ${size}`), `no side-by-side frames at ${size} yet: the clone is judged by eye at every size`, ['look at every sheet and give every frame a verdict under ## Review in notes.md, with its token from index.md ("- <frame> <size> [<token>]: same" or "... : differs: <what>")']), false);
   for (const r of (meta.routes || []).filter((x) => x.slug)) {
     for (const size of ['wide', 'mobile']) if (!(await stat(`compare/review/routes/${r.slug}/${size}/frames.json`))) add(`review-route:${r.slug}:${size}`, null, () => next(T(`review ${name} --route ${r.path} --size ${size}`), `route ${r.path} has not been looked at side by side at ${size}`, ['its frames are named "' + r.slug + '/<frame>": verdicts under ## Review as for the others']), false);
   }
@@ -181,45 +205,110 @@ for (const c of sorted.filter((x) => x.key !== 'layout')) {
     const what = first.script ? `reference/scripts/${first.script.replace(/\.js$/, '.pretty.js')} (or ${first.script})` : `the scroll curve on .${String(first.curve || '').split('.')[0]} (reference/reveals.desktop.json, path ${first.path})`;
     add(`coverage:${first.script || first.curve || ''}`, -c.failing.length, () => next(`read ${what}`, `${c.failing.length} piece(s) of the site's own code are not accounted for: port what each does (a line under ## Behaviours citing its file:line) or say under ## Findings why it is not ported`, [T(`brief ${name}`) + ' shows which section uses it', `then ${T(`report ${name}`)}`]));
   } else if (c.key === 'routes') {
-    // the worst route first: look at it side by side, then its sections' evidence
-    const w = c.failing[0];
-    const size = w.viewport || 'desktop';
-    add(`routes:${w.route}:${size}:${w.check}`, w.value, () => next(w.value === null ? T(`score ${name} --only layout,states`) : T(`review ${name} --route ${w.route} --size ${size}`), w.value === null ? `route ${w.route} has not been scored yet` : `route ${w.route} is the furthest from the original: ${w.check} at ${size} is ${w.value}`, [T(`brief ${name} --route ${w.route}`), `after the fix: ${T(`score ${name} --only layout,states`)}`]));
+    // every failing route, worst first, one step each (keyed by the route: its worst size can change between scores)
+    const byRoute = new Map();
+    for (const w of c.failing) if (!byRoute.has(w.route)) byRoute.set(w.route, w);
+    for (const w of byRoute.values()) {
+      const size = w.viewport || 'desktop';
+      add(`routes:${w.route}`, w.value, () => next(w.value === null ? T(`score ${name} --only layout,states`) : T(`review ${name} --route ${w.route} --size ${size}`), w.value === null ? `route ${w.route} has not been scored yet` : `route ${w.route}: ${w.check} at ${size} is ${w.value}${byRoute.size > 1 ? ` (${byRoute.size} routes below target: ${[...byRoute.keys()].join(', ')})` : ''}`, [T(`brief ${name} --route ${w.route}`), `after the fix: ${T(`score ${name} --only layout,states`)}`]));
+    }
   } else if (c.key === 'interactions') {
+    // every failing scenario is its own step (one key per scenario), worst first; a scenario that failed only because
+    // the instrument could not run it is not the clone's work: it goes to Findings with the error
     const rep = await json('compare/interact/report.json', { scenarios: [] });
-    const bad = rep.scenarios.find((s) => !s.notBehaviour && s.expect && !s.expect.pass);
-    add(`interactions:${bad?.name || ''}`, bad?.score ?? null, () => next(`make "${bad?.name || 'the failing interaction'}" behave like the reference`, bad ? (bad.expect.ref && bad.expect.clone === false ? 'it changes on the reference and does nothing on the clone' : `the clone ends in a different state (${bad.score}% like the reference)`) : 'interactions below target', [T(`brief ${name}`) + ' (find the section it is in; its brief has the handler file:line)', `after the fix: ${T(`score ${name} --only interact`)}`]));
+    const bad = rep.scenarios.filter((s) => !s.notBehaviour && s.expect && !s.expect.pass).sort((a, b) => (a.score ?? -1) - (b.score ?? -1));
+    const names = bad.map((s) => s.name);
+    for (const s of bad) {
+      const toolOnly = s.broken || (s.errors || []).length > 0 && (s.errors || []).every((e) => /^reference:/.test(e));
+      if (toolOnly) add(`interactions:${s.name}`, null, () => next(`write under ## Findings in notes.md why "${s.name}" cannot be measured, or rewrite it in interactions.json`, `the scenario could not run on the reference (${(s.errors || []).slice(0, 2).join('; ')}): an instrument problem, not the clone's; a scenario of yours with the same name replaces it, and { "name": "${s.name}", "skip": "<why>" } retires it`, [`then ${T(`score ${name} --only interact`)}`]));
+      else add(`interactions:${s.name}`, s.score ?? null, () => next(`make "${s.name}" behave like the reference`, `${s.expect.ref && s.expect.clone === false ? 'it changes on the reference and does nothing on the clone' : `the clone ends in a different state (${s.score ?? '-'}% like the reference)`}${(s.errors || []).length ? `; ${s.errors.slice(0, 2).join('; ')}` : ''}${names.length > 1 ? ` (${names.length} scenarios failing: ${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''})` : ''}`, [T(`brief ${name}`) + ' (find the section it is in; its brief has the handler file:line)', `after the fix: ${T(`score ${name} --only interact`)}`]));
+    }
   } else {
     add(`${c.key}:${vp}`, f.value ?? null, () => next(`fix ${c.check} at ${vp} (${f.value ?? 'below target'})`, `${c.check} is below its target; REPORT.md "Fix first" lists where`, [T(`explain ${name} <y> --viewport ${vp}`), `after the fix: ${T(`score ${name} --only ${{ hovers: 'hovers', detail: 'detail', load: 'load', motion: 'curves' }[c.key] || c.key}`)}`]));
   }
 }
+// scroll curves recorded on the reference are motion to score: a map pairs them with the clone's elements (in a
+// seeded clone the same ones, so the draft is the map)
+const curvesRecorded = ((await json('reference/reveals.desktop.json'))?.scrubs || []).length;
+if (curvesRecorded && !(await stat('motion-map.json'))) add('motion-map', null, () => next(T(`curves ${name} --draft`), `${curvesRecorded} scroll curve(s) were recorded on the reference and none is scored yet: the map pairs each with the clone's element`, [`then ${T(`score ${name} --only curves`)}`]), false);
 if (reviewCheck && !reviewCheck.pass) {
   const open = reviewCheck.failing.filter((f) => !f.verdict);
   if (open.length) add('review-verdicts', -open.length, () => next(`write review verdicts in notes.md for ${open.length} frame(s) (${open.slice(0, 3).map((f) => `${f.frame} ${f.viewport}`).join(', ')}…)`, 'every frame needs a verdict; "differs" is fixed, "same" closes it', [`look at compare/review/<size>/index.md`, T(`report ${name}`)]));
 }
-for (const s of candidates) {
-  if (s.track) {
-    const m = memory[s.key];
-    if (!m) memory[s.key] = { at: verdict.at, value: s.value, count: 1 };
-    else if (m.at !== verdict.at) {
-      const gained = typeof s.value === 'number' && typeof m.value === 'number' && s.value > m.value + 0.5;
-      memory[s.key] = gained ? { at: verdict.at, value: s.value, count: 1 } : { ...m, at: verdict.at, value: s.value, count: m.count + 1 };
-    }
-    if (memory[s.key].count >= 3) { setAside.push(s.key); continue; }
+// A try is the step status issued last, worked on (the clone changed after it was issued) and measured again (a newer
+// score): only then is it counted, as a gain (its count starts over) or not. Re-scoring an unchanged clone, or work
+// on another step, counts for nothing, so a step is set aside only after three real attempts at it.
+const last = memory.__last;
+if (last && !last.key.startsWith('next:') && last.at !== verdict.at && changed > last.cloneAt + 1000) {
+  const nowStep = candidates.find((c) => c.key === last.key);
+  if (!nowStep) delete memory[last.key]; // fixed
+  else {
+    const m = memory[last.key] || { count: 0, value: last.value };
+    const gained = typeof nowStep.value === 'number' && typeof m.value === 'number' && nowStep.value > m.value + 0.5;
+    memory[last.key] = gained ? { count: 0, value: nowStep.value } : { count: (m.count || 0) + 1, value: nowStep.value };
   }
-  await fs.writeFile(path.join(root, 'compare', 'status-steps.json'), JSON.stringify(memory, null, 2));
+  delete memory.__last;
+}
+const saveMemory = () => fs.writeFile(path.join(root, 'compare', 'status-steps.json'), JSON.stringify(memory, null, 2));
+for (const s of candidates) {
+  if (s.track && (memory[s.key]?.count || 0) >= 3) { setAside.push(s.key); continue; }
+  memory.__last = s.track ? { key: s.key, at: verdict.at, cloneAt: changed, value: s.value } : undefined;
+  await saveMemory();
   s.run();
 }
-await fs.writeFile(path.join(root, 'compare', 'status-steps.json'), JSON.stringify(memory, null, 2));
+delete memory.__last;
+await saveMemory();
 if (!setAside.length) done.push('checks pass', 'review');
 
 // ---- 8. the Next.js app ----
 const nextVerdict = await json('compare-next/verdict.json');
-if (!nextVerdict || Date.parse(nextVerdict.at) < Date.parse(verdict.at)) next(T(`next ${name} --verify`), `the HTML clone ${setAside.length ? 'has done all it can' : 'passes'}: generate the Next.js app and score it the same way (REPORT.next.md)`);
-// worse than the HTML clone: a check the clone passes and the app does not (what the clone itself still fails is the
-// clone's work, above)
-const worse = (nextVerdict.checks || []).filter((c) => !c.pass && c.key !== 'review' && (verdict.checks || []).find((x) => x.key === c.key)?.pass);
-if (worse.length) next(`make the Next.js app match the HTML clone: ${worse.map((c) => c.check).join(', ')}`, 'the app must equal the HTML clone within a point; change clone/ (never next/), then regenerate', [T(`next ${name} --verify`)]);
+// the app is stale when the clone changed after it was verified (notes.md, Findings and verdicts do not count)
+if (!nextVerdict || Date.parse(nextVerdict.at) < changed - 1000) next(T(`next ${name} --verify`), `the HTML clone ${setAside.length ? 'has done all it can' : 'passes'}: generate the Next.js app and score it the same way (REPORT.next.md), and look at it next to the original`);
+// The app equals the clone within a point: every check at every size, every route, every scenario, every review frame
+// the verify shot of the app. A random route (meta.routes[].unstable) cannot be compared draw for draw and is left out.
+const gaps = [];
+const pair = (what, a, b, slack = 1) => { if (typeof a === 'number' && typeof b === 'number' && b < a - slack) gaps.push(`${what}: app ${b} vs clone ${a}`); };
+const unstableRoutes = new Set((meta.routes || []).filter((r) => r.unstable).map((r) => r.path));
+for (const [file, label] of [['report.mask.json', 'layout'], ['states/report.mask.json', 'scroll states']]) {
+  const a = await json(`compare/${file}`), b = await json(`compare-next/${file}`);
+  for (const v of a?.viewports || []) pair(`${label} ${v.viewport}`, v.match, b?.viewports?.find((x) => x.viewport === v.viewport)?.match);
+  for (const r of a?.routes || []) if (!unstableRoutes.has(r.path)) for (const v of r.viewports || []) pair(`${label} ${r.path} ${v.viewport}`, v.match, b?.routes?.find((x) => x.path === r.path)?.viewports?.find((x) => x.viewport === v.viewport)?.match);
+}
+{
+  const a = await json('compare/detail.json'), b = await json('compare-next/detail.json');
+  for (const v of a?.viewports || []) pair(`detail ${v.viewport}`, v.score, b?.viewports?.find((x) => x.viewport === v.viewport)?.score);
+  const ha = await json('compare/hovers.desktop.json'), hb = await json('compare-next/hovers.desktop.json');
+  pair('hovers desktop', ha?.score, hb?.score);
+  const la = await json('compare/load.json'), lb = await json('compare-next/load.json');
+  for (const v of la?.viewports || []) pair(`load ${v.viewport}`, v.score, lb?.viewports?.find((x) => x.viewport === v.viewport)?.score, 2);
+  const ia = await json('compare/interact/report.json'), ib = await json('compare-next/interact/report.json');
+  for (const s of ia?.scenarios || []) {
+    if (s.notBehaviour || (s.path && unstableRoutes.has(s.path))) continue;
+    const t = ib?.scenarios?.find((x) => x.name === s.name);
+    if (s.expect?.pass && t && !t.expect?.pass) gaps.push(`"${s.name}": passes on the clone, fails on the app (${(t.errors || []).slice(0, 1).join('') || `${t.score}%`})`);
+    else pair(`"${s.name}"`, s.score, t?.score);
+  }
+  // the app's own review frames (next --verify shoots them against the original): a frame where the app is further
+  // from the original than the clone is shows something the clone does not
+  for (const size of ['wide', 'mobile']) {
+    const fa = await json(`compare/review/${size}/frames.json`), fb = await json(`compare-next/review/${size}/frames.json`);
+    for (const f of fb?.frames || []) pair(`review frame ${f.id} ${size}`, fa?.frames?.find((x) => x.id === f.id)?.pct, f.pct, 2);
+  }
+}
+// a try at the app: issued last, the clone changed after, the app verified again
+if (last?.key === 'next:equal' && nextVerdict.at !== last.at && changed > last.cloneAt + 1000) memory['next:equal'] = { count: (memory['next:equal']?.count || 0) + 1 };
+if (!gaps.length) delete memory['next:equal'];
+await saveMemory();
+if (gaps.length) {
+  const key = 'next:equal';
+  const m = memory[key];
+  if ((m?.count || 0) < 3) {
+    memory.__last = { key, at: nextVerdict.at, cloneAt: changed, value: null };
+    await saveMemory();
+    next(`make the Next.js app match the HTML clone: ${gaps.slice(0, 4).join('; ')}${gaps.length > 4 ? ` (+${gaps.length - 4} more)` : ''}`, 'the app must equal the HTML clone within a point, everywhere; a difference only the app has is fixed in clone/ (never next/) or, when it is the generator\'s, written under ## Findings with evidence', [T(`next ${name} --verify`), 'compare-next/review/<size>/ shows the app next to the original']);
+  }
+  setAside.push(key);
+}
 done.push('next.js');
 
 if (setAside.length) {

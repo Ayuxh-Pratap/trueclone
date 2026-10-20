@@ -36,6 +36,18 @@ const cloneBase = server ? server.url : flags.url;
 const cloneUrl = route?.slug ? new URL(route.path.replace(/^\//, ''), cloneBase).href : server ? `${server.url}index.html` : flags.url;
 const refUrl = route?.slug ? new URL(route.path, meta.finalUrl || meta.url).href : meta.url;
 const outDir = route?.slug ? path.join(root, COMPARE, 'review', 'routes', route.slug, vp.name) : path.join(root, COMPARE, 'review', vp.name);
+// A review of the clone as it is now is not shot again (its verdicts stand): only when the clone or the capture is
+// newer than the frames, or with --force. The app (--url) is always shot.
+if (!flags.url && !flags.force) {
+  const last = JSON.parse(await fs.readFile(path.join(outDir, 'frames.json'), 'utf8').catch(() => 'null'));
+  let newest = Date.parse(meta.capturedAt || 0) || 0;
+  const walk = async (d) => { for (const e of await fs.readdir(d, { withFileTypes: true }).catch(() => [])) { const p = path.join(d, e.name); if (e.isDirectory()) { if (e.name !== 'node_modules') await walk(p); } else newest = Math.max(newest, (await fs.stat(p)).mtimeMs); } };
+  await walk(path.join(root, 'clone'));
+  if (last?.at && Date.parse(last.at) > newest + 1000) {
+    console.log(`review (${vp.name}${route?.slug ? `, ${route.path}` : ''}): current, nothing changed since ${last.at.slice(0, 16).replace('T', ' ')} (${last.frames.length} frames in ${path.relative(process.cwd(), path.join(outDir, 'index.md'))}; --force shoots it again)`);
+    process.exit(0);
+  }
+}
 await fs.rm(outDir, { recursive: true, force: true });
 await fs.mkdir(outDir, { recursive: true });
 
@@ -48,7 +60,19 @@ sections.forEach((s, i) => {
   const screens = Math.max(1, Math.min(4, Math.round((s.height || s.h || vp.height) / vp.height)));
   for (let k = 0; k < screens; k++) plan.push({ label: `section-${i + 1}${screens > 1 ? `-${k + 1}` : ''}`, y: top + k * vp.height });
 });
-const frames = plan.slice(0, 30);
+// The page between and below the sections too: a block the section finder did not take for one (a component in a
+// shadow root, a script-built island) is still part of what a visitor scrolls past, and is looked at.
+const pageHeight = (route?.slug ? route.viewports : meta.viewports)?.find((v) => v.viewport === vp.name)?.pageHeight || 0;
+const spans = sections.map((s) => [Math.max(0, s.y), Math.max(0, s.y) + (s.height || s.h || 0)]).sort((a, b) => a[0] - b[0]);
+let reached = 0, gap = 0;
+for (const [top, bottom] of [...spans, [pageHeight, pageHeight]]) {
+  if (top - reached > vp.height * 0.4) {
+    gap++;
+    for (let y = reached, k = 0; y < top - vp.height * 0.2 && k < 4; y += vp.height, k++) plan.push({ label: `between-${gap}${k ? `-${k + 1}` : ''}`, y });
+  }
+  reached = Math.max(reached, bottom);
+}
+const frames = plan.sort((a, b) => a.y - b.y).slice(0, 40);
 
 // the control nearest the middle of the screen: links, buttons, pointer-cursor elements, cards with a hover listener
 function hoverPoint() {
@@ -135,6 +159,17 @@ try {
 // one image per frame: reference | clone, half size, with the frame's pixel match
 const lines = [];
 let n = 0;
+// A frame's token: what the picture shows, coarsely (16x10 grey levels), so a verdict holds for the picture judged,
+// not for a frame id: shot again and different, it needs a new look; shot again and alike, it keeps its verdict.
+const tokenOf = (img) => {
+  let h = 2166136261;
+  for (let gy = 0; gy < 10; gy++) for (let gx = 0; gx < 16; gx++) {
+    const x = Math.floor((gx + 0.5) * img.width / 16), y = Math.floor((gy + 0.5) * img.height / 10), i = (y * img.width + x) * 4;
+    h = Math.imul(h ^ (((img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3) >> 5), 16777619) >>> 0;
+  }
+  return h.toString(36).slice(0, 5);
+};
+const SAME_REASON = 85; // below this pixel match, "same" says why
 for (const label of Object.keys(refShots)) {
   const a = refShots[label] && PNG.sync.read(refShots[label]);
   const b = cloneShots[label] && PNG.sync.read(cloneShots[label]);
@@ -154,7 +189,7 @@ for (const label of Object.keys(refShots)) {
   await fs.writeFile(path.join(outDir, `${file}.png`), PNG.sync.write(img));
   const pct = matchPct(a, b).pct;
   const base = label.replace(/-hover$/, '');
-  lines.push({ id, file, pct, ...(positions.ref[base] !== undefined ? { y: { ref: positions.ref[base], clone: positions.clone[base] } } : {}), img });
+  lines.push({ id, file, pct, token: tokenOf(img), ...(positions.ref[base] !== undefined ? { y: { ref: positions.ref[base], clone: positions.clone[base] } } : {}), img });
 }
 // contact sheets: three frames per image, so the whole review is a few reads
 const sheets = [];
@@ -173,16 +208,19 @@ for (let s = 0; s * 3 < lines.length; s++) {
 for (const l of lines) delete l.img;
 await fs.writeFile(path.join(outDir, 'index.md'), `# Review${route?.slug ? ` of ${route.path}` : ''} at ${vp.name} (${vp.width}x${vp.height}): reference left, clone right
 
-Look at every frame (the sheets hold three frames each, in order). In notes.md under "## Review", one line per frame:
-\`- <frame> ${vp.name}: same\`, \`- <frame> ${vp.name}: differs: <what you see>\`, or, only when you proved the
-difference is the instrument's and not the clone's, \`- <frame> ${vp.name}: tool: <why>; evidence: <file>\`. Pixel
-match is a hint, not the verdict: a 99% frame can hide a wrong panel, and a 90% frame can be a random animation phase.
+Look at every frame (the sheets hold three frames each, in order). In notes.md under "## Review", one line per frame,
+with the frame's token from the table below (a verdict holds for that picture only: a frame shot again that looks
+different needs a new look): \`- <frame> ${vp.name} [<token>]: same\`, \`- <frame> ${vp.name} [<token>]: differs: <what you
+see>\`, or, only when you proved the difference is the instrument's and not the clone's, \`- <frame> ${vp.name} [<token>]:
+tool: <why>; evidence: <a crop or a measurement>\`. Below ${SAME_REASON}% pixel match, "same" says why
+(\`same: the reference's photo arrives later\`). Pixel match is a hint, not the verdict: a 99% frame can hide a wrong
+panel, and a 90% frame can be a random animation phase. Never write verdicts from pixel match alone.
 
 Sheets: ${sheets.map((s) => `[${s.file}](${s.file}) (${s.frames.join(', ')})`).join(' · ')}
 
-| frame | pixel match | scrolled to (reference / clone) |
-|---|---|---|
-${lines.map((l) => `| [${l.id}](${l.file}.png) | ${l.pct}% | ${l.y ? `${l.y.ref} / ${l.y.clone}${Math.abs(l.y.ref - l.y.clone) > 2 ? ' **(not the same place)**' : ''}` : '–'} |`).join('\n')}
+| frame | token | pixel match | scrolled to (reference / clone) |
+|---|---|---|---|
+${lines.map((l) => `| [${l.id}](${l.file}.png) | ${l.token} | ${l.pct}% | ${l.y ? `${l.y.ref} / ${l.y.clone}${Math.abs(l.y.ref - l.y.clone) > 2 ? ' **(not the same place)**' : ''}` : '–'} |`).join('\n')}
 `);
 // make sure notes.md has the section the verdicts go in
 const notesFile = path.join(root, 'notes.md');

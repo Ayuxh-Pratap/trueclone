@@ -402,15 +402,21 @@ const COMPRESSIBLE = /\.(html?|css|m?js|json|svg|txt|xml|map)$/i;
 export function serve(dir, port = 0) {
   dir = path.resolve(dir); // forward or back slashes, relative or not: one form, so the containment check holds
   return new Promise((resolve) => {
+    // the site's kind, from its capture next to the folder served (clone/ beside reference/): a site of separate
+    // pages answers an address it does not have with a 404, as its host does; a single-page app with its document
+    const kind = JSON.parse(fsSync.existsSync(path.join(dir, '..', 'reference', 'meta.json')) ? fsSync.readFileSync(path.join(dir, '..', 'reference', 'meta.json'), 'utf8') : '{}').app || null;
     const server = http.createServer(async (req, res) => {
       let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-      if (p.endsWith('/')) p += 'index.html';
+      // a route asked with or without its trailing slash (/about/ and /about) is the same route
+      if (p.length > 1 && p.endsWith('/')) p = p.replace(/\/+$/, '');
+      if (p === '/' || p === '') p = '/index.html';
       let file = path.join(dir, p);
       if (file !== dir && !file.startsWith(dir + path.sep)) { res.writeHead(403).end(); return; }
       // An address that is not a file is a route, served like a host does: its own page (/about -> about/index.html,
       // about.html) or, for a single-page app (one document for every address), the app's document.
-      if (!path.extname(p) && !(await fs.stat(file).then((s) => s.isFile(), () => false))) {
-        for (const c of [path.join(file, 'index.html'), `${file}.html`, path.join(dir, 'index.html')]) {
+      if (!(await fs.stat(file).then((s) => s.isFile(), () => false))) {
+        const candidates = [path.join(file, 'index.html'), ...(path.extname(p) ? [] : [`${file}.html`]), ...(!path.extname(p) && kind !== 'pages' ? [path.join(dir, 'index.html')] : [])];
+        for (const c of candidates) {
           if (await fs.stat(c).then((s) => s.isFile(), () => false)) { file = c; break; }
         }
       }
@@ -483,6 +489,29 @@ export function matchPct(pngA, pngB, withDiff = false) {
   const bad = match(a, b, diff);
   return { pct: +(100 - (bad / (w * h)) * 100).toFixed(2), diff };
 }
+
+// How much of a shot is drawn on at all: the share of pixels away from its dominant colour (its background). A
+// blank page or a 404 is near 0; a page with boxes and media, masked or not, is well above. Compared between the two
+// sides, it tells "a different page" from "no page".
+export function inkShare(png) {
+  const n = png.width * png.height;
+  const hist = new Map();
+  for (let i = 0; i < n; i += 7) { const k = ((png.data[i * 4] >> 4) << 8) | ((png.data[i * 4 + 1] >> 4) << 4) | (png.data[i * 4 + 2] >> 4); hist.set(k, (hist.get(k) || 0) + 1); }
+  let mode = 0, best = -1;
+  for (const [k, c] of hist) if (c > best) { best = c; mode = k; }
+  const [mr, mg, mb] = [((mode >> 8) & 15) * 16 + 8, ((mode >> 4) & 15) * 16 + 8, (mode & 15) * 16 + 8];
+  let ink = 0, seen = 0;
+  for (let i = 0; i < n; i += 3) { seen++; if (Math.abs(png.data[i * 4] - mr) + Math.abs(png.data[i * 4 + 1] - mg) + Math.abs(png.data[i * 4 + 2] - mb) > 48) ink++; }
+  return ink / (seen || 1);
+}
+
+// The images in view loaded and decoded (lazy ones made eager), at most `ms`: a shot after a navigation or a click
+// shows the view a visitor sees once its media arrive, on both sides alike, not whichever side's network was faster.
+export const mediaReady = (page, ms = 8000) => page.evaluate(async (max) => {
+  const inView = [...document.images].filter((i) => { const r = i.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.width > 1 && r.height > 1; });
+  for (const i of inView) if (i.loading === 'lazy') i.loading = 'eager';
+  await Promise.race([Promise.all(inView.map((i) => (i.complete ? (i.decode ? i.decode().catch(() => {}) : null) : new Promise((r) => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); })))), new Promise((r) => setTimeout(r, max))]);
+}, ms).catch(() => {});
 
 // ---------- Live-state sampling (animations running, nothing frozen) ----------
 // Loads lazy content without freezing anything: scroll once top to bottom, then back to the top.

@@ -6,6 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
 const TRACKING = /google-analytics|googletagmanager|gtag|doubleclick|facebook\.(com|net)|fbevents|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|hs-scripts|linkedin|licdn|tiktok|twitter|ads-twitter|redditstatic|marketo|munchkin|challenges\.cloudflare|recaptcha|hcaptcha|turnstile|cdn-cgi\/rum|debugbear/i;
@@ -121,7 +122,11 @@ export async function startScriptEvidence(page, pageUrl) {
       let source = '';
       try { ({ scriptSource: source } = await cdp.send('Debugger.getScriptSource', { scriptId })); } catch { continue; }
       if (!source || source.length < 40) continue;
-      const base = s.inline ? `inline-${++n}` : `${String(++n).padStart(2, '0')}-${(new URL(s.url).pathname.split('/').pop() || 'script').replace(/[^a-z0-9._-]/gi, '_').replace(/\.m?js$/i, '').slice(-60)}`;
+      // named by what the script is (its address, or an inline script's code), never by its rank in this load: the
+      // same script keeps its name in the next capture and on every page, so a notes.md citation keeps pointing at it
+      const id = createHash('sha1').update(s.inline ? source : s.url.split('#')[0]).digest('hex').slice(0, 6);
+      n++;
+      const base = s.inline ? `inline-${id}` : `${id}-${(new URL(s.url).pathname.split('/').pop() || 'script').replace(/[^a-z0-9._-]/gi, '_').replace(/\.m?js$/i, '').slice(-60)}`;
       const file = `${base}.js`;
       await fs.writeFile(path.join(outDir, file), source);
       // a readable copy when the code is minified (long lines); line numbers in INDEX.md refer to the original
