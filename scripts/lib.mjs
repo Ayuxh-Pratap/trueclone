@@ -284,7 +284,7 @@ export async function bundleIntegrity(refDir) {
     const st = await fs.stat(path.join(dir, ...String(e.file || '').split('/'))).catch(() => null);
     if (!e.file || !st) problems.push({ url, why: 'its file is missing' });
     else if (typeof e.bytes === 'number' && st.size !== e.bytes) problems.push({ url, why: `its file has ${st.size} bytes, ${e.bytes} were recorded` });
-    else if (st.size === 0 && !e.empty) problems.push({ url, why: e.via ? 'empty' : 'empty (recorded before rc.6, which saved bodies the browser did not hand over as empty files)' });
+    else if (st.size === 0 && !e.empty) problems.push({ url, why: e.via ? 'empty' : 'empty (recorded before rc.6)' });
   }
   return { recorded: true, entries: Object.keys(manifest.entries || {}).length, problems };
 }

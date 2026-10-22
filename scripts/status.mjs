@@ -113,18 +113,10 @@ if (!missing.length && !app) {
 }
 if (missing.length) await next(T(`reads ${name}`), `${missing.map(([c, why]) => `${c.split(' ')[0]}: ${why}`).join('; ')} (not read yet): the reads that only look run side by side, the reveals alone after them; only the missing ones run`, ['while it runs (in the background), read reference/scripts/INDEX.md: the site\'s scripts, ranked by what ran']);
 done.push('reads');
-// the reference against itself, before any clone work (PLAN.md 5.4 validity gate): every bar is set from it, and a
-// frame the reference varies on is known before the loop spends time on it
-const noiseRec = await json('reference/noise.json');
-// the reference's own reads that the calibration replays (its states, an app's reference journey) read again after it
-// was made: it describes reference frames that are gone (RC5 zero: the journey re-recorded to complete the bundle)
-const readAfter = Math.max((await stat(app ? 'reference/journey/journey.json' : 'reference/states/desktop.json'))?.mtimeMs || 0, 0);
-const noiseOld = noiseRec && Date.parse(noiseRec.at || 0) < readAfter - 1000;
-if (!noiseRec || noiseRec.refId !== refIdOf(meta) || noiseOld) await next(T(`calibrate ${name}`), `${noiseOld ? 'the reference was read again after the calibration' : noiseRec ? 'the calibration belongs to an earlier capture' : 'the reference has not been measured against itself yet'}: two more loads of the live page through the same checks set the bar of every frame (reference/noise.json); about ${app ? '10' : '5-15'} minutes, once per capture`, ['while it runs (in the background), read reference/scripts/INDEX.md']);
-done.push('calibrated');
 // the site's own files, whole (own bundle: the clone runs them). A file the recorder could not get is recorded as failed
 // (lib.mjs recordBundle); a bundle from rc.5 may hold empty files. The reference journey records every file again, once;
-// a file still missing after that cannot be fixed by the clone's work: Blocked, the files named, the work kept
+// a file still missing after that cannot be fixed by the clone's work: Blocked, the files named, the work kept. Before
+// the calibration: recording again re-reads the reference journey, which the calibration replays
 if (ownBundle) {
   const integrity = await bundleIntegrity(path.join(root, 'reference'));
   const tried = await json('compare/bundle-rerecord.json');
@@ -144,6 +136,15 @@ if (ownBundle) {
   await fs.rm(path.join(root, 'compare', 'bundle-rerecord.json'), { force: true });
   done.push(`bundle (${integrity.entries} files whole)`);
 }
+// the reference against itself, before any clone work (PLAN.md 5.4 validity gate): every bar is set from it, and a
+// frame the reference varies on is known before the loop spends time on it. The reference's own reads that the
+// calibration replays (its states, an app's reference journey) read again after it was made: it describes reference
+// frames that are gone (RC5 zero: the journey re-recorded to complete the bundle)
+const noiseRec = await json('reference/noise.json');
+const readAfter = Math.max((await stat(app ? 'reference/journey/journey.json' : 'reference/states/desktop.json'))?.mtimeMs || 0, 0);
+const noiseOld = noiseRec && Date.parse(noiseRec.at || 0) < readAfter - 1000;
+if (!noiseRec || noiseRec.refId !== refIdOf(meta) || noiseOld) await next(T(`calibrate ${name}`), `${noiseOld ? 'the reference was read again after the calibration' : noiseRec ? 'the calibration belongs to an earlier capture' : 'the reference has not been measured against itself yet'}: two more loads of the live page through the same checks set the bar of every frame (reference/noise.json); about ${app ? '10' : '5-15'} minutes, once per capture`, ['while it runs (in the background), read reference/scripts/INDEX.md']);
+done.push('calibrated');
 
 // ---- 2. design and seed (each re-run when its inputs are newer) ----
 const tokens = await stat('design-tokens.json');
