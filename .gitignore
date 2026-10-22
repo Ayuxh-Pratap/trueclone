@@ -17,3 +17,10 @@ sites/
 playwright-report/
 test-results/
 *.tgz
+
+# The RC4 evaluation's per-event timelines: derived from local agent session logs (private, 5.8 MB); the evaluation keeps
+# what it concluded from them (docs/eval-rc4/projects/*.series.json, data/run-facts.json, data/summary.json)
+docs/eval-rc4/data/*.timeline.json
+
+# Written by npm prepack (tools/manifest.mjs) and removed by postpack: only the published package carries it
+scripts/MANIFEST.json
