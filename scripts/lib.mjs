@@ -158,6 +158,62 @@ export const releaseStill = (page) => page.clock.resume().catch(() => {});
 // reference/bundle/<host>/<path> with a manifest, so the clone can run the site's own code on its own files. Tracking
 // is never saved; requests that are not GET (a form, a backend write) are never saved either.
 const TRACKING_HOSTS = /google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|linkedin\.com\/px|tiktok|bat\.bing|snap\.licdn|vercel-insights|vitals\.vercel/i;
+//
+// What the browser hands over is checked before it is kept (RC5 zero: nine textures and videos saved as 0-byte files).
+// Chrome's DevTools protocol (Network.getResponseBody, under Playwright's response.body()) returns an EMPTY body for a
+// fetch the page consumes as a Blob (`fetch(u).then((r) => r.blob())`), although the bytes arrived: the browser streams
+// such bodies straight into its blob store, past the DevTools buffer. So every body is compared with what the browser
+// says it received (request.sizes().responseBodySize: the body's bytes on the wire, with any content encoding and any
+// chunked framing, so it only tells "nothing arrived" from "something arrived") and with the length the server
+// declared (Content-Length, comparable to the body only when the body is not content-encoded):
+//   ok          the body as received
+//   empty       nothing arrived (a 204, a zero-length answer): legitimately empty, kept as such
+//   lost        an empty body although bytes arrived: recovered
+//   incomplete  not content-encoded, with a declared length the body does not have: recovered
+//   partial     a 206 range answer (a video element streaming): the whole file is recovered
+// Recovery asks for the same address again through the page's own browser context (its cookies, the request's headers,
+// no Range), at most twice, and keeps the answer only when it is the same resource: status 200, the same address after
+// any redirect, the same media type, not an HTML page standing in for something else, and its own declared length.
+// Two answers that agree a resource is empty (the browser's and the recovery's) make it legitimately empty. Otherwise
+// the entry is recorded as failed, with why; a file is never taken as recorded merely because it exists
+// (bundleIntegrity reads the manifest, not the folder). Each entry says how it was obtained.
+export function bodyVerdict({ status, bodyLength, wireBytes, encoding, contentLength }) {
+  if (status === 206) return 'partial';
+  if (status === 204) return 'empty';
+  if (bodyLength === 0) return wireBytes === 0 || contentLength === 0 ? 'empty' : 'lost';
+  const encoded = encoding && !/^identity$/i.test(encoding);
+  if (!encoded && Number.isFinite(contentLength) && bodyLength !== contentLength) return 'incomplete';
+  return 'ok';
+}
+const declared = (h) => (h['content-length'] !== undefined && /^\d+$/.test(h['content-length']) ? Number(h['content-length']) : undefined);
+const baseType = (t) => String(t || '').split(';')[0].trim().toLowerCase();
+const HOP = /^(:|host$|content-length$|range$|if-range$|cookie$|connection$|accept-encoding$)/i;
+// the same resource asked for again through the page's browser context; returns { body, via } or { failed }
+export async function recoverBody(context, req, res, { attempts = 2 } = {}) {
+  const url = res.url();
+  const want = baseType(res.headers()['content-type']);
+  const headers = Object.fromEntries(Object.entries(await req.allHeaders().catch(() => ({}))).filter(([k]) => !HOP.test(k)));
+  let why = 'not tried';
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const r = await context.request.get(url, { headers, timeout: 60000, maxRedirects: 5 });
+      const body = await r.body();
+      const h = r.headers();
+      const got = baseType(h['content-type']);
+      // the length the recovery's own answer declared, when its body arrives as declared (Playwright decodes an
+      // encoded body, so an encoded answer's length cannot be checked)
+      const enc = h['content-encoding'] && !/^identity$/i.test(h['content-encoding']);
+      const len = enc ? undefined : declared(h);
+      if (r.status() !== 200) why = `answered HTTP ${r.status()}`;
+      else if (r.url() !== url) why = `redirected to ${r.url()}`;
+      else if (want && got && got !== want) why = `answered ${got}, not ${want}`;
+      else if (!/html/.test(want) && /html/.test(got)) why = 'answered an HTML page';
+      else if (Number.isFinite(len) && body.length !== len) why = `answered ${body.length} of the ${len} bytes it declared`;
+      else return { body, attempts: i, ...(body.length ? {} : { empty: true }) };
+    } catch (e) { why = String(e.message).split('\n')[0]; }
+  }
+  return { failed: why, attempts };
+}
 export function recordBundle(page, refDir) {
   const dir = path.join(refDir, 'bundle');
   const manifestFile = path.join(dir, 'manifest.json');
@@ -168,22 +224,69 @@ export function recordBundle(page, refDir) {
         const req = res.request();
         const u = new URL(res.url());
         if (req.method() !== 'GET' || !/^https?:$/.test(u.protocol) || TRACKING_HOSTS.test(u.href) || res.status() >= 300) return;
-        const body = await res.body().catch(() => null);
-        if (!body || body.length > 300 * 1024 * 1024) return;
+        let body = await res.body().catch(() => null);
+        const wireBytes = await req.sizes().then((s) => s.responseBodySize, () => null);
+        const encoding = res.headers()['content-encoding'] || '';
+        let verdict = body ? bodyVerdict({ status: res.status(), bodyLength: body.length, wireBytes, encoding, contentLength: declared(res.headers()) }) : 'lost';
+        let via = 'browser', failed = null, tries = 0;
+        if (['lost', 'incomplete', 'partial'].includes(verdict)) {
+          const r = await recoverBody(page.context(), req, res);
+          tries = r.attempts;
+          if (r.body) { body = r.body; via = 'recovered'; if (r.empty) verdict = 'empty'; } else failed = r.failed;
+        }
+        if (body && body.length > 300 * 1024 * 1024) return;
         let rel = decodeURIComponent(u.pathname);
         if (rel.endsWith('/')) rel += 'index.html';
         const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map((p) => p.replace(/[<>:"|?*\\]/g, '_'));
         if (!parts.length) parts.push('index.html');
         const file = path.join(dir, u.host.replace(/[:]/g, '_'), ...parts);
-        await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, body);
+        const key = `${u.origin}${u.pathname}`;
         const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8').catch(() => '{"entries":{}}'));
-        manifest.entries[`${u.origin}${u.pathname}`] = { file: path.relative(dir, file).split(path.sep).join('/'), type: res.headers()['content-type'] || '', kind: req.resourceType(), document: req.isNavigationRequest() && req.frame() === page.mainFrame() };
+        const had = manifest.entries[key];
+        const base = { type: res.headers()['content-type'] || '', kind: req.resourceType(), document: req.isNavigationRequest() && req.frame() === page.mainFrame(), status: res.status(), wireBytes, encoding, at: new Date().toISOString() };
+        if (failed) {
+          // a good copy recorded earlier (another load of the same address) is kept; otherwise the failure is recorded
+          if (had && had.via && !had.failed && had.bytes > 0) return;
+          await fs.rm(file, { force: true });
+          manifest.entries[key] = { ...base, failed: `${verdict} body (${body ? body.length : 'unreadable'} of ${wireBytes ?? '?'} bytes), recovery ${failed}`, attempts: tries };
+        } else {
+          await fs.mkdir(path.dirname(file), { recursive: true });
+          await fs.writeFile(file, body);
+          manifest.entries[key] = { ...base, file: path.relative(dir, file).split(path.sep).join('/'), bytes: body.length, sha1: crypto.createHash('sha1').update(body).digest('hex'), via, ...(via === 'recovered' ? { recoveredFrom: verdict, attempts: tries } : {}), ...(verdict === 'empty' ? { empty: true } : {}) };
+        }
+        await fs.mkdir(dir, { recursive: true });
         await fs.writeFile(manifestFile, JSON.stringify(manifest, null, 1));
-      } catch { /* a response that cannot be read is left out */ }
+      } catch { /* a response that cannot be read at all (the page closed) is left out */ }
     });
   });
-  return () => pending; // await it before closing the page
+  // await it before closing the page: until every response seen so far is recorded or recovered, and no new one has
+  // joined for a quarter of a second (a texture requested while the last one was being written is not cut off)
+  return async () => {
+    for (;;) {
+      const at = pending;
+      await at;
+      await new Promise((r) => setTimeout(r, 250));
+      if (at === pending) return;
+    }
+  };
+}
+
+// Is the recorded bundle whole? Read from the manifest's own record of each file, never from the folder alone: an entry
+// that failed, a file missing or of another size than recorded, and (bundles recorded before rc.6, which kept no
+// record) any empty file not recorded as legitimately empty.
+export async function bundleIntegrity(refDir) {
+  const dir = path.join(refDir, 'bundle');
+  const manifest = JSON.parse(await fs.readFile(path.join(dir, 'manifest.json'), 'utf8').catch(() => 'null'));
+  if (!manifest) return { recorded: false, problems: [] };
+  const problems = [];
+  for (const [url, e] of Object.entries(manifest.entries || {})) {
+    if (e.failed) { problems.push({ url, why: e.failed }); continue; }
+    const st = await fs.stat(path.join(dir, ...String(e.file || '').split('/'))).catch(() => null);
+    if (!e.file || !st) problems.push({ url, why: 'its file is missing' });
+    else if (typeof e.bytes === 'number' && st.size !== e.bytes) problems.push({ url, why: `its file has ${st.size} bytes, ${e.bytes} were recorded` });
+    else if (st.size === 0 && !e.empty) problems.push({ url, why: e.via ? 'empty' : 'empty (recorded before rc.6, which saved bodies the browser did not hand over as empty files)' });
+  }
+  return { recorded: true, entries: Object.keys(manifest.entries || {}).length, problems };
 }
 
 // One timing-sensitive measurement at a time across every trueclone process on this machine (load sequences, reveals

@@ -78,6 +78,9 @@ export async function seedBundle(root, meta) {
   const map = {}, docs = {}, hosts = new Set();
   const placed = [];
   for (const [abs, entry] of Object.entries(manifest.entries)) {
+    // a file that could not be recorded has no copy: the clone answers it 404, and status reports it (lib.mjs
+    // bundleIntegrity) instead of a clone that pretends to have it
+    if (entry.failed || !entry.file) continue;
     const u = new URL(abs);
     const [host, ...rest] = entry.file.split('/');
     const local = host === siteDir ? `/${rest.join('/')}` : `/_ext/${entry.file}`;

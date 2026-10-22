@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill, bundleIntegrity } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 import { detectInPage, operable } from './interactions-auto.mjs';
 
@@ -526,7 +526,10 @@ console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (si
 // on its own files (the owner's permission covers their code). Any other capture drops it: a document is rebuilt.
 const ownBundle = mode === 'exact' && (Boolean(canvasApp) || Boolean(flags.bundle)) && await fs.stat(path.join(ref, 'bundle', 'manifest.json')).then(() => true, () => false);
 if (!ownBundle) await fs.rm(path.join(ref, 'bundle'), { recursive: true, force: true });
-else console.log(`own bundle: ${Object.keys(JSON.parse(await fs.readFile(path.join(ref, 'bundle', 'manifest.json'), 'utf8')).entries).length} files the app loaded, kept in reference/bundle/ (exact mode: the clone runs the site's own code)`);
+else {
+  const integrity = await bundleIntegrity(ref);
+  console.log(`own bundle: ${integrity.entries} files the app loaded, kept in reference/bundle/ (exact mode: the clone runs the site's own code)${integrity.problems.length ? `; ${integrity.problems.length} could not be recorded (status reports them): ${integrity.problems.slice(0, 5).map((p) => `${p.url} (${p.why})`).join('; ')}` : ''}`);
+}
 await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', stabilise: STABILISERS, ...(ignore.length ? { ignore } : {}), ...(thirdParty.length ? { thirdParty } : {}), ...(scriptOrigins ? { scriptOrigins } : {}), ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), capturedAt: new Date().toISOString(), complete: false, rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
