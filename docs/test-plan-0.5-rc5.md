@@ -11,7 +11,7 @@ tune the tool toward this sheet.
 |---|---|
 | Tool | `@trueclone/cli` **0.5.0-rc.5**, repository commit `6cb5e34` (the last code commit of the rc.5 work; `git log --oneline 17cd6cf..6cb5e34` lists them; later commits change documents and dev tools only) |
 | Baseline | 0.5.0-rc.4 (`17cd6cf`), runs in `C:\dev\tc-tests\rc4-*`: **read-only, never opened by these runs** |
-| Installed from | a local tarball (`npm pack`), so nothing has to be published first. Publishing to npm stays your call: if you prefer `npm publish --tag next`, use `@trueclone/cli@0.5.0-rc.5` wherever the tarball path appears |
+| Installed from | npm: `@trueclone/cli@0.5.0-rc.5`, published under the `next` tag (step 2), installed into each folder by `init` |
 | Folders | `C:\dev\tc-tests\rc5-<site>` (new) |
 | Results archive | `C:\dev\tc-tests\rc5-results\<site>\` (copied after each run, step 6) |
 
@@ -38,7 +38,7 @@ Order and flags (the same capture flags as RC4):
 | 2 | rc5-varsity | www.varsity.vc (exact, "site owner") | exact | RC4's false exit 0 (VAR-1), the noisy canvas frame (VAR-2) |
 | 3 | rc5-bhaskar | www.heybhaskar.com (exact, "site owner") | exact | stopped before Next in RC4; the shuffle route (BHASKAR-1/-3) |
 | 4 | rc5-allbirds | allbirds.com/products/mens-tree-runners (`--routes 1`) | template | the hide race, the third-party widget, rotation |
-| 5 | rc5-zero | why.zero.university | template, canvas app | the 32 h loop; D4 |
+| 5 | rc5-zero | why.zero.university (exact: needs the owner's permission, recorded with `--permission`) | exact, canvas app (its own bundle) | the 32 h loop. **Changed from RC4** (template): exact mode runs the site's own recorded bundle offline, so this run tests app mode's own-bundle path, not D4's template scene port; its numbers do not compare with RC4 zero |
 
 ## 2. Preflight (in the repository, before any run)
 
@@ -50,20 +50,19 @@ npm test                                # 76 tests, all pass (about 30 seconds)
 npm run test:browser                    # 5 tests, all pass (about 4 minutes)
 npm run test:e2e                        # 4 tests, all pass (about 15 minutes); starts the fixture servers itself
 node bin/trueclone.mjs doctor           # every line ok
-npm pack                                # writes trueclone-cli-0.5.0-rc.5.tgz (the manifest goes in, and is removed again)
-Get-FileHash .\trueclone-cli-0.5.0-rc.5.tgz -Algorithm SHA256   # write it on the score sheet
+npm pack --dry-run                      # lists scripts/MANIFEST.json and 0.5.0-rc.5 (the manifest is removed again after)
+npm whoami                              # signed in to npm as the package's owner
+npm publish --tag next                  # publishes 0.5.0-rc.5 under "next" ("latest" stays where it is)
+npm view @trueclone/cli dist-tags       # next: 0.5.0-rc.5
 ```
 
-The tarball must contain `scripts/MANIFEST.json` (`tar -tzf trueclone-cli-0.5.0-rc.5.tgz | Select-String MANIFEST`):
-it is how an installed copy detects an edited instrument.
+The package carries `scripts/MANIFEST.json`: it is how an installed copy detects an edited instrument.
 
 ## 3. Make a folder and install (per run, just before it starts)
 
 ```powershell
 $s = 'rc5-astro'; $d = "C:\dev\tc-tests\$s"; New-Item -ItemType Directory -Force $d | Out-Null; Push-Location $d
-npm init -y | Out-Null
-npm install --save-dev --save-exact C:\dev\rea-lab\trueclone-cli-0.5.0-rc.5.tgz
-npx trueclone init --no-install         # skill, AGENTS.md, .gitignore (the package is already installed)
+npx -y @trueclone/cli@0.5.0-rc.5 init   # skill, AGENTS.md, .gitignore, and the package pinned as a dev dependency
 npx trueclone --version                 # 0.5.0-rc.5
 npx trueclone doctor                    # Node, Chrome, DNS, a local page, the timing lock: every line ok
 Pop-Location
@@ -102,9 +101,10 @@ First paragraphs for the others (RC4's flags):
   shop: https://www.allbirds.com/products/mens-tree-runners. Name the site "allbirds". First run `npx trueclone doctor`
   and include its output in your report. Then capture with: npx trueclone capture
   https://www.allbirds.com/products/mens-tree-runners allbirds --routes 1`
-- **zero:** `Clone https://why.zero.university/ with trueclone, in template mode (I do not have the owner's permission
-  for an exact copy). Name the site "zero". First run `npx trueclone doctor` and include its output in your report.
-  Then capture with: npx trueclone capture https://why.zero.university/ zero`
+- **zero (exact, changed from RC4):** `Clone https://why.zero.university/ with trueclone, in exact mode: the site owner
+  has given permission for an exact copy. Name the site "zero". First run `npx trueclone doctor` and include its output
+  in your report. Then capture with: npx trueclone capture https://why.zero.university/ zero --mode exact --permission
+  "<who authorised it>"`
 
 (Replace `astro` in the loop and report paragraphs with the site's name.)
 
@@ -168,7 +168,7 @@ Any audit finding is a tool failure (row 2).
 | 10 | Lock-wait minutes; calibrate and behaviour minutes | under 20% of wall time together | | | | | |
 | 11 | Questions asked mid-run | none | | | | | |
 | 12 | Instrument modifications detected | none | | | | | |
-| 13 | Your by-eye score, wide and phone (0-100) | astro ≥ 95, bhaskar ≥ 93, varsity ≥ 88, allbirds ≥ 85, zero as agreed for D4 | | | | | |
+| 13 | Your by-eye score, wide and phone (0-100) | astro ≥ 95, bhaskar ≥ 93, varsity ≥ 88, allbirds ≥ 85, zero (exact, own bundle) ≥ 90 | | | | | |
 | 14 | REPORT claims nothing you do not see | always | | | | | |
 
 **Predictions** (before the runs):
@@ -184,7 +184,7 @@ Any audit finding is a tool failure (row 2).
   - load wide is named if it fails.
 - **zero:**
   - review verdicts are written right after the first score;
-  - the template journey is judged on composition and UI ("media replaced");
+  - exact mode: the clone runs the site's own bundle offline (recorded at capture and along the journey); a checkpoint that differs is usually a file the journey never loaded;
   - terminal at 0 or 3 well before RC4's 32 h.
 
 ## 8. How to read the outcome
