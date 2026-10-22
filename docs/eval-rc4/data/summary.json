@@ -1,0 +1,202 @@
+{
+ "zero": {
+  "file": "C:\\Users\\Ayush Pratap Singh\\.codex\\sessions\\2026\\10\\21\\rollout-2026-10-21T02-17-03-01a15b11-4d83-7340-9693-0c7ecc4d9f3f.jsonl",
+  "turns": [
+   {
+    "start": "2026-10-20T20:47:09.469Z",
+    "trigger": "composer"
+   },
+   {
+    "start": "2026-10-22T04:40:56.349Z",
+    "trigger": "composer",
+    "end": "2026-10-22T04:48:06.479Z",
+    "aborted": "interrupted"
+   },
+   {
+    "start": "2026-10-22T04:58:07.003Z",
+    "trigger": "composer"
+   }
+  ],
+  "userMessages": 3,
+  "compactions": 9,
+  "toolCalls": 2128,
+  "trueclone": 21,
+  "sleepSeconds": 3855,
+  "first": "2026-10-20T20:47:09.469Z",
+  "lastEvent": "2026-10-22T04:58:07.074Z",
+  "tokens": {
+   "input_tokens": 483779032,
+   "cached_input_tokens": 478948864,
+   "cache_write_input_tokens": 0,
+   "output_tokens": 1826328,
+   "reasoning_output_tokens": 1273819,
+   "total_tokens": 485605360
+  },
+  "stepCounts": {
+   "capture": 1,
+   "commands": 2,
+   "measurement": 3,
+   "score": 7,
+   "scoring": 6,
+   "phone": 1,
+   "defect": 1
+  }
+ },
+ "bhaskar": {
+  "file": "C:\\Users\\Ayush Pratap Singh\\.codex\\sessions\\2026\\10\\21\\rollout-2026-10-21T02-27-35-01a15b1a-f3f2-7a60-9f11-ae81241a52d9.jsonl",
+  "turns": [
+   {
+    "start": "2026-10-20T20:59:55.839Z",
+    "trigger": "composer",
+    "end": "2026-10-20T23:24:35.465Z",
+    "final": "Unfinished: final `status` exited **1**, after **2h 23m 52s**. Eight routes were cloned; all **307 visual-review frames** are closed.\n\n1. **Every step:** [Full ordered audit—137 logged steps with status instructions and actions](C:/dev/tc-tests/rc4-bhaskar/sites/heybhaskar/RUN-AUDIT.md).\n2. **Report rows:** Every row of [REPORT.md](C:/dev/tc-tests/rc4-bhaskar/sites/heybhaskar/REPORT.md) is reprodu"
+   }
+  ],
+  "userMessages": 1,
+  "compactions": 1,
+  "toolCalls": 421,
+  "trueclone": 113,
+  "sleepSeconds": 3435,
+  "first": "2026-10-20T20:59:55.839Z",
+  "lastEvent": "2026-10-22T04:40:33.773Z",
+  "tokens": {
+   "input_tokens": 87068980,
+   "cached_input_tokens": 86102528,
+   "cache_write_input_tokens": 0,
+   "output_tokens": 103543,
+   "reasoning_output_tokens": 33239,
+   "total_tokens": 87172523
+  },
+  "stepCounts": {
+   "capture": 2,
+   "status": 43,
+   "reads": 1,
+   "design": 1,
+   "seed": 3,
+   "brief": 17,
+   "score": 7,
+   "review": 26,
+   "report": 13
+  }
+ },
+ "varsity": {
+  "file": "C:\\Users\\Ayush Pratap Singh\\.codex\\sessions\\2026\\10\\21\\rollout-2026-10-21T02-38-28-01a15b24-eca3-7990-8b28-e3846ba69d72.jsonl",
+  "turns": [
+   {
+    "start": "2026-10-20T21:08:31.791Z",
+    "trigger": "composer",
+    "end": "2026-10-21T08:36:37.864Z",
+    "final": "`status varsity` exited **0**. Total time through audit assembly: **11h 27m**; time to terminal status: **11h 22m 25s**.\n\n[Complete audit](C:/dev/tc-tests/rc4-varsity/sites/varsity/FINAL-REPORT.md) contains:\n\n1. All **211 commands**, in order, with instructions, actions and results.\n2. Every row of **REPORT.md** and **REPORT.next.md**.\n3. All **Findings** from notes.md.\n4. Set-asides: **none**.\n5."
+   }
+  ],
+  "userMessages": 1,
+  "compactions": 5,
+  "toolCalls": 1013,
+  "trueclone": 211,
+  "sleepSeconds": 270,
+  "first": "2026-10-20T21:08:31.791Z",
+  "lastEvent": "2026-10-22T04:42:47.510Z",
+  "tokens": {
+   "input_tokens": 233170540,
+   "cached_input_tokens": 230492160,
+   "cache_write_input_tokens": 0,
+   "output_tokens": 423068,
+   "reasoning_output_tokens": 229358,
+   "total_tokens": 233593608
+  },
+  "stepCounts": {
+   "capture": 2,
+   "status": 81,
+   "reads": 1,
+   "design": 1,
+   "seed": 10,
+   "brief": 26,
+   "vendor": 2,
+   "score": 34,
+   "explain": 4,
+   "review": 27,
+   "report": 16,
+   "curves": 1,
+   "next": 4,
+   "states": 2
+  }
+ },
+ "astro": {
+  "file": "C:\\Users\\Ayush Pratap Singh\\.codex\\sessions\\2026\\10\\21\\rollout-2026-10-21T02-47-26-01a15b2d-1f44-7c11-8446-9f7adb7d9c72.jsonl",
+  "turns": [
+   {
+    "start": "2026-10-20T21:17:32.916Z",
+    "trigger": "composer",
+    "end": "2026-10-20T22:38:59.753Z",
+    "final": "**Final exit code: 0. Total elapsed: 1 hour 20 minutes**, through the final confirmation at 04:07:42 IST on 21 October. Every gate passes.\n\nDeliverables: [REPORT.md](C:/dev/tc-tests/rc4-astro/sites/astro/REPORT.md), [REPORT.next.md](C:/dev/tc-tests/rc4-astro/sites/astro/REPORT.next.md), [ordered run log](C:/dev/tc-tests/rc4-astro/sites/astro/RUN-LOG.md), [notes.md](C:/dev/tc-tests/rc4-astro/sites/"
+   }
+  ],
+  "userMessages": 1,
+  "compactions": 0,
+  "toolCalls": 235,
+  "trueclone": 71,
+  "sleepSeconds": 2300,
+  "first": "2026-10-20T21:17:32.916Z",
+  "lastEvent": "2026-10-22T04:42:17.961Z",
+  "tokens": {
+   "input_tokens": 45430975,
+   "cached_input_tokens": 44879488,
+   "cache_write_input_tokens": 0,
+   "output_tokens": 53748,
+   "reasoning_output_tokens": 16427,
+   "total_tokens": 45484723
+  },
+  "stepCounts": {
+   "capture": 2,
+   "status": 34,
+   "reads": 1,
+   "design": 1,
+   "seed": 4,
+   "brief": 3,
+   "score": 6,
+   "review": 13,
+   "report": 6,
+   "next": 1
+  }
+ },
+ "allbirds": {
+  "file": "C:\\Users\\Ayush Pratap Singh\\.codex\\sessions\\2026\\10\\21\\rollout-2026-10-21T03-00-34-01a15b39-2767-7cc3-870f-45a60648eb2b.jsonl",
+  "turns": [
+   {
+    "start": "2026-10-20T21:30:47.493Z",
+    "trigger": "composer",
+    "end": "2026-10-21T07:37:10.790Z",
+    "final": "Final status exited **3** after **10h 4m 18.408s**.\n\nThe [complete run audit](/C:/dev/tc-tests/rc4-allbirds/sites/allbirds/RUN-AUDIT.md) contains all 162 ordered steps, every row of both reports, complete Findings, set-aside reasons, and tool defects with evidence.\n\n- Only native set-aside: `load:laptop`. Load remains below target at laptop and wide.\n- App wide load trails the clone by **1.37 poin"
+   }
+  ],
+  "userMessages": 1,
+  "compactions": 4,
+  "toolCalls": 950,
+  "trueclone": 217,
+  "sleepSeconds": 550,
+  "first": "2026-10-20T21:30:47.493Z",
+  "lastEvent": "2026-10-22T04:41:05.244Z",
+  "tokens": {
+   "input_tokens": 207954412,
+   "cached_input_tokens": 205298176,
+   "cache_write_input_tokens": 0,
+   "output_tokens": 514611,
+   "reasoning_output_tokens": 330401,
+   "total_tokens": 208469023
+  },
+  "stepCounts": {
+   "capture": 2,
+   "status": 92,
+   "reads": 1,
+   "design": 1,
+   "seed": 30,
+   "brief": 29,
+   "vendor": 1,
+   "score": 15,
+   "explain": 12,
+   "review": 22,
+   "report": 10,
+   "curves": 2
+  }
+ }
+}

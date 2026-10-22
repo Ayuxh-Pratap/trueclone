@@ -1,48 +1,154 @@
 # 0.5.0-rc.4 test plan: five sites, run in parallel in Codex
 
+> **Status (2026-10-22): the RC4 runbook, kept as run.** The next test is `docs/test-plan-0.5-rc5.md`. Superseded
+> here: exit 3 as "every step left is set aside" (rc.5: Incomplete, decided by the loop controller), set-asides and "three
+> tries" in the score sheet, and `--quick`. The runs used effort `high` and the default sandbox (network off,
+> escalations on request), not the Extra High / Full access this page recommends (docs/eval-rc4/data/run-facts.json).
+
 What each run should do, stage by stage, so you can score it against this sheet. Four document sites from the rc.3
 round (varsity, heybhaskar, allbirds, docs.astro.build) and one canvas app (why.zero.university). rc.3 numbers are the
 baseline (docs/analysis-0.5-rc3-runs.md). Everything below is a prediction made before the runs. A run that differs is
 a finding: note it in the Score sheet. Do not tune the tool toward this sheet.
 
-## 0. Setup (once)
+## 0. Runbook: what you do, as a user would
 
-1. Publish rc.4 (`npm publish --tag next` from `C:\dev\rea-lab`), then check `npm view @trueclone/cli dist-tags`.
-2. One folder per site, each a fresh install:
+### Model (all five runs): GPT-6.1 Sol, reasoning Extra High
+
+OpenAI's Codex model page says: "For complex coding and agentic workflows, use GPT-6.1 Sol", for "repeated,
+long-running work". It describes Sol as near-Astra performance at a lower cost; GPT-6 Astra is the top tier at about 5x
+the price. Use the same model on all five so a low site says something about the tool, not the model mix. **Extra
+High**, not Ultra: Ultra splits work across parallel subagents, and the trueclone loop is one step at a time (with five
+runs on one machine, subagents would only add load). Not Luna: it is the model for focused, repeatable tasks. Keep
+the older GPT-5.6 models (Sol, Terra, Luna) out. Later, if the hardest site (zero or varsity) ends low, re-run that one
+site on GPT-6 Astra to see whether the model was the limit.
+
+### 1. Publish rc.4 (once, from the repo)
 
 ```powershell
-foreach ($s in 'rc4-varsity','rc4-bhaskar','rc4-allbirds','rc4-astro','rc4-zero') { mkdir C:\dev\tc-tests\$s; cd C:\dev\tc-tests\$s; npx -y @trueclone/cli@0.5.0-rc.4 init; npx trueclone doctor }
+cd C:\dev\rea-lab; npm publish --tag next; npm view @trueclone/cli dist-tags
 ```
 
-   `init` writes AGENTS.md (Codex reads it by itself), the skill, `.gitignore`, and pins the package. `doctor` must
-   print `ok` for Node, Chrome and Playwright Chromium.
-3. Codex session per folder: **full access, network on** (the steps start Chrome and load the live site). Allow long
-   commands: capture, reads, a full score and `next --verify` take 5-25 minutes each.
-4. **Stagger the starts by about 10 minutes** (zero, then varsity, heybhaskar, allbirds, astro). The machine has 16 GB of
-   RAM, and the memory peak of a run is its capture: Chrome at 5 sizes plus every route. Timing checks (load, reveals,
-   journey) wait for each other through a machine-wide lock (`trueclone-timing.lock` in `%TEMP%`), so five runs don't
-   distort each other's numbers. While one run holds the lock, the others wait in silence. That is expected, not a hang.
+`next` must say `0.5.0-rc.4`.
 
-### Prompt (identical for every run, only the URL and flags change)
+### 2. Make the five folders and install (one command, about 5-10 minutes)
 
-```
-Clone <URL> with trueclone<FLAGS>. Follow AGENTS.md and the skill exactly: capture, then loop on `npx trueclone status <name>`
-and do exactly the step it names until it exits 0 or 3. Do not stop, summarise or ask me anything before that.
-At the end, report: the exit code, every row of REPORT.md and REPORT.next.md, what you set aside and why, and the
-total time.
+```powershell
+foreach ($s in 'rc4-zero','rc4-varsity','rc4-bhaskar','rc4-allbirds','rc4-astro') { $d = "C:\dev\tc-tests\$s"; New-Item -ItemType Directory -Force $d | Out-Null; Push-Location $d; npx -y @trueclone/cli@0.5.0-rc.4 init; Pop-Location }
 ```
 
-| Run | URL | Flags in the prompt | Name |
-|---|---|---|---|
-| varsity | https://www.varsity.vc/ | ` in exact mode, permission "site owner"` | varsity |
-| heybhaskar | https://www.heybhaskar.com/ | ` in exact mode, permission "site owner"` | heybhaskar |
-| allbirds | https://www.allbirds.com/products/mens-tree-runners | `, this one page only (--routes 1), template mode` | allbirds |
-| astro | https://docs.astro.build/en/getting-started/ | `, 4 pages (--routes 4), template mode` | astro |
-| zero | https://why.zero.university/ | `, template mode (we have no permission to copy it)` | zero |
+Each folder gets AGENTS.md (Codex reads it by itself), the skill in `.claude/skills/trueclone/`, `.gitignore`, and the
+package pinned as a dev dependency. Then check the machine once:
 
-Same flags as rc.3, so the numbers compare. zero.university runs in **template mode**: nobody gave permission to copy
-it, so the own-bundle path, which runs the site's own code, is off. The exact own-bundle path has already been proven on
-a canvas app of our own (section 6).
+```powershell
+cd C:\dev\tc-tests\rc4-zero; npx trueclone doctor
+```
+
+It must print `ok` for Node, Chrome and Playwright Chromium.
+
+### 3. Start each run in Codex
+
+For each folder, in this order and **about 10 minutes apart**: rc4-zero, rc4-varsity, rc4-bhaskar, rc4-allbirds,
+rc4-astro.
+
+1. Open the folder in Codex.
+2. Model **GPT-6.1 Sol**, reasoning **Extra High**.
+3. Permissions **Full access** (network on): the steps start Chrome and load the live site.
+4. Paste that site's prompt (below) and leave it alone until it reports.
+
+Why stagger: 16 GB of RAM, and each run's memory peak is its capture (Chrome at 5 sizes and every route). Timing checks
+(load, reveals, the journey) take turns across all runs through a lock in `%TEMP%`: a run waiting for its turn is quiet,
+not hung.
+
+### 4. The prompts
+
+Same body for all five; only the first paragraph changes. Same flags as rc.3, so the numbers compare.
+zero.university is template mode: nobody gave permission to copy it.
+
+**rc4-zero**
+
+```text
+Clone https://why.zero.university/ with trueclone, in template mode (I do not have the owner's permission for an exact copy). Name the site "zero". Capture it with:
+npx trueclone capture https://why.zero.university/ zero
+
+Then follow AGENTS.md and .claude/skills/trueclone/SKILL.md exactly: loop on `npx trueclone status zero`, do exactly the step it names, and run it again, until it exits 0 or 3. Do not stop, summarise, or ask me anything before that. Give every trueclone command a timeout of at least 20 minutes; a quiet command is still working.
+
+When it exits 0 or 3, report:
+1. the exit code and the total time;
+2. every step you ran, in order, each with one line on what status said and what you did;
+3. every row of sites/zero/REPORT.md and sites/zero/REPORT.next.md;
+4. what was set aside and why, and what is under Findings in notes.md;
+5. anything in the tool you believe is a defect, with the evidence.
+```
+
+**rc4-varsity**
+
+```text
+Clone https://www.varsity.vc/ with trueclone, in exact mode: the site owner has given permission for an exact copy. Name the site "varsity". Capture it with:
+npx trueclone capture https://www.varsity.vc/ varsity --mode exact --permission "site owner"
+
+Then follow AGENTS.md and .claude/skills/trueclone/SKILL.md exactly: loop on `npx trueclone status varsity`, do exactly the step it names, and run it again, until it exits 0 or 3. Do not stop, summarise, or ask me anything before that. Give every trueclone command a timeout of at least 20 minutes; a quiet command is still working.
+
+When it exits 0 or 3, report:
+1. the exit code and the total time;
+2. every step you ran, in order, each with one line on what status said and what you did;
+3. every row of sites/varsity/REPORT.md and sites/varsity/REPORT.next.md;
+4. what was set aside and why, and what is under Findings in notes.md;
+5. anything in the tool you believe is a defect, with the evidence.
+```
+
+**rc4-bhaskar**
+
+```text
+Clone https://www.heybhaskar.com/ with trueclone, in exact mode: the site owner has given permission for an exact copy. The whole site, every page it links to. Name the site "heybhaskar". Capture it with:
+npx trueclone capture https://www.heybhaskar.com/ heybhaskar --mode exact --permission "site owner"
+
+Then follow AGENTS.md and .claude/skills/trueclone/SKILL.md exactly: loop on `npx trueclone status heybhaskar`, do exactly the step it names, and run it again, until it exits 0 or 3. Do not stop, summarise, or ask me anything before that. Give every trueclone command a timeout of at least 20 minutes; a quiet command is still working.
+
+When it exits 0 or 3, report:
+1. the exit code and the total time;
+2. every step you ran, in order, each with one line on what status said and what you did;
+3. every row of sites/heybhaskar/REPORT.md and sites/heybhaskar/REPORT.next.md;
+4. what was set aside and why, and what is under Findings in notes.md;
+5. anything in the tool you believe is a defect, with the evidence.
+```
+
+**rc4-allbirds**
+
+```text
+Clone this one product page with trueclone, in template mode, only this page and not the rest of the shop: https://www.allbirds.com/products/mens-tree-runners. Name the site "allbirds". Capture it with:
+npx trueclone capture https://www.allbirds.com/products/mens-tree-runners allbirds --routes 1
+
+Then follow AGENTS.md and .claude/skills/trueclone/SKILL.md exactly: loop on `npx trueclone status allbirds`, do exactly the step it names, and run it again, until it exits 0 or 3. Do not stop, summarise, or ask me anything before that. Give every trueclone command a timeout of at least 20 minutes; a quiet command is still working.
+
+When it exits 0 or 3, report:
+1. the exit code and the total time;
+2. every step you ran, in order, each with one line on what status said and what you did;
+3. every row of sites/allbirds/REPORT.md and sites/allbirds/REPORT.next.md;
+4. what was set aside and why, and what is under Findings in notes.md;
+5. anything in the tool you believe is a defect, with the evidence.
+```
+
+**rc4-astro**
+
+```text
+Clone the Astro docs "Getting started" page and the next pages it links to, 4 pages in all, with trueclone, in template mode: https://docs.astro.build/en/getting-started/. Name the site "astro". Capture it with:
+npx trueclone capture https://docs.astro.build/en/getting-started/ astro --routes 4
+
+Then follow AGENTS.md and .claude/skills/trueclone/SKILL.md exactly: loop on `npx trueclone status astro`, do exactly the step it names, and run it again, until it exits 0 or 3. Do not stop, summarise, or ask me anything before that. Give every trueclone command a timeout of at least 20 minutes; a quiet command is still working.
+
+When it exits 0 or 3, report:
+1. the exit code and the total time;
+2. every step you ran, in order, each with one line on what status said and what you did;
+3. every row of sites/astro/REPORT.md and sites/astro/REPORT.next.md;
+4. what was set aside and why, and what is under Findings in notes.md;
+5. anything in the tool you believe is a defect, with the evidence.
+```
+
+### 5. While they run and after
+
+- Don't answer questions mid-run except "keep going" (a question is a red flag: section 1, C16).
+- When each one reports, score it on the sheet (section 3), then look at it yourself: `npx trueclone serve <name>` in
+  its folder, the original in another window, wide and phone size. Your by-eye score goes in row 12.
 
 ## 1. The common flow: checkpoints, decisions, actions
 
@@ -222,15 +328,24 @@ the tool can **replicate** it.
 
 ## 6. The Codex model
 
-I don't know the models on your list ("Luna Terra Sol 5.6", "GPT-6 Luna Sol Astra", "Sol 6.1"): they are after my
-training data. Choose by these rules, not by name:
+**GPT-6.1 Sol (`gpt-6.1-sol`), reasoning Extra High, for all five** (checked 21 Oct 2026):
 
-1. **The strongest agentic coding flagship you have, at its highest reasoning setting, for all five runs.** rc.3 proved
-   the loop with a top model (Opus 5.5) only. A long unattended loop with set-asides, porting from evidence and review
-   by eye is exactly where smaller models drift. Use the same model on all five so the runs compare: a site that
-   scores low then says something about the tool, not about the model mix.
-2. If one of them is labelled as the Codex or coding variant of the flagship, prefer it over the general chat
-   flagship. If they are equal, take the newest (from your list, `Sol 6.1` reads as the latest, but confirm in the
-   Codex model picker which one is the top coding model).
-3. Don't use the "normal" (smaller) models for this round. After rc.4, re-run **astro** alone on the normal model as
-   the cheap-model bar (it is the easiest site; if it reaches exit 0 there, the loop is model-robust).
+| Model | What OpenAI says it is for | For this test |
+|---|---|---|
+| GPT-6 Astra (`gpt-6-astra`) | the most capable, hardest multi-step work; about 5x Sol's price | the escalation: re-run one low site on it afterwards |
+| **GPT-6.1 Sol** (`gpt-6.1-sol`) | "near-Astra performance at a lower cost"; recommended "for complex coding and agentic workflows" and "repeated, long-running work"; shipped 29 Sep 2026 (a third-party guide says it became the Codex CLI default in early October) | **use this** |
+| GPT-6 Luna (`gpt-6-luna`) | focused, high-volume, repeatable tasks; Artificial Analysis measured its coding-agent score *down* against GPT-5.6 Luna | no: the loop is long and judgement-heavy |
+| GPT-5.6 Sol / Terra / Luna | the previous generation, kept during the rollout | no |
+
+Reasoning: **Extra High**. Max gives one agent more thinking time but is slower across hours of loop. Ultra splits work
+across parallel subagents, which the one-step-at-a-time loop can't use, and five runs on one machine can't afford it.
+If GPT-6.1 Sol is missing from the picker, update Codex: early builds hid it (openai/codex issue #49362, fixed in newer
+versions).
+
+After rc.4: re-run **astro** alone on GPT-6 Luna as the cheap-model bar. It is the easiest site, so if it reaches exit 0
+there, the loop is model-robust.
+
+Sources: [OpenAI: Models in Codex](https://learn.chatgpt.com/docs/models),
+[Introducing GPT-6 Sol and Luna](https://openai.com/index/introducing-gpt-6-sol-and-luna/),
+[openai/codex#49362](https://github.com/openai/codex/issues/49362),
+[AIDEN: best Codex model](https://aidenapp.org/best-codex-model) (secondary).

@@ -1,0 +1,3390 @@
+[
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "scroll_mobile",
+  "value": 42.55,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "scroll_tablet",
+  "value": 48.27,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "scroll_desktop",
+  "value": 30.21,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "scroll_laptop",
+  "value": 35.27,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "scroll_wide",
+  "value": 24.62,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "layout_mobile",
+  "value": 79.76,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "layout_tablet",
+  "value": 86.89,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "layout_desktop",
+  "value": 87.56,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "layout_laptop",
+  "value": 88.43,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:10Z",
+  "metric": "layout_wide",
+  "value": 86.76,
+  "source": "codex session output @2026-10-20T21:53:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:10Z",
+  "metric": "interactions_failing",
+  "value": 4,
+  "source": "codex session output @2026-10-20T21:55:10Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:32Z",
+  "metric": "detail_mobile",
+  "value": 28,
+  "source": "codex session output @2026-10-20T21:55:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:32Z",
+  "metric": "detail_tablet",
+  "value": 40,
+  "source": "codex session output @2026-10-20T21:55:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:32Z",
+  "metric": "detail_desktop",
+  "value": 79.6,
+  "source": "codex session output @2026-10-20T21:55:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:58:32Z",
+  "metric": "hovers_desktop",
+  "value": 0,
+  "source": "codex session output @2026-10-20T21:58:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:09:57.808Z",
+  "metric": "checks_below_target",
+  "value": 8,
+  "source": "timeline said @2026-10-20T22:09:57.808Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:09:57Z",
+  "metric": "load_mobile",
+  "value": 91.97,
+  "source": "codex session output @2026-10-20T22:09:57Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:09:57Z",
+  "metric": "load_tablet",
+  "value": 93.57,
+  "source": "codex session output @2026-10-20T22:09:57Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:09:57Z",
+  "metric": "load_desktop",
+  "value": 95.27,
+  "source": "codex session output @2026-10-20T22:09:57Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:09:57Z",
+  "metric": "load_laptop",
+  "value": 95.68,
+  "source": "codex session output @2026-10-20T22:09:57Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:09:57Z",
+  "metric": "load_wide",
+  "value": 95.26,
+  "source": "codex session output @2026-10-20T22:09:57Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:12:48.536Z",
+  "metric": "checks_below_target",
+  "value": 8,
+  "source": "timeline said @2026-10-20T22:12:48.536Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:12:48Z",
+  "metric": "layout_mobile",
+  "value": 86.34,
+  "source": "codex session output @2026-10-20T22:12:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:12:48Z",
+  "metric": "layout_tablet",
+  "value": 96.38,
+  "source": "codex session output @2026-10-20T22:12:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:12:48Z",
+  "metric": "layout_desktop",
+  "value": 96.82,
+  "source": "codex session output @2026-10-20T22:12:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:12:48Z",
+  "metric": "layout_laptop",
+  "value": 96.44,
+  "source": "codex session output @2026-10-20T22:12:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:12:48Z",
+  "metric": "layout_wide",
+  "value": 96.54,
+  "source": "codex session output @2026-10-20T22:12:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "scroll_mobile",
+  "value": 92.84,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "scroll_tablet",
+  "value": 24.16,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "scroll_desktop",
+  "value": 20.04,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "scroll_laptop",
+  "value": 20.54,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "scroll_wide",
+  "value": 14.26,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "detail_mobile",
+  "value": 81.4,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:14:06Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-20T22:14:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:15:02Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-20T22:15:02Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:20:24.367Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said @2026-10-20T22:20:24.367Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:20:24Z",
+  "metric": "load_mobile",
+  "value": 94.71,
+  "source": "codex session output @2026-10-20T22:20:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:20:24Z",
+  "metric": "load_tablet",
+  "value": 92.98,
+  "source": "codex session output @2026-10-20T22:20:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:20:24Z",
+  "metric": "load_desktop",
+  "value": 94.41,
+  "source": "codex session output @2026-10-20T22:20:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:20:24Z",
+  "metric": "load_laptop",
+  "value": 93.65,
+  "source": "codex session output @2026-10-20T22:20:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:20:24Z",
+  "metric": "load_wide",
+  "value": 93.69,
+  "source": "codex session output @2026-10-20T22:20:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:11.530Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said @2026-10-20T22:22:11.530Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:11Z",
+  "metric": "layout_mobile",
+  "value": 99.42,
+  "source": "codex session output @2026-10-20T22:22:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:11Z",
+  "metric": "layout_tablet",
+  "value": 99.69,
+  "source": "codex session output @2026-10-20T22:22:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:11Z",
+  "metric": "layout_desktop",
+  "value": 99.87,
+  "source": "codex session output @2026-10-20T22:22:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:11Z",
+  "metric": "layout_laptop",
+  "value": 99.63,
+  "source": "codex session output @2026-10-20T22:22:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:11Z",
+  "metric": "layout_wide",
+  "value": 99.84,
+  "source": "codex session output @2026-10-20T22:22:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:03Z",
+  "metric": "scroll_mobile",
+  "value": 93.05,
+  "source": "codex session output @2026-10-20T22:23:03Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:03Z",
+  "metric": "scroll_tablet",
+  "value": 24.16,
+  "source": "codex session output @2026-10-20T22:23:03Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:03Z",
+  "metric": "scroll_desktop",
+  "value": 20.05,
+  "source": "codex session output @2026-10-20T22:23:03Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:03Z",
+  "metric": "scroll_laptop",
+  "value": 20.53,
+  "source": "codex session output @2026-10-20T22:23:03Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:03Z",
+  "metric": "scroll_wide",
+  "value": 14.26,
+  "source": "codex session output @2026-10-20T22:23:03Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:36Z",
+  "metric": "detail_mobile",
+  "value": 94.9,
+  "source": "codex session output @2026-10-20T22:23:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:36Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-20T22:23:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:36Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-20T22:23:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:23:36Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-20T22:23:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:24:51Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-20T22:24:51Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30.923Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-20T22:35:30.923Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "load_mobile",
+  "value": 94.71,
+  "source": "codex session output @2026-10-20T22:35:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "load_tablet",
+  "value": 92.98,
+  "source": "codex session output @2026-10-20T22:35:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "load_desktop",
+  "value": 94.41,
+  "source": "codex session output @2026-10-20T22:35:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "load_laptop",
+  "value": 93.23,
+  "source": "codex session output @2026-10-20T22:35:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "load_wide",
+  "value": 93.69,
+  "source": "codex session output @2026-10-20T22:35:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:47:29.397Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-20T22:47:29.397Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:00:56Z",
+  "metric": "scroll_desktop",
+  "value": 19.92,
+  "source": "codex session output @2026-10-20T23:00:56Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:01:07Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-20T23:01:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:01:18Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-20T23:01:18Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:07:18.662Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said @2026-10-20T23:07:18.662Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:07:18Z",
+  "metric": "load_desktop",
+  "value": 94.82,
+  "source": "codex session output @2026-10-20T23:07:18Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:08:35Z",
+  "metric": "layout_mobile",
+  "value": 99.36,
+  "source": "codex session output @2026-10-20T23:08:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:08:35Z",
+  "metric": "layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-20T23:08:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:08:35Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-20T23:08:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:08:35Z",
+  "metric": "layout_laptop",
+  "value": 99.72,
+  "source": "codex session output @2026-10-20T23:08:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:08:35Z",
+  "metric": "layout_wide",
+  "value": 99.9,
+  "source": "codex session output @2026-10-20T23:08:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:16.422Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-20T23:09:16.422Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:16Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-20T23:09:16Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:42.241Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-20T23:09:42.241Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:54.002Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-20T23:09:54.002Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:18:59.113Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said @2026-10-20T23:18:59.113Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:18:59Z",
+  "metric": "scroll_desktop",
+  "value": 20.03,
+  "source": "codex session output @2026-10-20T23:18:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:18:59Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-20T23:18:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:18:59Z",
+  "metric": "load_desktop",
+  "value": 94.83,
+  "source": "codex session output @2026-10-20T23:18:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:27Z",
+  "metric": "layout_mobile",
+  "value": 94.59,
+  "source": "codex session output @2026-10-20T23:20:27Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:27Z",
+  "metric": "layout_tablet",
+  "value": 94.77,
+  "source": "codex session output @2026-10-20T23:20:27Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:27Z",
+  "metric": "layout_desktop",
+  "value": 90.28,
+  "source": "codex session output @2026-10-20T23:20:27Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:27Z",
+  "metric": "layout_laptop",
+  "value": 91,
+  "source": "codex session output @2026-10-20T23:20:27Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:27Z",
+  "metric": "layout_wide",
+  "value": 89.96,
+  "source": "codex session output @2026-10-20T23:20:27Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:53.931Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-20T23:20:53.931Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "scroll_desktop",
+  "value": 19.88,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "layout_mobile",
+  "value": 94.59,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "layout_tablet",
+  "value": 94.83,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "layout_desktop",
+  "value": 90.28,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "layout_laptop",
+  "value": 90.97,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "layout_wide",
+  "value": 89.96,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:07Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-20T23:29:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:27.482Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said @2026-10-20T23:29:27.482Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:29:27Z",
+  "metric": "load_desktop",
+  "value": 94.83,
+  "source": "codex session output @2026-10-20T23:29:27Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:32:04.061Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-20T23:32:04.061Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:32:04Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-20T23:32:04Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:38:36Z",
+  "metric": "layout_mobile",
+  "value": 94.59,
+  "source": "codex session output @2026-10-20T23:38:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:38:36Z",
+  "metric": "layout_tablet",
+  "value": 94.77,
+  "source": "codex session output @2026-10-20T23:38:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:38:36Z",
+  "metric": "layout_desktop",
+  "value": 90.28,
+  "source": "codex session output @2026-10-20T23:38:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:38:36Z",
+  "metric": "layout_laptop",
+  "value": 90.97,
+  "source": "codex session output @2026-10-20T23:38:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:38:36Z",
+  "metric": "layout_wide",
+  "value": 89.96,
+  "source": "codex session output @2026-10-20T23:38:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:38:36Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-20T23:38:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:39:44.822Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said @2026-10-20T23:39:44.822Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:39:44Z",
+  "metric": "load_desktop",
+  "value": 94.83,
+  "source": "codex session output @2026-10-20T23:39:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:41:41.229Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-20T23:41:41.229Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:44:37.198Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-20T23:44:37.198Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:47:17.142Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-20T23:47:17.142Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:49.723Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T00:03:49.723Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "layout_mobile",
+  "value": 94.57,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "layout_tablet",
+  "value": 94.83,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "layout_desktop",
+  "value": 90.28,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "layout_laptop",
+  "value": 91.04,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "layout_wide",
+  "value": 89.96,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "scroll_mobile",
+  "value": 88.51,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "scroll_tablet",
+  "value": 24.55,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "scroll_desktop",
+  "value": 19.88,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "scroll_laptop",
+  "value": 20.68,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "scroll_wide",
+  "value": 14.8,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "detail_mobile",
+  "value": 94.9,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "detail_tablet",
+  "value": 89.3,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:31Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-21T00:05:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:10:33.547Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-21T00:10:33.547Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:10:33Z",
+  "metric": "load_mobile",
+  "value": 95.52,
+  "source": "codex session output @2026-10-21T00:10:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:10:33Z",
+  "metric": "load_tablet",
+  "value": 94.56,
+  "source": "codex session output @2026-10-21T00:10:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:10:33Z",
+  "metric": "load_desktop",
+  "value": 95.58,
+  "source": "codex session output @2026-10-21T00:10:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:10:33Z",
+  "metric": "load_laptop",
+  "value": 94.89,
+  "source": "codex session output @2026-10-21T00:10:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:10:33Z",
+  "metric": "load_wide",
+  "value": 98.63,
+  "source": "codex session output @2026-10-21T00:10:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:12:52.705Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-21T00:12:52.705Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:12:52Z",
+  "metric": "layout_mobile",
+  "value": 99.35,
+  "source": "codex session output @2026-10-21T00:12:52Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:12:52Z",
+  "metric": "layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-21T00:12:52Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:12:52Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-21T00:12:52Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:12:52Z",
+  "metric": "layout_laptop",
+  "value": 99.7,
+  "source": "codex session output @2026-10-21T00:12:52Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:12:52Z",
+  "metric": "layout_wide",
+  "value": 99.9,
+  "source": "codex session output @2026-10-21T00:12:52Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:15:30Z",
+  "metric": "scroll_mobile",
+  "value": 90.88,
+  "source": "codex session output @2026-10-21T00:15:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:15:30Z",
+  "metric": "scroll_tablet",
+  "value": 24.42,
+  "source": "codex session output @2026-10-21T00:15:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:15:30Z",
+  "metric": "scroll_desktop",
+  "value": 19.88,
+  "source": "codex session output @2026-10-21T00:15:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:15:30Z",
+  "metric": "scroll_laptop",
+  "value": 20.69,
+  "source": "codex session output @2026-10-21T00:15:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:15:30Z",
+  "metric": "scroll_wide",
+  "value": 14.3,
+  "source": "codex session output @2026-10-21T00:15:30Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:17:20Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T00:17:20Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:17:20Z",
+  "metric": "detail_mobile",
+  "value": 95,
+  "source": "codex session output @2026-10-21T00:17:20Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:17:20Z",
+  "metric": "detail_tablet",
+  "value": 89.3,
+  "source": "codex session output @2026-10-21T00:17:20Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:17:20Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-21T00:17:20Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:01Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T00:20:01Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:25:11.748Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T00:25:11.748Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:25:11Z",
+  "metric": "load_mobile",
+  "value": 95.82,
+  "source": "codex session output @2026-10-21T00:25:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:25:11Z",
+  "metric": "load_tablet",
+  "value": 97.94,
+  "source": "codex session output @2026-10-21T00:25:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:25:11Z",
+  "metric": "load_desktop",
+  "value": 95.53,
+  "source": "codex session output @2026-10-21T00:25:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:25:11Z",
+  "metric": "load_laptop",
+  "value": 98.87,
+  "source": "codex session output @2026-10-21T00:25:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:25:11Z",
+  "metric": "load_wide",
+  "value": 99.06,
+  "source": "codex session output @2026-10-21T00:25:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:04:48.960Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T04:04:48.960Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:05:39.717Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T04:05:39.717Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:05:39Z",
+  "metric": "scroll_desktop",
+  "value": 98.03,
+  "source": "codex session output @2026-10-21T04:05:39Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:07:54.473Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T04:07:54.473Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:07:54Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T04:07:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "layout_mobile",
+  "value": 99.42,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "layout_tablet",
+  "value": 99.69,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "layout_laptop",
+  "value": 99.7,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "layout_wide",
+  "value": 99.86,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "scroll_mobile",
+  "value": 94.33,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "scroll_tablet",
+  "value": 98.32,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "scroll_desktop",
+  "value": 98.03,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "scroll_laptop",
+  "value": 97.34,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:08:34Z",
+  "metric": "scroll_wide",
+  "value": 98.95,
+  "source": "codex session output @2026-10-21T04:08:34Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:09:23Z",
+  "metric": "detail_mobile",
+  "value": 95,
+  "source": "codex session output @2026-10-21T04:09:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:09:23Z",
+  "metric": "detail_tablet",
+  "value": 89.3,
+  "source": "codex session output @2026-10-21T04:09:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:09:23Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-21T04:09:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:46.251Z",
+  "metric": "checks_below_target",
+  "value": 4,
+  "source": "timeline said @2026-10-21T04:14:46.251Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:46Z",
+  "metric": "load_mobile",
+  "value": 95.66,
+  "source": "codex session output @2026-10-21T04:14:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:46Z",
+  "metric": "load_tablet",
+  "value": 95.97,
+  "source": "codex session output @2026-10-21T04:14:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:46Z",
+  "metric": "load_desktop",
+  "value": 95.54,
+  "source": "codex session output @2026-10-21T04:14:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:46Z",
+  "metric": "load_laptop",
+  "value": 95.53,
+  "source": "codex session output @2026-10-21T04:14:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:28:07.264Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T04:28:07.264Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:28:07Z",
+  "metric": "load_mobile",
+  "value": 96.46,
+  "source": "codex session output @2026-10-21T04:28:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:28:07Z",
+  "metric": "load_tablet",
+  "value": 95.7,
+  "source": "codex session output @2026-10-21T04:28:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:28:07Z",
+  "metric": "load_desktop",
+  "value": 95.54,
+  "source": "codex session output @2026-10-21T04:28:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:28:07Z",
+  "metric": "load_laptop",
+  "value": 95.52,
+  "source": "codex session output @2026-10-21T04:28:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:28:07Z",
+  "metric": "load_wide",
+  "value": 99.06,
+  "source": "codex session output @2026-10-21T04:28:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:29:43.631Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T04:29:43.631Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:29:43Z",
+  "metric": "scroll_mobile",
+  "value": 94.49,
+  "source": "codex session output @2026-10-21T04:29:43Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:30:15Z",
+  "metric": "layout_mobile",
+  "value": 99.42,
+  "source": "codex session output @2026-10-21T04:30:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:30:15Z",
+  "metric": "layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-21T04:30:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:30:15Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-21T04:30:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:30:15Z",
+  "metric": "layout_laptop",
+  "value": 99.7,
+  "source": "codex session output @2026-10-21T04:30:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:30:15Z",
+  "metric": "layout_wide",
+  "value": 99.9,
+  "source": "codex session output @2026-10-21T04:30:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:32:35.566Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T04:32:35.566Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:32:35Z",
+  "metric": "load_mobile",
+  "value": 95.75,
+  "source": "codex session output @2026-10-21T04:32:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:32:35Z",
+  "metric": "load_tablet",
+  "value": 95.73,
+  "source": "codex session output @2026-10-21T04:32:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:32:35Z",
+  "metric": "load_desktop",
+  "value": 95.52,
+  "source": "codex session output @2026-10-21T04:32:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:32:35Z",
+  "metric": "load_laptop",
+  "value": 95.49,
+  "source": "codex session output @2026-10-21T04:32:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:32:35Z",
+  "metric": "load_wide",
+  "value": 95.45,
+  "source": "codex session output @2026-10-21T04:32:35Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:33:57.751Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T04:33:57.751Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:33:57Z",
+  "metric": "scroll_mobile",
+  "value": 94.47,
+  "source": "codex session output @2026-10-21T04:33:57Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "layout_mobile",
+  "value": 99.42,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "layout_tablet",
+  "value": 99.69,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "layout_laptop",
+  "value": 99.7,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "layout_wide",
+  "value": 99.9,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "detail_mobile",
+  "value": 95,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "detail_tablet",
+  "value": 89.3,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:35:23Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-21T04:35:23Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:36:06Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T04:36:06Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:12.620Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T04:37:12.620Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:12Z",
+  "metric": "load_mobile",
+  "value": 95.75,
+  "source": "codex session output @2026-10-21T04:37:12Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:12Z",
+  "metric": "load_tablet",
+  "value": 95.72,
+  "source": "codex session output @2026-10-21T04:37:12Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:12Z",
+  "metric": "load_desktop",
+  "value": 95.53,
+  "source": "codex session output @2026-10-21T04:37:12Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:12Z",
+  "metric": "load_laptop",
+  "value": 95.52,
+  "source": "codex session output @2026-10-21T04:37:12Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:12Z",
+  "metric": "load_wide",
+  "value": 99.07,
+  "source": "codex session output @2026-10-21T04:37:12Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:54.880Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T04:38:54.880Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:54Z",
+  "metric": "scroll_mobile",
+  "value": 91.67,
+  "source": "codex session output @2026-10-21T04:38:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:40:11Z",
+  "metric": "layout_mobile",
+  "value": 99.34,
+  "source": "codex session output @2026-10-21T04:40:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:40:11Z",
+  "metric": "layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-21T04:40:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:40:11Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-21T04:40:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:40:11Z",
+  "metric": "layout_laptop",
+  "value": 99.7,
+  "source": "codex session output @2026-10-21T04:40:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:40:11Z",
+  "metric": "layout_wide",
+  "value": 99.9,
+  "source": "codex session output @2026-10-21T04:40:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:41:09Z",
+  "metric": "detail_mobile",
+  "value": 95,
+  "source": "codex session output @2026-10-21T04:41:09Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:41:09Z",
+  "metric": "detail_tablet",
+  "value": 89.3,
+  "source": "codex session output @2026-10-21T04:41:09Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:41:09Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-21T04:41:09Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:41:09Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T04:41:09Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:42:50.517Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T04:42:50.517Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:42:50Z",
+  "metric": "load_mobile",
+  "value": 97.05,
+  "source": "codex session output @2026-10-21T04:42:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:42:50Z",
+  "metric": "load_tablet",
+  "value": 95.7,
+  "source": "codex session output @2026-10-21T04:42:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:42:50Z",
+  "metric": "load_desktop",
+  "value": 95.54,
+  "source": "codex session output @2026-10-21T04:42:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:42:50Z",
+  "metric": "load_laptop",
+  "value": 95.43,
+  "source": "codex session output @2026-10-21T04:42:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:42:50Z",
+  "metric": "load_wide",
+  "value": 95.13,
+  "source": "codex session output @2026-10-21T04:42:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:44:49.821Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T04:44:49.821Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:44:49Z",
+  "metric": "scroll_mobile",
+  "value": 92.86,
+  "source": "codex session output @2026-10-21T04:44:49Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:46:02Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T04:46:02Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:52:56.604Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T04:52:56.604Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:52:56Z",
+  "metric": "load_mobile",
+  "value": 96.4,
+  "source": "codex session output @2026-10-21T04:52:56Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:52:56Z",
+  "metric": "load_tablet",
+  "value": 95.95,
+  "source": "codex session output @2026-10-21T04:52:56Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:52:56Z",
+  "metric": "load_desktop",
+  "value": 95.53,
+  "source": "codex session output @2026-10-21T04:52:56Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:52:56Z",
+  "metric": "load_laptop",
+  "value": 95.49,
+  "source": "codex session output @2026-10-21T04:52:56Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:52:56Z",
+  "metric": "load_wide",
+  "value": 95.7,
+  "source": "codex session output @2026-10-21T04:52:56Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:54:49.418Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T04:54:49.418Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:54:49Z",
+  "metric": "scroll_mobile",
+  "value": 92.85,
+  "source": "codex session output @2026-10-21T04:54:49Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:32Z",
+  "metric": "layout_mobile",
+  "value": 99.35,
+  "source": "codex session output @2026-10-21T04:56:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:32Z",
+  "metric": "layout_tablet",
+  "value": 99.69,
+  "source": "codex session output @2026-10-21T04:56:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:32Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-21T04:56:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:32Z",
+  "metric": "layout_laptop",
+  "value": 99.7,
+  "source": "codex session output @2026-10-21T04:56:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:32Z",
+  "metric": "layout_wide",
+  "value": 99.9,
+  "source": "codex session output @2026-10-21T04:56:32Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:57:58Z",
+  "metric": "detail_mobile",
+  "value": 95,
+  "source": "codex session output @2026-10-21T04:57:58Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:57:58Z",
+  "metric": "detail_tablet",
+  "value": 89.3,
+  "source": "codex session output @2026-10-21T04:57:58Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:57:58Z",
+  "metric": "detail_desktop",
+  "value": 85.5,
+  "source": "codex session output @2026-10-21T04:57:58Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:57:58Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T04:57:58Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:57:58Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T04:57:58Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:59:33.053Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T04:59:33.053Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:59:33Z",
+  "metric": "load_mobile",
+  "value": 96.22,
+  "source": "codex session output @2026-10-21T04:59:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:59:33Z",
+  "metric": "load_tablet",
+  "value": 95.65,
+  "source": "codex session output @2026-10-21T04:59:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:59:33Z",
+  "metric": "load_desktop",
+  "value": 95.52,
+  "source": "codex session output @2026-10-21T04:59:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:59:33Z",
+  "metric": "load_laptop",
+  "value": 95.52,
+  "source": "codex session output @2026-10-21T04:59:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:59:33Z",
+  "metric": "load_wide",
+  "value": 99.1,
+  "source": "codex session output @2026-10-21T04:59:33Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:01:29.767Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T05:01:29.767Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:01:29Z",
+  "metric": "scroll_mobile",
+  "value": 92.85,
+  "source": "codex session output @2026-10-21T05:01:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:02:44Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T05:02:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:00.283Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T05:11:00.283Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:00Z",
+  "metric": "load_mobile",
+  "value": 97.16,
+  "source": "codex session output @2026-10-21T05:11:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:00Z",
+  "metric": "load_tablet",
+  "value": 95.64,
+  "source": "codex session output @2026-10-21T05:11:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:00Z",
+  "metric": "load_desktop",
+  "value": 95.53,
+  "source": "codex session output @2026-10-21T05:11:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:00Z",
+  "metric": "load_laptop",
+  "value": 95.53,
+  "source": "codex session output @2026-10-21T05:11:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:00Z",
+  "metric": "load_wide",
+  "value": 95.16,
+  "source": "codex session output @2026-10-21T05:11:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:12:20.954Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T05:12:20.954Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:12:20Z",
+  "metric": "scroll_mobile",
+  "value": 94.12,
+  "source": "codex session output @2026-10-21T05:12:20Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:14:42Z",
+  "metric": "layout_mobile",
+  "value": 99.36,
+  "source": "codex session output @2026-10-21T05:14:42Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:14:42Z",
+  "metric": "layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-21T05:14:42Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:14:42Z",
+  "metric": "layout_desktop",
+  "value": 99.77,
+  "source": "codex session output @2026-10-21T05:14:42Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:14:42Z",
+  "metric": "layout_laptop",
+  "value": 99.7,
+  "source": "codex session output @2026-10-21T05:14:42Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:14:42Z",
+  "metric": "layout_wide",
+  "value": 99.9,
+  "source": "codex session output @2026-10-21T05:14:42Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:14:42Z",
+  "metric": "interactions_failing",
+  "value": 3,
+  "source": "codex session output @2026-10-21T05:14:42Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:24:07.584Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said @2026-10-21T05:24:07.584Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:24:07Z",
+  "metric": "load_mobile",
+  "value": 96.23,
+  "source": "codex session output @2026-10-21T05:24:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:24:07Z",
+  "metric": "load_tablet",
+  "value": 95.6,
+  "source": "codex session output @2026-10-21T05:24:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:24:07Z",
+  "metric": "load_desktop",
+  "value": 95.52,
+  "source": "codex session output @2026-10-21T05:24:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:24:07Z",
+  "metric": "load_laptop",
+  "value": 95.53,
+  "source": "codex session output @2026-10-21T05:24:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:24:07Z",
+  "metric": "load_wide",
+  "value": 95.17,
+  "source": "codex session output @2026-10-21T05:24:07Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:47:46Z",
+  "metric": "scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T05:47:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:48:16Z",
+  "metric": "detail_mobile",
+  "value": 96.7,
+  "source": "codex session output @2026-10-21T05:48:16Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:49:36.327Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-21T05:49:36.327Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:49:36Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "codex session output @2026-10-21T05:49:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:01:41.477Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:01:41.477Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:02:52.489Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-21T06:02:52.489Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:02:52Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:02:52Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "layout_mobile",
+  "value": 99.43,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "layout_tablet",
+  "value": 99.67,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "layout_desktop",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "layout_laptop",
+  "value": 99.72,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "layout_wide",
+  "value": 99.91,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "scroll_tablet",
+  "value": 98.48,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "scroll_desktop",
+  "value": 98.93,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "scroll_laptop",
+  "value": 97.21,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:03:50Z",
+  "metric": "scroll_wide",
+  "value": 99.31,
+  "source": "codex session output @2026-10-21T06:03:50Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:40Z",
+  "metric": "detail_mobile",
+  "value": 96.7,
+  "source": "codex session output @2026-10-21T06:05:40Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:40Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:05:40Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:40Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:05:40Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:59.567Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T06:05:59.567Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:59Z",
+  "metric": "load_mobile",
+  "value": 93.57,
+  "source": "codex session output @2026-10-21T06:05:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:59Z",
+  "metric": "load_tablet",
+  "value": 94.11,
+  "source": "codex session output @2026-10-21T06:05:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:59Z",
+  "metric": "load_desktop",
+  "value": 93.84,
+  "source": "codex session output @2026-10-21T06:05:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:59Z",
+  "metric": "load_laptop",
+  "value": 92.64,
+  "source": "codex session output @2026-10-21T06:05:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:59Z",
+  "metric": "load_wide",
+  "value": 93.02,
+  "source": "codex session output @2026-10-21T06:05:59Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:09:51.353Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T06:09:51.353Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:09:51Z",
+  "metric": "load_mobile",
+  "value": 94.76,
+  "source": "codex session output @2026-10-21T06:09:51Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:09:51Z",
+  "metric": "load_tablet",
+  "value": 94.29,
+  "source": "codex session output @2026-10-21T06:09:51Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:09:51Z",
+  "metric": "load_desktop",
+  "value": 93.96,
+  "source": "codex session output @2026-10-21T06:09:51Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:09:51Z",
+  "metric": "load_laptop",
+  "value": 92.82,
+  "source": "codex session output @2026-10-21T06:09:51Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:09:51Z",
+  "metric": "load_wide",
+  "value": 93.09,
+  "source": "codex session output @2026-10-21T06:09:51Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "layout_mobile",
+  "value": 99.43,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "layout_tablet",
+  "value": 99.67,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "layout_desktop",
+  "value": 99.65,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "layout_laptop",
+  "value": 99.81,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "layout_wide",
+  "value": 99.91,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "scroll_tablet",
+  "value": 98.37,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "scroll_desktop",
+  "value": 98.85,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "scroll_laptop",
+  "value": 97.21,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "scroll_wide",
+  "value": 99.94,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "detail_mobile",
+  "value": 96.7,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:25Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:11:25Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:11:59.838Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T06:11:59.838Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:21:00.480Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T06:21:00.480Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:21:00Z",
+  "metric": "load_mobile",
+  "value": 94.76,
+  "source": "codex session output @2026-10-21T06:21:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:21:00Z",
+  "metric": "load_tablet",
+  "value": 94.29,
+  "source": "codex session output @2026-10-21T06:21:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:21:00Z",
+  "metric": "load_desktop",
+  "value": 93.97,
+  "source": "codex session output @2026-10-21T06:21:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:21:00Z",
+  "metric": "load_laptop",
+  "value": 92.81,
+  "source": "codex session output @2026-10-21T06:21:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:21:00Z",
+  "metric": "load_wide",
+  "value": 93.09,
+  "source": "codex session output @2026-10-21T06:21:00Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "layout_mobile",
+  "value": 99.43,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "layout_tablet",
+  "value": 99.67,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "layout_desktop",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "layout_laptop",
+  "value": 99.72,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "layout_wide",
+  "value": 99.91,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "scroll_tablet",
+  "value": 98.48,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "scroll_desktop",
+  "value": 98.93,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "scroll_laptop",
+  "value": 97.21,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "scroll_wide",
+  "value": 99.31,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "detail_mobile",
+  "value": 96.7,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:48Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:22:48Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:23:36.341Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T06:23:36.341Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:23:36Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:23:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:26:11.511Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said @2026-10-21T06:26:11.511Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:26:11Z",
+  "metric": "load_mobile",
+  "value": 96.13,
+  "source": "codex session output @2026-10-21T06:26:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:26:11Z",
+  "metric": "load_tablet",
+  "value": 95.28,
+  "source": "codex session output @2026-10-21T06:26:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:26:11Z",
+  "metric": "load_desktop",
+  "value": 95.13,
+  "source": "codex session output @2026-10-21T06:26:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:26:11Z",
+  "metric": "load_laptop",
+  "value": 92.22,
+  "source": "codex session output @2026-10-21T06:26:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:26:11Z",
+  "metric": "load_wide",
+  "value": 94.09,
+  "source": "codex session output @2026-10-21T06:26:11Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "layout_mobile",
+  "value": 99.43,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "layout_tablet",
+  "value": 99.67,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "layout_desktop",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "layout_laptop",
+  "value": 99.72,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "layout_wide",
+  "value": 99.91,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "scroll_tablet",
+  "value": 98.48,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "scroll_desktop",
+  "value": 98.86,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "scroll_laptop",
+  "value": 97.21,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "scroll_wide",
+  "value": 99.31,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "detail_mobile",
+  "value": 96.7,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:15Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:28:15Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:28:31.276Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T06:28:31.276Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_layout_mobile",
+  "value": 99.94,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_layout_tablet",
+  "value": 99.96,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_layout_desktop",
+  "value": 99.84,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_layout_laptop",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_layout_wide",
+  "value": 99.99,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_scroll_mobile",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_scroll_tablet",
+  "value": 99.99,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_scroll_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_scroll_laptop",
+  "value": 98.35,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_scroll_wide",
+  "value": 99.28,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_curves_tablet",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:35:44Z",
+  "metric": "next_curves_mobile",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:35:44Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:36:14Z",
+  "metric": "next_curves_desktop",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:36:14Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:37:47Z",
+  "metric": "next_detail_mobile",
+  "value": 95,
+  "source": "codex session output @2026-10-21T06:37:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:37:47Z",
+  "metric": "next_detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:37:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:37:47Z",
+  "metric": "next_detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:37:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:37:47Z",
+  "metric": "next_interactions_failing",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:37:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:39:37.171Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:39:37.171Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:39:37Z",
+  "metric": "next_hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:39:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:39:37Z",
+  "metric": "next_load_mobile",
+  "value": 95.19,
+  "source": "codex session output @2026-10-21T06:39:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:39:37Z",
+  "metric": "next_load_tablet",
+  "value": 95.96,
+  "source": "codex session output @2026-10-21T06:39:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:39:37Z",
+  "metric": "next_load_desktop",
+  "value": 94.91,
+  "source": "codex session output @2026-10-21T06:39:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:39:37Z",
+  "metric": "next_load_laptop",
+  "value": 91.67,
+  "source": "codex session output @2026-10-21T06:39:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:39:37Z",
+  "metric": "next_load_wide",
+  "value": 92.52,
+  "source": "codex session output @2026-10-21T06:39:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:47.182Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said @2026-10-21T06:44:47.182Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:47.182Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:44:47.182Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:47Z",
+  "metric": "load_mobile",
+  "value": 96.12,
+  "source": "codex session output @2026-10-21T06:44:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:47Z",
+  "metric": "load_tablet",
+  "value": 95.3,
+  "source": "codex session output @2026-10-21T06:44:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:47Z",
+  "metric": "load_desktop",
+  "value": 95.13,
+  "source": "codex session output @2026-10-21T06:44:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:47Z",
+  "metric": "load_laptop",
+  "value": 92.21,
+  "source": "codex session output @2026-10-21T06:44:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:47Z",
+  "metric": "load_wide",
+  "value": 94.1,
+  "source": "codex session output @2026-10-21T06:44:47Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "scroll_tablet",
+  "value": 98.48,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "scroll_desktop",
+  "value": 98.93,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "scroll_laptop",
+  "value": 97.21,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "scroll_wide",
+  "value": 99.32,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "layout_mobile",
+  "value": 99.43,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "layout_desktop",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "layout_laptop",
+  "value": 99.72,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:46:54Z",
+  "metric": "layout_wide",
+  "value": 99.91,
+  "source": "codex session output @2026-10-21T06:46:54Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:47:35.066Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T06:47:35.066Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:47:35.066Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:47:35.066Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:48:37.639Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:48:37.639Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:48:37.639Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:48:37.639Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:48:37Z",
+  "metric": "curves_desktop",
+  "value": 96.8,
+  "source": "codex session output @2026-10-21T06:48:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:48:37Z",
+  "metric": "curves_tablet",
+  "value": 91.5,
+  "source": "codex session output @2026-10-21T06:48:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:48:37Z",
+  "metric": "curves_mobile",
+  "value": 99.8,
+  "source": "codex session output @2026-10-21T06:48:37Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:53:24.007Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said @2026-10-21T06:53:24.007Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:53:24.007Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:53:24.007Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:53:24Z",
+  "metric": "curves_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:53:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:53:24Z",
+  "metric": "curves_tablet",
+  "value": 93.3,
+  "source": "codex session output @2026-10-21T06:53:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:53:24Z",
+  "metric": "curves_mobile",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:53:24Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "scroll_tablet",
+  "value": 98.45,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "scroll_desktop",
+  "value": 98.85,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "scroll_laptop",
+  "value": 97.21,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "scroll_wide",
+  "value": 98.58,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "layout_mobile",
+  "value": 99.43,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "layout_desktop",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "layout_laptop",
+  "value": 99.72,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:46Z",
+  "metric": "layout_wide",
+  "value": 99.91,
+  "source": "codex session output @2026-10-21T06:55:46Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:56:22Z",
+  "metric": "detail_mobile",
+  "value": 96.7,
+  "source": "codex session output @2026-10-21T06:56:22Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:56:22Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:56:22Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:56:22Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:56:22Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:56:22Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "codex session output @2026-10-21T06:56:22Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36.417Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:58:36.417Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36.417Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T06:58:36.417Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T06:58:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36Z",
+  "metric": "load_mobile",
+  "value": 97.35,
+  "source": "codex session output @2026-10-21T06:58:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36Z",
+  "metric": "load_tablet",
+  "value": 95.27,
+  "source": "codex session output @2026-10-21T06:58:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36Z",
+  "metric": "load_desktop",
+  "value": 95.11,
+  "source": "codex session output @2026-10-21T06:58:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36Z",
+  "metric": "load_laptop",
+  "value": 92.2,
+  "source": "codex session output @2026-10-21T06:58:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:36Z",
+  "metric": "load_wide",
+  "value": 94.1,
+  "source": "codex session output @2026-10-21T06:58:36Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:16.011Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T07:04:16.011Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:16.011Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T07:04:16.011Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:16Z",
+  "metric": "curves_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:04:16Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:16Z",
+  "metric": "curves_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:04:16Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:16Z",
+  "metric": "curves_mobile",
+  "value": 99.5,
+  "source": "codex session output @2026-10-21T07:04:16Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:15:22.854Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T07:15:22.854Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:15:22.854Z",
+  "metric": "next_checks_below_target",
+  "value": 2,
+  "source": "timeline said @2026-10-21T07:15:22.854Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_scroll_mobile",
+  "value": 96,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_scroll_tablet",
+  "value": 98.48,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_scroll_desktop",
+  "value": 98.93,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_scroll_laptop",
+  "value": 99.09,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_scroll_wide",
+  "value": 99.31,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_layout_mobile",
+  "value": 99.43,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_layout_tablet",
+  "value": 99.63,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_layout_desktop",
+  "value": 99.97,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_layout_laptop",
+  "value": 99.81,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_layout_wide",
+  "value": 99.91,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_curves_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_curves_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_curves_mobile",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_detail_mobile",
+  "value": 96.7,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_detail_tablet",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_detail_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:20:29Z",
+  "metric": "next_interactions_failing",
+  "value": 0,
+  "source": "codex session output @2026-10-21T07:20:29Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:21:31Z",
+  "metric": "next_hovers_desktop",
+  "value": 100,
+  "source": "codex session output @2026-10-21T07:21:31Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:25:28.404Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T07:25:28.404Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:25:28Z",
+  "metric": "next_load_mobile",
+  "value": 97.48,
+  "source": "codex session output @2026-10-21T07:25:28Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:25:28Z",
+  "metric": "next_load_tablet",
+  "value": 96.33,
+  "source": "codex session output @2026-10-21T07:25:28Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:25:28Z",
+  "metric": "next_load_desktop",
+  "value": 95.23,
+  "source": "codex session output @2026-10-21T07:25:28Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:25:28Z",
+  "metric": "next_load_laptop",
+  "value": 92.24,
+  "source": "codex session output @2026-10-21T07:25:28Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:25:28Z",
+  "metric": "next_load_wide",
+  "value": 92.73,
+  "source": "codex session output @2026-10-21T07:25:28Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:33:03.027Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T07:33:03.027Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:33:03.027Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T07:33:03.027Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:35:05.901Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T07:35:05.901Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:35:05.901Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said @2026-10-21T07:35:05.901Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:34:13.373Z",
+  "metric": "status_exit",
+  "value": 3,
+  "source": "timeline steps[214] / compare/status-steps.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:35:20.595Z",
+  "metric": "status_exit",
+  "value": 3,
+  "source": "timeline steps[216]",
+  "kind": "measured"
+ }
+]

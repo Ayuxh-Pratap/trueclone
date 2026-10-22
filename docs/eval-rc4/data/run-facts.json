@@ -1,0 +1,13 @@
+{
+  "source": "Codex session rollouts in C:/Users/Ayush Pratap Singh/.codex/sessions/2026/10/21 (main sessions + codex-auto-review guardian sessions); parsed read-only on 2026-10-22",
+  "config_all_runs": { "model": "gpt-6.1-sol", "effort": "high", "approval_policy": "on-request", "approvals_reviewer": "auto_review (guardian, codex-auto-review, effort low)", "sandbox": "workspace-write, network_access false (escalations requested per command)", "service_tier": "priority", "codex_cli": "0.163.0-alpha.10.2", "trueclone": "0.5.0-rc.4 (skill + scripts byte-identical to rea-lab 17cd6cf)" },
+  "runbook_deviations": ["effort high instead of Extra High (xhigh)", "on-request approvals + auto-review instead of Full access", "start order zero, bhaskar, varsity, astro, allbirds (runbook: zero, varsity, bhaskar, allbirds, astro)"],
+  "runs": {
+    "zero":     { "start_ist": "2026-10-21 02:17", "end_ist": "2026-10-22 10:28 (user stopped)", "elapsed": "32h 11m (agent-reported; first turn open until the user's 10:10 IST question)", "compactions": 9, "input_mtok": 483.8, "cached_mtok": 478.9, "output_mtok": 1.83, "tool_calls": 2128, "user_messages_during_run": 1, "approval_reviews": 358, "approval_review_minutes": 18, "final_status_exit": 1 },
+    "bhaskar":  { "start_ist": "2026-10-21 02:29", "end_ist": "2026-10-21 04:54", "elapsed_h": 2.41, "compactions": 1, "input_mtok": 87.1, "output_mtok": 0.10, "tool_calls": 421, "approval_reviews": 60, "approval_review_minutes": 2, "final_status_exit": 1 },
+    "varsity":  { "start_ist": "2026-10-21 02:38", "end_ist": "2026-10-21 14:06", "elapsed_h": 11.47, "compactions": 5, "input_mtok": 233.2, "output_mtok": 0.42, "tool_calls": 1013, "approval_reviews": 247, "approval_review_minutes": 11, "final_status_exit": "0 (agent-reported; see varsity findings)" },
+    "astro":    { "start_ist": "2026-10-21 02:47", "end_ist": "2026-10-21 04:08", "elapsed_h": 1.36, "compactions": 0, "input_mtok": 45.4, "output_mtok": 0.05, "tool_calls": 235, "approval_reviews": 31, "approval_review_minutes": 1, "final_status_exit": 0 },
+    "allbirds": { "start_ist": "2026-10-21 03:00", "end_ist": "2026-10-21 13:07", "elapsed_h": 10.11, "compactions": 4, "input_mtok": 208.0, "output_mtok": 0.51, "tool_calls": 950, "approval_reviews": 350, "approval_review_minutes": 16, "final_status_exit": 3 }
+  },
+  "not_measurable": "a reliable split of elapsed time into command-running vs model time: commands run in background shell sessions polled by the model, and session exits cannot be matched to launches reliably from the rollout; per-run phase timelines come from each run's timestamped logs instead"
+}

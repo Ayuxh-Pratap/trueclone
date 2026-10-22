@@ -1,0 +1,3243 @@
+[
+ {
+  "t": "2026-10-20T21:34:06.606Z",
+  "metric": "journey_desktop",
+  "value": 68.96,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/16-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:34:06.606Z",
+  "metric": "journey_mobile",
+  "value": 65.21,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/16-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:34:06.606Z",
+  "metric": "load_tablet",
+  "value": 48.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/16-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:34:06.606Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/16-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:34:06.606Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/16-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:34:06.606Z",
+  "metric": "load_wide",
+  "value": 49.88,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/16-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:34:06.606Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/16-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:34:25.168Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 30.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/17-status.log (mobile step-19)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:38.231Z",
+  "metric": "journey_desktop",
+  "value": 67.33,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/22-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:38.231Z",
+  "metric": "journey_mobile",
+  "value": 70.34,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/22-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:38.231Z",
+  "metric": "load_tablet",
+  "value": 48.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/22-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:38.231Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/22-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:38.231Z",
+  "metric": "load_laptop",
+  "value": 49.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/22-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:38.231Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/22-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:38.231Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/22-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:57.625Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 32.98,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/23-status.log (desktop step-23)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:00.149Z",
+  "metric": "journey_desktop",
+  "value": 67.1,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/25-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:00.149Z",
+  "metric": "journey_mobile",
+  "value": 63.9,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/25-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:00.149Z",
+  "metric": "load_tablet",
+  "value": 48.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/25-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:00.149Z",
+  "metric": "load_desktop",
+  "value": 49.44,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/25-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:00.149Z",
+  "metric": "load_laptop",
+  "value": 49.27,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/25-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:00.149Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/25-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:00.149Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/25-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:55:44.316Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 34.13,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/26-status.log (desktop step-9)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:19.310Z",
+  "metric": "journey_desktop",
+  "value": 70.68,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/28-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:19.310Z",
+  "metric": "journey_mobile",
+  "value": 63.46,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/28-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:19.310Z",
+  "metric": "load_tablet",
+  "value": 48.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/28-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:19.310Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/28-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:19.310Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/28-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:19.310Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/28-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:19.310Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/28-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:50.176Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 29.61,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/29-status.log (mobile step-16)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:20.120Z",
+  "metric": "journey_desktop",
+  "value": 69.43,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/33-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:20.120Z",
+  "metric": "journey_mobile",
+  "value": 68.42,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/33-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:20.120Z",
+  "metric": "load_tablet",
+  "value": 48.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/33-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:20.120Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/33-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:20.120Z",
+  "metric": "load_laptop",
+  "value": 49.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/33-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:20.120Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/33-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:20.120Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/33-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:48.112Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 45.06,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/34-status.log (desktop step-11)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:46.318Z",
+  "metric": "journey_desktop",
+  "value": 70.23,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/36-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:46.318Z",
+  "metric": "journey_mobile",
+  "value": 68.7,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/36-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:46.318Z",
+  "metric": "load_tablet",
+  "value": 48.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/36-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:46.318Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/36-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:46.318Z",
+  "metric": "load_laptop",
+  "value": 49.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/36-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:46.318Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/36-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:46.318Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/36-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:46:50.931Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 48.92,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/37-status.log (mobile step-13)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:44.561Z",
+  "metric": "journey_desktop",
+  "value": 65.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/39-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:44.561Z",
+  "metric": "journey_mobile",
+  "value": 66.25,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/39-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:44.561Z",
+  "metric": "load_tablet",
+  "value": 48.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/39-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:44.561Z",
+  "metric": "load_desktop",
+  "value": 49.44,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/39-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:44.561Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/39-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:44.561Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/39-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:44.561Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/39-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:57:50.647Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 22.82,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/40-status.log (desktop step-12)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:07:07.306Z",
+  "metric": "journey_desktop",
+  "value": 70.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/41-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:07:07.306Z",
+  "metric": "journey_mobile",
+  "value": 70.16,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/41-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:07:07.306Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/41-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:26.326Z",
+  "metric": "load_tablet",
+  "value": 48.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/43-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:26.326Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/43-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:26.326Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/43-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:26.326Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/43-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:26.326Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/43-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:42.169Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 50.23,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/44-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:18:52.115Z",
+  "metric": "journey_desktop",
+  "value": 71.21,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/45-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:18:52.115Z",
+  "metric": "journey_mobile",
+  "value": 71.89,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/45-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:18:52.115Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/45-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:22.065Z",
+  "metric": "load_tablet",
+  "value": 48.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/47-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:22.065Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/47-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:22.065Z",
+  "metric": "load_laptop",
+  "value": 49.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/47-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:22.065Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/47-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:22.065Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/47-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:20:30.768Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 45.35,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/48-status.log (desktop step-20)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:49.866Z",
+  "metric": "journey_desktop",
+  "value": 71.1,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/51-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:49.866Z",
+  "metric": "journey_mobile",
+  "value": 70.5,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/51-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:49.866Z",
+  "metric": "load_tablet",
+  "value": 48.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/51-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:49.866Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/51-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:49.866Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/51-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:49.866Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/51-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:49.866Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/51-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:40:57.971Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 31.12,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/52-status.log (mobile step-19)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:16.218Z",
+  "metric": "journey_desktop",
+  "value": 70.82,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/55-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:16.218Z",
+  "metric": "journey_mobile",
+  "value": 69.48,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/55-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:16.218Z",
+  "metric": "load_tablet",
+  "value": 48.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/55-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:16.218Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/55-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:16.218Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/55-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:16.218Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/55-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:16.218Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/55-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:53:30.606Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 30.4,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/56-status.log (mobile step-19)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:28.477Z",
+  "metric": "journey_desktop",
+  "value": 73.11,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/58-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:28.477Z",
+  "metric": "journey_mobile",
+  "value": 71.91,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/58-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:28.477Z",
+  "metric": "load_tablet",
+  "value": 48.67,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/58-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:28.477Z",
+  "metric": "load_desktop",
+  "value": 49.44,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/58-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:28.477Z",
+  "metric": "load_laptop",
+  "value": 49.27,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/58-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:28.477Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/58-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:28.477Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/58-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:05:38.587Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 34.56,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/59-status.log (mobile step-18)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:18.181Z",
+  "metric": "journey_desktop",
+  "value": 77.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/61-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:18.181Z",
+  "metric": "journey_mobile",
+  "value": 72.43,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/61-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:18.181Z",
+  "metric": "load_tablet",
+  "value": 48.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/61-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:18.181Z",
+  "metric": "load_desktop",
+  "value": 49.49,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/61-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:18.181Z",
+  "metric": "load_laptop",
+  "value": 49.27,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/61-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:18.181Z",
+  "metric": "load_wide",
+  "value": 49.88,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/61-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:18.181Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/61-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:32.635Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 40.98,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/62-status.log (mobile step-18)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:26:03.756Z",
+  "metric": "journey_desktop",
+  "value": 74.51,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/64-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:26:03.756Z",
+  "metric": "journey_mobile",
+  "value": 72.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/64-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:26:03.756Z",
+  "metric": "load_tablet",
+  "value": 48.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/64-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:26:03.756Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/64-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:26:03.756Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/64-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:26:03.756Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/64-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:26:03.756Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/64-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:27:25.857Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 50.51,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/65-status.log (desktop step-13)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:53:59.236Z",
+  "metric": "journey_desktop",
+  "value": 75.88,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/68-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:53:59.236Z",
+  "metric": "journey_mobile",
+  "value": 72.47,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/68-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:53:59.236Z",
+  "metric": "load_tablet",
+  "value": 48.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/68-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:53:59.236Z",
+  "metric": "load_desktop",
+  "value": 49.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/68-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:53:59.236Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/68-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:53:59.236Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/68-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:53:59.236Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/68-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:54:34.364Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 46.67,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/69-status.log (mobile step-13)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:16.961Z",
+  "metric": "journey_desktop",
+  "value": 75.32,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/72-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:16.961Z",
+  "metric": "journey_mobile",
+  "value": 73.12,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/72-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:16.961Z",
+  "metric": "load_tablet",
+  "value": 48.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/72-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:16.961Z",
+  "metric": "load_desktop",
+  "value": 49.44,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/72-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:16.961Z",
+  "metric": "load_laptop",
+  "value": 49.28,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/72-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:16.961Z",
+  "metric": "load_wide",
+  "value": 49.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/72-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:11:16.961Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/72-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:12:24.012Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 54.12,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/73-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:00.215Z",
+  "metric": "journey_desktop",
+  "value": 75.38,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/76-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:00.215Z",
+  "metric": "journey_mobile",
+  "value": 73.41,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/76-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:00.215Z",
+  "metric": "load_tablet",
+  "value": 48.75,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/76-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:00.215Z",
+  "metric": "load_desktop",
+  "value": 49.52,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/76-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:00.215Z",
+  "metric": "load_laptop",
+  "value": 49.33,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/76-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:00.215Z",
+  "metric": "load_wide",
+  "value": 49.89,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/76-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:00.215Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/76-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:18.183Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 55.07,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/77-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:37:52.412Z",
+  "metric": "journey_desktop",
+  "value": 77.23,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/80-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:37:52.412Z",
+  "metric": "journey_mobile",
+  "value": 73.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/80-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:37:52.412Z",
+  "metric": "load_tablet",
+  "value": 48.81,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/80-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:37:52.412Z",
+  "metric": "load_desktop",
+  "value": 49.53,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/80-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:37:52.412Z",
+  "metric": "load_laptop",
+  "value": 49.34,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/80-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:37:52.412Z",
+  "metric": "load_wide",
+  "value": 49.89,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/80-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:37:52.412Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/80-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:39:29.420Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 54.27,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/81-status.log (mobile step-18)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:04:07.077Z",
+  "metric": "journey_desktop",
+  "value": 78.48,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/84-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:04:07.077Z",
+  "metric": "journey_mobile",
+  "value": 73.13,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/84-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:04:07.077Z",
+  "metric": "load_tablet",
+  "value": 48.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/84-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:04:07.077Z",
+  "metric": "load_desktop",
+  "value": 49.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/84-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:04:07.077Z",
+  "metric": "load_laptop",
+  "value": 49.36,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/84-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:04:07.077Z",
+  "metric": "load_wide",
+  "value": 49.94,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/84-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:04:07.077Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/84-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:11.575Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 39.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/85-status.log (mobile step-18)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:27.318Z",
+  "metric": "journey_desktop",
+  "value": 78.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/88-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:27.318Z",
+  "metric": "journey_mobile",
+  "value": 77.47,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/88-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:27.318Z",
+  "metric": "load_tablet",
+  "value": 48.89,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/88-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:27.318Z",
+  "metric": "load_desktop",
+  "value": 49.5,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/88-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:27.318Z",
+  "metric": "load_laptop",
+  "value": 49.48,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/88-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:27.318Z",
+  "metric": "load_wide",
+  "value": 49.94,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/88-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:22:27.318Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/88-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:23:32.831Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 55.14,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/89-status.log (mobile step-6)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:18.923Z",
+  "metric": "journey_desktop",
+  "value": 78.86,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/93-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:18.923Z",
+  "metric": "journey_mobile",
+  "value": 75.32,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/93-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:18.923Z",
+  "metric": "load_tablet",
+  "value": 49.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/93-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:18.923Z",
+  "metric": "load_desktop",
+  "value": 54.12,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/93-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:18.923Z",
+  "metric": "load_laptop",
+  "value": 49.39,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/93-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:18.923Z",
+  "metric": "load_wide",
+  "value": 49.94,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/93-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:55:18.923Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/93-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:56:47.174Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 33.01,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/94-status.log (mobile step-7)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:52.374Z",
+  "metric": "journey_desktop",
+  "value": 79.5,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/98-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:52.374Z",
+  "metric": "journey_mobile",
+  "value": 75.68,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/98-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:52.374Z",
+  "metric": "load_tablet",
+  "value": 49.54,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/98-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:52.374Z",
+  "metric": "load_desktop",
+  "value": 54.08,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/98-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:52.374Z",
+  "metric": "load_laptop",
+  "value": 54.54,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/98-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:52.374Z",
+  "metric": "load_wide",
+  "value": 49.94,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/98-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:52.374Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/98-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:24:32.458Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 41.94,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/99-status.log (mobile step-7)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:23.916Z",
+  "metric": "journey_desktop",
+  "value": 75.88,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/103-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:23.916Z",
+  "metric": "journey_mobile",
+  "value": 77.88,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/103-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:23.916Z",
+  "metric": "load_tablet",
+  "value": 49.74,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/103-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:23.916Z",
+  "metric": "load_desktop",
+  "value": 54.12,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/103-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:23.916Z",
+  "metric": "load_laptop",
+  "value": 54.49,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/103-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:23.916Z",
+  "metric": "load_wide",
+  "value": 49.91,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/103-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:23.916Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/103-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:39:55.031Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 52.16,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/104-status.log (desktop step-7)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:19.176Z",
+  "metric": "journey_desktop",
+  "value": 77.16,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/108-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:19.176Z",
+  "metric": "journey_mobile",
+  "value": 80.54,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/108-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:19.176Z",
+  "metric": "load_tablet",
+  "value": 49.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/108-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:19.176Z",
+  "metric": "load_desktop",
+  "value": 54.14,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/108-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:19.176Z",
+  "metric": "load_laptop",
+  "value": 49.42,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/108-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:19.176Z",
+  "metric": "load_wide",
+  "value": 49.89,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/108-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:19.176Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/108-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:47.477Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 58.96,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/109-status.log (desktop step-1)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:14:34.588Z",
+  "metric": "journey_desktop",
+  "value": 76.53,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/113-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:14:34.588Z",
+  "metric": "journey_mobile",
+  "value": 79.06,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/113-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:14:34.588Z",
+  "metric": "load_tablet",
+  "value": 51.72,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/113-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:14:34.588Z",
+  "metric": "load_desktop",
+  "value": 58.65,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/113-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:14:34.588Z",
+  "metric": "load_laptop",
+  "value": 59.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/113-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:14:34.588Z",
+  "metric": "load_wide",
+  "value": 60.3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/113-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:14:34.588Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/113-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:16:22.023Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 52.52,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/114-status.log (desktop step-3)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:40:09.369Z",
+  "metric": "journey_desktop",
+  "value": 79.09,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/117-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:40:09.369Z",
+  "metric": "journey_mobile",
+  "value": 77.54,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/117-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:40:09.369Z",
+  "metric": "load_tablet",
+  "value": 51.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/117-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:40:09.369Z",
+  "metric": "load_desktop",
+  "value": 58.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/117-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:40:09.369Z",
+  "metric": "load_laptop",
+  "value": 59.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/117-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:40:09.369Z",
+  "metric": "load_wide",
+  "value": 60.25,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/117-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:40:09.369Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/117-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:41:32.341Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 29.94,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/118-status.log (mobile gate-1)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:56:38.327Z",
+  "metric": "journey_desktop",
+  "value": 79.93,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/121-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:56:38.327Z",
+  "metric": "journey_mobile",
+  "value": 80.49,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/121-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:56:38.327Z",
+  "metric": "load_tablet",
+  "value": 51.64,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/121-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:56:38.327Z",
+  "metric": "load_desktop",
+  "value": 58.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/121-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:56:38.327Z",
+  "metric": "load_laptop",
+  "value": 59.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/121-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:56:38.327Z",
+  "metric": "load_wide",
+  "value": 60.24,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/121-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:56:38.327Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/121-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:57:55.326Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 60.67,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/122-status.log (desktop step-9)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:18:51.564Z",
+  "metric": "journey_desktop",
+  "value": 80.98,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/127-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:18:51.564Z",
+  "metric": "journey_mobile",
+  "value": 80.85,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/127-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:18:51.564Z",
+  "metric": "load_tablet",
+  "value": 51.68,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/127-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:18:51.564Z",
+  "metric": "load_desktop",
+  "value": 58.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/127-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:18:51.564Z",
+  "metric": "load_laptop",
+  "value": 59.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/127-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:18:51.564Z",
+  "metric": "load_wide",
+  "value": 60.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/127-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:18:51.564Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/127-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T09:21:26.729Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 60.27,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/128-status.log (mobile step-11)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:44.154Z",
+  "metric": "journey_desktop",
+  "value": 82.45,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/132-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:44.154Z",
+  "metric": "journey_mobile",
+  "value": 81.69,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/132-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:44.154Z",
+  "metric": "load_tablet",
+  "value": 51.7,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/132-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:44.154Z",
+  "metric": "load_desktop",
+  "value": 58.65,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/132-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:44.154Z",
+  "metric": "load_laptop",
+  "value": 59.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/132-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:44.154Z",
+  "metric": "load_wide",
+  "value": 60.3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/132-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:44.154Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/132-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:06:52.744Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 59.1,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/133-status.log (desktop step-9)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:20.512Z",
+  "metric": "journey_desktop",
+  "value": 82.64,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/136-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:20.512Z",
+  "metric": "journey_mobile",
+  "value": 82.26,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/136-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:20.512Z",
+  "metric": "load_tablet",
+  "value": 51.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/136-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:20.512Z",
+  "metric": "load_desktop",
+  "value": 58.64,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/136-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:20.512Z",
+  "metric": "load_laptop",
+  "value": 59.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/136-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:20.512Z",
+  "metric": "load_wide",
+  "value": 60.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/136-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:20.512Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/136-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:27:28.842Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 60.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/137-status.log (desktop step-8)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:08.321Z",
+  "metric": "journey_desktop",
+  "value": 82.3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/141-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:08.321Z",
+  "metric": "journey_mobile",
+  "value": 81.44,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/141-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:08.321Z",
+  "metric": "load_tablet",
+  "value": 51.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/141-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:08.321Z",
+  "metric": "load_desktop",
+  "value": 58.64,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/141-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:08.321Z",
+  "metric": "load_laptop",
+  "value": 59.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/141-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:08.321Z",
+  "metric": "load_wide",
+  "value": 60.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/141-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:08.321Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/141-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T10:50:52.637Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 58.2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/142-status.log (desktop step-8)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:05:42.126Z",
+  "metric": "journey_desktop",
+  "value": 85.39,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/145-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:05:42.126Z",
+  "metric": "journey_mobile",
+  "value": 84.33,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/145-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:05:42.126Z",
+  "metric": "load_tablet",
+  "value": 51.7,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/145-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:05:42.126Z",
+  "metric": "load_desktop",
+  "value": 58.64,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/145-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:05:42.126Z",
+  "metric": "load_laptop",
+  "value": 59.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/145-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:05:42.126Z",
+  "metric": "load_wide",
+  "value": 60.3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/145-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:05:42.126Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/145-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:06:44.983Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 61.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/146-status.log (mobile step-14)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:47:50.295Z",
+  "metric": "journey_desktop",
+  "value": 86.17,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/152-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:47:50.295Z",
+  "metric": "journey_mobile",
+  "value": 85.12,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/152-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:47:50.295Z",
+  "metric": "load_tablet",
+  "value": 51.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/152-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:47:50.295Z",
+  "metric": "load_desktop",
+  "value": 58.65,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/152-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:47:50.295Z",
+  "metric": "load_laptop",
+  "value": 59.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/152-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:47:50.295Z",
+  "metric": "load_wide",
+  "value": 60.3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/152-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:47:50.295Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/152-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T11:49:01.431Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 63.41,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/153-status.log (mobile step-21)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:15.877Z",
+  "metric": "journey_desktop",
+  "value": 86.84,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/156-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:15.877Z",
+  "metric": "journey_mobile",
+  "value": 85.04,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/156-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:15.877Z",
+  "metric": "load_tablet",
+  "value": 51.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/156-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:15.877Z",
+  "metric": "load_desktop",
+  "value": 58.64,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/156-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:15.877Z",
+  "metric": "load_laptop",
+  "value": 59.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/156-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:15.877Z",
+  "metric": "load_wide",
+  "value": 60.3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/156-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:15.877Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/156-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:19:23.926Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 64.61,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/157-status.log (desktop step-9)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:24.425Z",
+  "metric": "journey_desktop",
+  "value": 88.03,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/161-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:24.425Z",
+  "metric": "journey_mobile",
+  "value": 86.46,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/161-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:24.425Z",
+  "metric": "load_tablet",
+  "value": 51.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/161-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:24.425Z",
+  "metric": "load_desktop",
+  "value": 58.65,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/161-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:24.425Z",
+  "metric": "load_laptop",
+  "value": 59.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/161-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:24.425Z",
+  "metric": "load_wide",
+  "value": 60.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/161-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:24.425Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/161-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:34:40.490Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 64.94,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/162-status.log (mobile step-2)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:09.156Z",
+  "metric": "journey_desktop",
+  "value": 87.55,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/166-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:09.156Z",
+  "metric": "journey_mobile",
+  "value": 86.56,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/166-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:09.156Z",
+  "metric": "load_tablet",
+  "value": 51.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/166-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:09.156Z",
+  "metric": "load_desktop",
+  "value": 58.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/166-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:09.156Z",
+  "metric": "load_laptop",
+  "value": 59.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/166-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:09.156Z",
+  "metric": "load_wide",
+  "value": 60.25,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/166-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:09.156Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/166-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T12:56:36.150Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 73.48,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/167-status.log (desktop load)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:08.502Z",
+  "metric": "journey_desktop",
+  "value": 88.35,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/171-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:08.502Z",
+  "metric": "journey_mobile",
+  "value": 86.88,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/171-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:08.502Z",
+  "metric": "load_tablet",
+  "value": 98.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/171-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:08.502Z",
+  "metric": "load_desktop",
+  "value": 94.8,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/171-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:08.502Z",
+  "metric": "load_laptop",
+  "value": 93.78,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/171-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:08.502Z",
+  "metric": "load_wide",
+  "value": 94.19,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/171-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:08.502Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/171-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:25:26.904Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 73.69,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/172-status.log (mobile step-3)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:58:39.489Z",
+  "metric": "journey_desktop",
+  "value": 88.9,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/175-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:58:39.489Z",
+  "metric": "journey_mobile",
+  "value": 88.15,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/175-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:58:39.489Z",
+  "metric": "load_tablet",
+  "value": 98.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/175-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:58:39.489Z",
+  "metric": "load_desktop",
+  "value": 94.79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/175-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:58:39.489Z",
+  "metric": "load_laptop",
+  "value": 93.77,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/175-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:58:39.489Z",
+  "metric": "load_wide",
+  "value": 94.19,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/175-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:58:39.489Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/175-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T13:59:41.011Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 75.96,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/176-status.log (mobile step-5)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:06.912Z",
+  "metric": "journey_desktop",
+  "value": 89.65,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/179-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:06.912Z",
+  "metric": "journey_mobile",
+  "value": 87.74,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/179-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:06.912Z",
+  "metric": "load_tablet",
+  "value": 98.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/179-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:06.912Z",
+  "metric": "load_desktop",
+  "value": 94.79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/179-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:06.912Z",
+  "metric": "load_laptop",
+  "value": 93.75,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/179-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:06.912Z",
+  "metric": "load_wide",
+  "value": 94.21,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/179-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:06.912Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/179-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:21:16.294Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 77.33,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/180-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:22.979Z",
+  "metric": "journey_desktop",
+  "value": 89.21,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/183-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:22.979Z",
+  "metric": "journey_mobile",
+  "value": 86.96,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/183-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:22.979Z",
+  "metric": "load_tablet",
+  "value": 98.55,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/183-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:22.979Z",
+  "metric": "load_desktop",
+  "value": 94.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/183-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:22.979Z",
+  "metric": "load_laptop",
+  "value": 93.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/183-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:22.979Z",
+  "metric": "load_wide",
+  "value": 93.69,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/183-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:22.979Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/183-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:37:33.952Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 74.26,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/184-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:56:57.041Z",
+  "metric": "journey_desktop",
+  "value": 90.73,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/187-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:56:57.041Z",
+  "metric": "journey_mobile",
+  "value": 87.69,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/187-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:56:57.041Z",
+  "metric": "load_tablet",
+  "value": 98.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/187-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:56:57.041Z",
+  "metric": "load_desktop",
+  "value": 94.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/187-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:56:57.041Z",
+  "metric": "load_laptop",
+  "value": 93.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/187-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:56:57.041Z",
+  "metric": "load_wide",
+  "value": 94.06,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/187-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:56:57.041Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/187-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T14:57:08.258Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/188-status.log (mobile step-21)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:13:36.001Z",
+  "metric": "journey_desktop",
+  "value": 90.73,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/192-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:13:36.001Z",
+  "metric": "journey_mobile",
+  "value": 86.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/192-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:13:36.001Z",
+  "metric": "load_tablet",
+  "value": 98.56,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/192-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:13:36.001Z",
+  "metric": "load_desktop",
+  "value": 94.61,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/192-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:13:36.001Z",
+  "metric": "load_laptop",
+  "value": 93.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/192-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:13:36.001Z",
+  "metric": "load_wide",
+  "value": 94.07,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/192-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:13:36.001Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/192-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:14:10.741Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 62.15,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/193-status.log (mobile step-17)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:33:36.826Z",
+  "metric": "journey_desktop",
+  "value": 90.76,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/197-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:33:36.826Z",
+  "metric": "journey_mobile",
+  "value": 87.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/197-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:33:36.826Z",
+  "metric": "load_tablet",
+  "value": 98.56,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/197-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:33:36.826Z",
+  "metric": "load_desktop",
+  "value": 94.61,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/197-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:33:36.826Z",
+  "metric": "load_laptop",
+  "value": 93.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/197-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:33:36.826Z",
+  "metric": "load_wide",
+  "value": 94.06,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/197-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:33:36.826Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/197-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:34:17.516Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79.18,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/198-status.log (mobile load)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:58:28.269Z",
+  "metric": "journey_desktop",
+  "value": 90.67,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/201-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:58:28.269Z",
+  "metric": "journey_mobile",
+  "value": 87.51,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/201-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:58:28.269Z",
+  "metric": "load_tablet",
+  "value": 98.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/201-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:58:28.269Z",
+  "metric": "load_desktop",
+  "value": 94.68,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/201-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:58:28.269Z",
+  "metric": "load_laptop",
+  "value": 93.72,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/201-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:58:28.269Z",
+  "metric": "load_wide",
+  "value": 94.21,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/201-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T15:58:28.269Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/201-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:00:00.311Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79.34,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/202-status.log (mobile step-21)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:26:43.661Z",
+  "metric": "journey_desktop",
+  "value": 91.2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/205-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:26:43.661Z",
+  "metric": "journey_mobile",
+  "value": 88.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/205-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:26:43.661Z",
+  "metric": "load_tablet",
+  "value": 98.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/205-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:26:43.661Z",
+  "metric": "load_desktop",
+  "value": 94.67,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/205-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:26:43.661Z",
+  "metric": "load_laptop",
+  "value": 93.71,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/205-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:26:43.661Z",
+  "metric": "load_wide",
+  "value": 94.22,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/205-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:26:43.661Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/205-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:27:32.155Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79.63,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/206-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:55:23.733Z",
+  "metric": "journey_desktop",
+  "value": 91.06,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/210-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:55:23.733Z",
+  "metric": "journey_mobile",
+  "value": 87.68,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/210-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:55:23.733Z",
+  "metric": "load_tablet",
+  "value": 98.58,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/210-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:55:23.733Z",
+  "metric": "load_desktop",
+  "value": 94.74,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/210-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:55:23.733Z",
+  "metric": "load_laptop",
+  "value": 93.79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/210-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:55:23.733Z",
+  "metric": "load_wide",
+  "value": 94.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/210-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:55:23.733Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/210-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T16:56:17.125Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/211-status.log (mobile step-16)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:02.938Z",
+  "metric": "journey_desktop",
+  "value": 91.26,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/216-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:02.938Z",
+  "metric": "journey_mobile",
+  "value": 88.34,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/216-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:02.938Z",
+  "metric": "load_tablet",
+  "value": 97.79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/216-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:02.938Z",
+  "metric": "load_desktop",
+  "value": 94.38,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/216-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:02.938Z",
+  "metric": "load_laptop",
+  "value": 93.44,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/216-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:02.938Z",
+  "metric": "load_wide",
+  "value": 93.92,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/216-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:02.938Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/216-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:14:12.172Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79.81,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/217-status.log (mobile load)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:16.867Z",
+  "metric": "journey_desktop",
+  "value": 90.96,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/221-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:16.867Z",
+  "metric": "journey_mobile",
+  "value": 88.27,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/221-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:16.867Z",
+  "metric": "load_tablet",
+  "value": 98.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/221-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:16.867Z",
+  "metric": "load_desktop",
+  "value": 94.76,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/221-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:16.867Z",
+  "metric": "load_laptop",
+  "value": 93.82,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/221-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:16.867Z",
+  "metric": "load_wide",
+  "value": 94.3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/221-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:16.867Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/221-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:32:30.139Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79.61,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/222-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:21.789Z",
+  "metric": "journey_desktop",
+  "value": 90.79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/225-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:21.789Z",
+  "metric": "journey_mobile",
+  "value": 88.35,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/225-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:21.789Z",
+  "metric": "load_tablet",
+  "value": 98.34,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/225-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:21.789Z",
+  "metric": "load_desktop",
+  "value": 94.72,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/225-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:21.789Z",
+  "metric": "load_laptop",
+  "value": 93.8,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/225-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:21.789Z",
+  "metric": "load_wide",
+  "value": 94.29,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/225-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:21.789Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/225-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T17:47:33.425Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 79.87,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/226-status.log (mobile load)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:21.216Z",
+  "metric": "journey_desktop",
+  "value": 90.5,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/230-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:21.216Z",
+  "metric": "journey_mobile",
+  "value": 87.98,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/230-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:21.216Z",
+  "metric": "load_tablet",
+  "value": 98.51,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/230-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:21.216Z",
+  "metric": "load_desktop",
+  "value": 94.74,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/230-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:21.216Z",
+  "metric": "load_laptop",
+  "value": 93.8,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/230-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:21.216Z",
+  "metric": "load_wide",
+  "value": 94.27,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/230-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:21.216Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/230-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:07:58.672Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 66.31,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/231-status.log (mobile load)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:51:59.705Z",
+  "metric": "journey_desktop",
+  "value": 91.34,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/239-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:51:59.705Z",
+  "metric": "journey_mobile",
+  "value": 88.93,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/239-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:51:59.705Z",
+  "metric": "load_tablet",
+  "value": 96.6,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/239-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:51:59.705Z",
+  "metric": "load_desktop",
+  "value": 96.77,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/239-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:51:59.705Z",
+  "metric": "load_laptop",
+  "value": 97.75,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/239-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:51:59.705Z",
+  "metric": "load_wide",
+  "value": 97.07,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/239-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:51:59.705Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/239-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T18:52:49.266Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 80.26,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/240-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:11:35.479Z",
+  "metric": "journey_desktop",
+  "value": 91.14,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/243-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:11:35.479Z",
+  "metric": "journey_mobile",
+  "value": 87.83,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/243-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:11:35.479Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/243-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:14:50.492Z",
+  "metric": "load_tablet",
+  "value": 96.59,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/245-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:14:50.492Z",
+  "metric": "load_desktop",
+  "value": 96.76,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/245-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:14:50.492Z",
+  "metric": "load_laptop",
+  "value": 97.77,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/245-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:14:50.492Z",
+  "metric": "load_wide",
+  "value": 97.04,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/245-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:14:50.492Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/245-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:14:57.510Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 78.88,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/246-status.log (mobile step-16)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:33:20.194Z",
+  "metric": "journey_desktop",
+  "value": 90.13,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/249-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:33:20.194Z",
+  "metric": "journey_mobile",
+  "value": 87.75,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/249-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:33:20.194Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/249-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:36:37.339Z",
+  "metric": "load_tablet",
+  "value": 96.67,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/251-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:36:37.339Z",
+  "metric": "load_desktop",
+  "value": 96.78,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/251-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:36:37.339Z",
+  "metric": "load_laptop",
+  "value": 97.76,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/251-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:36:37.339Z",
+  "metric": "load_wide",
+  "value": 97.03,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/251-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:36:37.339Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/251-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:36:48.862Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 71.42,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/252-status.log (mobile step-17)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:53:04.668Z",
+  "metric": "journey_desktop",
+  "value": 90.25,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/257-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:53:04.668Z",
+  "metric": "journey_mobile",
+  "value": 88.56,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/257-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:53:04.668Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/257-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:56:33.887Z",
+  "metric": "load_tablet",
+  "value": 96.62,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/259-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:56:33.887Z",
+  "metric": "load_desktop",
+  "value": 96.77,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/259-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:56:33.887Z",
+  "metric": "load_laptop",
+  "value": 97.75,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/259-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:56:33.887Z",
+  "metric": "load_wide",
+  "value": 97.04,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/259-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:56:33.887Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/259-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T19:56:45.123Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 78.41,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/260-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:10:14.253Z",
+  "metric": "journey_desktop",
+  "value": 89.84,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/264-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:10:14.253Z",
+  "metric": "journey_mobile",
+  "value": 88.22,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/264-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:10:14.253Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/264-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:13:54.445Z",
+  "metric": "load_tablet",
+  "value": 96.78,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/266-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:13:54.445Z",
+  "metric": "load_desktop",
+  "value": 96.77,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/266-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:13:54.445Z",
+  "metric": "load_laptop",
+  "value": 97.79,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/266-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:13:54.445Z",
+  "metric": "load_wide",
+  "value": 97.04,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/266-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:13:54.445Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/266-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:14:15.307Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 77.76,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/267-status.log (mobile step-15)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:33:01.805Z",
+  "metric": "journey_desktop",
+  "value": 90.98,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/272-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:33:01.805Z",
+  "metric": "journey_mobile",
+  "value": 87.89,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/272-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:33:01.805Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/272-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:36:43.820Z",
+  "metric": "load_tablet",
+  "value": 96.57,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/274-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:36:43.820Z",
+  "metric": "load_desktop",
+  "value": 96.76,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/274-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:36:43.820Z",
+  "metric": "load_laptop",
+  "value": 97.73,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/274-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:36:43.820Z",
+  "metric": "load_wide",
+  "value": 97.02,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/274-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:36:43.820Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/274-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T20:37:44.376Z",
+  "metric": "status_issued_worst_checkpoint_pct",
+  "value": 72.22,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/275-status.log (mobile step-17)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:33.432Z",
+  "metric": "journey_desktop",
+  "value": 90.5,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/280-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:33.432Z",
+  "metric": "journey_mobile",
+  "value": 88.91,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/280-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:33.432Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "C:/dev/tc-tests/rc4-zero/.trueclone-run/280-score.log",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:17.162Z",
+  "metric": "review_open_frames",
+  "value": 57,
+  "source": "C:/dev/tc-tests/rc4-zero/sites/zero/REPORT.md (Review 0/30 desktop, 0/27 mobile)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:17.162Z",
+  "metric": "journey_worst_desktop",
+  "value": 77.61,
+  "source": "C:/dev/tc-tests/rc4-zero/sites/zero/compare/journey/report.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:17.162Z",
+  "metric": "journey_worst_mobile",
+  "value": 77.9,
+  "source": "C:/dev/tc-tests/rc4-zero/sites/zero/compare/journey/report.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:17.162Z",
+  "metric": "journey_pixels_mean_desktop",
+  "value": 63.22,
+  "source": "C:/dev/tc-tests/rc4-zero/sites/zero/compare/journey/report.json (mean of checkpoints[].pixels, computed)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-22T04:55:17.162Z",
+  "metric": "journey_pixels_mean_mobile",
+  "value": 58.49,
+  "source": "C:/dev/tc-tests/rc4-zero/sites/zero/compare/journey/report.json (mean of checkpoints[].pixels, computed)",
+  "kind": "measured"
+ }
+]

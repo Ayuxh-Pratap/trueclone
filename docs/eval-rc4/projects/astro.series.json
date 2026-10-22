@@ -1,0 +1,205 @@
+[
+ {
+  "t": "2026-10-20T21:36:34Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "astro.timeline.json said 21:36:34 (first full score)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:49:48Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "astro.timeline.json said 21:49:48 (report astro)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:51:48Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "astro.timeline.json said 21:51:48 (score --only interact (stale checks counted))",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:56:23Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "astro.timeline.json said 21:56:23 (score --only layout,states,detail,hovers,load)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:57:54Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "astro.timeline.json said 21:57:54 (report astro)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:00:50Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "astro.timeline.json said 22:00:50 (report astro)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:03:03Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "astro.timeline.json said 22:03:03 (score --only interact (stale checks counted))",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:03:03Z",
+  "metric": "interactions_failing",
+  "value": 6,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/evidence/interactions-before-rewrite.json (copy of compare/interact/report.json from the 22:01:14 interact run; 6 broken)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:03:03Z",
+  "metric": "interactions_passing",
+  "value": 20,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/evidence/interactions-before-rewrite.json (20 of 26 pass)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:03:48Z",
+  "metric": "scroll_states_min_pct",
+  "value": 100,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/.stamps.json states",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:03:58Z",
+  "metric": "layout_min_pct",
+  "value": 100,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/.stamps.json layout (all 5 sizes 100)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:04:09Z",
+  "metric": "detail_min_pct",
+  "value": 100,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/.stamps.json detail",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:05:21Z",
+  "metric": "hovers_desktop_pct",
+  "value": 100,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/.stamps.json hovers",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:21:22Z",
+  "metric": "load_desktop_pct",
+  "value": 98.76,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/.stamps.json load",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:21:22Z",
+  "metric": "load_step_seconds",
+  "value": 961,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/.stamps.json load.seconds (queued on machine timing lock)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:18Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "astro.timeline.json said 22:22:18 (score --only layout,states,detail,hovers,load)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:22:18Z",
+  "metric": "partial_rescore_minutes",
+  "value": 18.1,
+  "source": "RUN-LOG.md:34 / timeline 22:03:15-22:22:18",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:24:08Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "astro.timeline.json said 22:24:08 (report astro)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:25:46Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/.stamps.json interact.at; compare/interact/report.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:25:46Z",
+  "metric": "interactions_passing",
+  "value": 26,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/interact/report.json (26/26)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:25:46Z",
+  "metric": "score_minutes",
+  "value": 1,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare/score-times.json (only interact, 62 s)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:25:49Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "astro.timeline.json said 22:25:49 (score --only interact)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:27:20Z",
+  "metric": "next_interactions_passing",
+  "value": 26,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare-next/interact/report.json (26/26)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:27:20Z",
+  "metric": "next_load_desktop_pct",
+  "value": 98.76,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare-next/load.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:34:31Z",
+  "metric": "next_score_minutes",
+  "value": 7.4,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare-next/score-times.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:34:31Z",
+  "metric": "next_load_step_seconds",
+  "value": 310,
+  "source": "C:/dev/tc-tests/rc4-astro/sites/astro/compare-next/score-times.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:34:46Z",
+  "metric": "next_checks_below_target",
+  "value": 0,
+  "source": "astro.timeline.json said 22:34:46 (next --verify)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:37:42Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "astro.timeline.json said 22:37:42 (report astro (final))",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:37:42Z",
+  "metric": "next_checks_below_target",
+  "value": 0,
+  "source": "astro.timeline.json said 22:37:42 (report with TC_REPORT=REPORT.next.md)",
+  "kind": "measured"
+ }
+]

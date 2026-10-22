@@ -1,0 +1,3712 @@
+[
+ {
+  "t": "2026-10-20T21:30:22Z",
+  "metric": "layout_desktop",
+  "value": 97.87,
+  "source": "timeline call 2026-10-20T21:30:18.522Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:30:22Z",
+  "metric": "layout_laptop",
+  "value": 95.78,
+  "source": "timeline call 2026-10-20T21:30:18.522Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:30:22Z",
+  "metric": "layout_mobile",
+  "value": 98.28,
+  "source": "timeline call 2026-10-20T21:30:18.522Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:30:22Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T21:30:18.522Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:30:22Z",
+  "metric": "layout_wide",
+  "value": 99.43,
+  "source": "timeline call 2026-10-20T21:30:18.522Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:31:15Z",
+  "metric": "states_mean_desktop",
+  "value": 82.05,
+  "source": "timeline call 2026-10-20T21:31:13.071Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:31:15Z",
+  "metric": "states_mean_laptop",
+  "value": 78.85,
+  "source": "timeline call 2026-10-20T21:31:13.071Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:31:15Z",
+  "metric": "states_mean_mobile",
+  "value": 79.54,
+  "source": "timeline call 2026-10-20T21:31:13.071Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:31:15Z",
+  "metric": "states_mean_tablet",
+  "value": 80.61,
+  "source": "timeline call 2026-10-20T21:31:13.071Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:31:15Z",
+  "metric": "states_mean_wide",
+  "value": 80.25,
+  "source": "timeline call 2026-10-20T21:31:13.071Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:33:00Z",
+  "metric": "interactions_failing",
+  "value": 2,
+  "source": "timeline call 2026-10-20T21:32:56.495Z (score output: interact 2 FAIL)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:38:18.058Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said 2026-10-20T21:38:18.058Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:38:18Z",
+  "metric": "load_desktop",
+  "value": 53.73,
+  "source": "timeline call 2026-10-20T21:38:13.188Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:38:18Z",
+  "metric": "load_laptop",
+  "value": 48.73,
+  "source": "timeline call 2026-10-20T21:38:13.188Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:38:18Z",
+  "metric": "load_mobile",
+  "value": 55.69,
+  "source": "timeline call 2026-10-20T21:38:13.188Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:38:18Z",
+  "metric": "load_tablet",
+  "value": 54.98,
+  "source": "timeline call 2026-10-20T21:38:13.188Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:38:18Z",
+  "metric": "load_wide",
+  "value": 51.03,
+  "source": "timeline call 2026-10-20T21:38:13.188Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:42:25.253Z",
+  "metric": "checks_below_target",
+  "value": 9,
+  "source": "timeline said 2026-10-20T21:42:25.253Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:42:25Z",
+  "metric": "layout_desktop",
+  "value": 97.99,
+  "source": "timeline call 2026-10-20T21:42:25.082Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:42:25Z",
+  "metric": "layout_laptop",
+  "value": 96.03,
+  "source": "timeline call 2026-10-20T21:42:25.082Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:42:25Z",
+  "metric": "layout_mobile",
+  "value": 98.11,
+  "source": "timeline call 2026-10-20T21:42:25.082Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:42:25Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T21:42:25.082Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:42:25Z",
+  "metric": "layout_wide",
+  "value": 99.77,
+  "source": "timeline call 2026-10-20T21:42:25.082Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "interactions_failing",
+  "value": 2,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: interact 2 FAIL)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "states_mean_desktop",
+  "value": 79.22,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "states_mean_laptop",
+  "value": 75.86,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "states_mean_mobile",
+  "value": 76.51,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "states_mean_tablet",
+  "value": 77.94,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:44:46Z",
+  "metric": "states_mean_wide",
+  "value": 76.95,
+  "source": "timeline call 2026-10-20T21:44:42.535Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:45:47Z",
+  "metric": "hovers_desktop",
+  "value": 78.6,
+  "source": "timeline call 2026-10-20T21:45:45.146Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:46:41.169Z",
+  "metric": "checks_below_target",
+  "value": 8,
+  "source": "timeline said 2026-10-20T21:46:41.169Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:46:41Z",
+  "metric": "load_desktop",
+  "value": 53.74,
+  "source": "timeline call 2026-10-20T21:46:39.058Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:46:41Z",
+  "metric": "load_laptop",
+  "value": 48.73,
+  "source": "timeline call 2026-10-20T21:46:39.058Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:46:41Z",
+  "metric": "load_mobile",
+  "value": 55.69,
+  "source": "timeline call 2026-10-20T21:46:39.058Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:46:41Z",
+  "metric": "load_tablet",
+  "value": 54.98,
+  "source": "timeline call 2026-10-20T21:46:39.058Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:46:41Z",
+  "metric": "load_wide",
+  "value": 51.03,
+  "source": "timeline call 2026-10-20T21:46:39.058Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:50:52.991Z",
+  "metric": "checks_below_target",
+  "value": 10,
+  "source": "timeline said 2026-10-20T21:50:52.991Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:50:52Z",
+  "metric": "layout_desktop",
+  "value": 97.99,
+  "source": "timeline call 2026-10-20T21:50:46.615Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:50:52Z",
+  "metric": "layout_laptop",
+  "value": 96.03,
+  "source": "timeline call 2026-10-20T21:50:46.615Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:50:52Z",
+  "metric": "layout_mobile",
+  "value": 98.11,
+  "source": "timeline call 2026-10-20T21:50:46.615Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:50:52Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T21:50:46.615Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:50:52Z",
+  "metric": "layout_wide",
+  "value": 99.77,
+  "source": "timeline call 2026-10-20T21:50:46.615Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:15Z",
+  "metric": "states_mean_desktop",
+  "value": 82.46,
+  "source": "timeline call 2026-10-20T21:53:13.220Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:15Z",
+  "metric": "states_mean_laptop",
+  "value": 78.54,
+  "source": "timeline call 2026-10-20T21:53:13.220Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:15Z",
+  "metric": "states_mean_mobile",
+  "value": 81.6,
+  "source": "timeline call 2026-10-20T21:53:13.220Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:15Z",
+  "metric": "states_mean_tablet",
+  "value": 81.09,
+  "source": "timeline call 2026-10-20T21:53:13.220Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:53:15Z",
+  "metric": "states_mean_wide",
+  "value": 80.16,
+  "source": "timeline call 2026-10-20T21:53:13.220Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:54:20Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T21:54:16.985Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:54:20Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T21:54:16.985Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:54:20Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T21:54:16.985Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:54:20Z",
+  "metric": "hovers_desktop",
+  "value": 78.6,
+  "source": "timeline call 2026-10-20T21:54:16.985Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:54:20Z",
+  "metric": "interactions_failing",
+  "value": 2,
+  "source": "timeline call 2026-10-20T21:54:16.985Z (score output: interact 2 FAIL)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:57:00.669Z",
+  "metric": "checks_below_target",
+  "value": 9,
+  "source": "timeline said 2026-10-20T21:57:00.669Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:57:00Z",
+  "metric": "load_desktop",
+  "value": 53.73,
+  "source": "timeline call 2026-10-20T21:56:46.330Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:57:00Z",
+  "metric": "load_laptop",
+  "value": 48.73,
+  "source": "timeline call 2026-10-20T21:56:46.330Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:57:00Z",
+  "metric": "load_mobile",
+  "value": 55.69,
+  "source": "timeline call 2026-10-20T21:56:46.330Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:57:00Z",
+  "metric": "load_tablet",
+  "value": 54.98,
+  "source": "timeline call 2026-10-20T21:56:46.330Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:57:00Z",
+  "metric": "load_wide",
+  "value": 51.03,
+  "source": "timeline call 2026-10-20T21:56:46.330Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:58:21.253Z",
+  "metric": "checks_below_target",
+  "value": 9,
+  "source": "timeline said 2026-10-20T21:58:21.253Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:58:21Z",
+  "metric": "layout_desktop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T21:58:15.220Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:58:21Z",
+  "metric": "layout_laptop",
+  "value": 98.75,
+  "source": "timeline call 2026-10-20T21:58:15.220Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:58:21Z",
+  "metric": "layout_mobile",
+  "value": 99.91,
+  "source": "timeline call 2026-10-20T21:58:15.220Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:58:21Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T21:58:15.220Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T21:58:21Z",
+  "metric": "layout_wide",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T21:58:15.220Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:00:07Z",
+  "metric": "states_mean_desktop",
+  "value": 84.94,
+  "source": "timeline call 2026-10-20T22:00:04.005Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:00:07Z",
+  "metric": "states_mean_laptop",
+  "value": 81.2,
+  "source": "timeline call 2026-10-20T22:00:04.005Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:00:07Z",
+  "metric": "states_mean_mobile",
+  "value": 84.21,
+  "source": "timeline call 2026-10-20T22:00:04.005Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:00:07Z",
+  "metric": "states_mean_tablet",
+  "value": 83.45,
+  "source": "timeline call 2026-10-20T22:00:04.005Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:00:07Z",
+  "metric": "states_mean_wide",
+  "value": 83.06,
+  "source": "timeline call 2026-10-20T22:00:04.005Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:01:01Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T22:00:58.435Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:01:01Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T22:00:58.435Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:01:01Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T22:00:58.435Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:01:01Z",
+  "metric": "hovers_desktop",
+  "value": 92.7,
+  "source": "timeline call 2026-10-20T22:00:58.435Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:01:01Z",
+  "metric": "interactions_failing",
+  "value": 2,
+  "source": "timeline call 2026-10-20T22:00:58.435Z (score output: interact 2 FAIL)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:04:14.026Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said 2026-10-20T22:04:14.026Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:04:14Z",
+  "metric": "load_desktop",
+  "value": 53.74,
+  "source": "timeline call 2026-10-20T22:03:43.923Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:04:14Z",
+  "metric": "load_laptop",
+  "value": 48.75,
+  "source": "timeline call 2026-10-20T22:03:43.923Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:04:14Z",
+  "metric": "load_mobile",
+  "value": 55.69,
+  "source": "timeline call 2026-10-20T22:03:43.923Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:04:14Z",
+  "metric": "load_tablet",
+  "value": 54.99,
+  "source": "timeline call 2026-10-20T22:03:43.923Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:04:14Z",
+  "metric": "load_wide",
+  "value": 51.03,
+  "source": "timeline call 2026-10-20T22:03:43.923Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:26:00.854Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said 2026-10-20T22:26:00.854Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:32:19Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-20T22:32:19.403Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:32:19Z",
+  "metric": "layout_desktop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T22:32:19.403Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:32:19Z",
+  "metric": "layout_laptop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T22:32:19.403Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:32:19Z",
+  "metric": "layout_mobile",
+  "value": 99.91,
+  "source": "timeline call 2026-10-20T22:32:19.403Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:32:19Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T22:32:19.403Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:32:19Z",
+  "metric": "layout_wide",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T22:32:19.403Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:32:19Z",
+  "metric": "states_mean_desktop",
+  "value": 86.82,
+  "source": "timeline call 2026-10-20T22:32:19.403Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:37.368Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said 2026-10-20T22:33:37.368Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:33:37Z",
+  "metric": "load_desktop",
+  "value": 76.43,
+  "source": "timeline call 2026-10-20T22:33:37.196Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30.285Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said 2026-10-20T22:35:30.285Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T22:35:02.992Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T22:35:02.992Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T22:35:02.992Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:35:30Z",
+  "metric": "hovers_desktop",
+  "value": 92.7,
+  "source": "timeline call 2026-10-20T22:35:02.992Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:37:10.015Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said 2026-10-20T22:37:10.015Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:43:48Z",
+  "metric": "layout_desktop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T22:43:42.398Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:43:48Z",
+  "metric": "layout_laptop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T22:43:42.398Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:43:48Z",
+  "metric": "layout_mobile",
+  "value": 99.92,
+  "source": "timeline call 2026-10-20T22:43:42.398Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:43:48Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T22:43:42.398Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:43:48Z",
+  "metric": "layout_wide",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T22:43:42.398Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:01Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-20T22:44:51.623Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:45:01Z",
+  "metric": "states_mean_desktop",
+  "value": 86.78,
+  "source": "timeline call 2026-10-20T22:44:51.623Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:46:00.493Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said 2026-10-20T22:46:00.493Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:47:29Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T22:47:23.092Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:47:29Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T22:47:23.092Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:47:29Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T22:47:23.092Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:47:39.173Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said 2026-10-20T22:47:39.173Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T22:51:12.303Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said 2026-10-20T22:51:12.303Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:00:34Z",
+  "metric": "layout_desktop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T23:00:29.789Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:00:34Z",
+  "metric": "layout_laptop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T23:00:29.789Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:00:34Z",
+  "metric": "layout_mobile",
+  "value": 99.92,
+  "source": "timeline call 2026-10-20T23:00:29.789Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:00:34Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T23:00:29.789Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:00:34Z",
+  "metric": "layout_wide",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T23:00:29.789Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:07:23.692Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said 2026-10-20T23:07:23.692Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:27.851Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said 2026-10-20T23:09:27.851Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:27Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:09:27.628Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:27Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T23:09:27.628Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:09:27Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:09:27.628Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:16:10Z",
+  "metric": "layout_desktop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T23:16:09.762Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:16:10Z",
+  "metric": "layout_laptop",
+  "value": 99.95,
+  "source": "timeline call 2026-10-20T23:16:09.762Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:16:10Z",
+  "metric": "layout_mobile",
+  "value": 99.92,
+  "source": "timeline call 2026-10-20T23:16:09.762Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:16:10Z",
+  "metric": "layout_tablet",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T23:16:09.762Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:16:10Z",
+  "metric": "layout_wide",
+  "value": 99.96,
+  "source": "timeline call 2026-10-20T23:16:09.762Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:17:48Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-20T23:17:48.021Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:17:48Z",
+  "metric": "states_mean_desktop",
+  "value": 99.05,
+  "source": "timeline call 2026-10-20T23:17:48.021Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:19:09.585Z",
+  "metric": "checks_below_target",
+  "value": 6,
+  "source": "timeline said 2026-10-20T23:19:09.585Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:19:09Z",
+  "metric": "load_desktop",
+  "value": 76.76,
+  "source": "timeline call 2026-10-20T23:19:09.401Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:21:22.906Z",
+  "metric": "checks_below_target",
+  "value": 4,
+  "source": "timeline said 2026-10-20T23:21:22.906Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:21:22Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:21:22.589Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:21:22Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T23:21:22.589Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:21:22Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:21:22.589Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:26:59.903Z",
+  "metric": "checks_below_target",
+  "value": 4,
+  "source": "timeline said 2026-10-20T23:26:59.903Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:30:34.173Z",
+  "metric": "checks_below_target",
+  "value": 11,
+  "source": "timeline said 2026-10-20T23:30:34.173Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:32:20Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:32:12.158Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:32:20Z",
+  "metric": "layout_laptop",
+  "value": 99.99,
+  "source": "timeline call 2026-10-20T23:32:12.158Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:32:20Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:32:12.158Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:32:20Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:32:12.158Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:32:20Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:32:12.158Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:34:28Z",
+  "metric": "states_mean_desktop",
+  "value": 99.03,
+  "source": "timeline call 2026-10-20T23:34:17.541Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:34:28Z",
+  "metric": "states_mean_laptop",
+  "value": 98.7,
+  "source": "timeline call 2026-10-20T23:34:17.541Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:34:28Z",
+  "metric": "states_mean_mobile",
+  "value": 96.97,
+  "source": "timeline call 2026-10-20T23:34:17.541Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:34:28Z",
+  "metric": "states_mean_tablet",
+  "value": 98.62,
+  "source": "timeline call 2026-10-20T23:34:17.541Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:34:28Z",
+  "metric": "states_mean_wide",
+  "value": 99.26,
+  "source": "timeline call 2026-10-20T23:34:17.541Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:35:31Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-20T23:35:19.875Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:39:31.658Z",
+  "metric": "checks_below_target",
+  "value": 4,
+  "source": "timeline said 2026-10-20T23:39:31.658Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:43:20.742Z",
+  "metric": "checks_below_target",
+  "value": 10,
+  "source": "timeline said 2026-10-20T23:43:20.742Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:45:37Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:45:37.309Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:45:37Z",
+  "metric": "layout_laptop",
+  "value": 99.99,
+  "source": "timeline call 2026-10-20T23:45:37.309Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:45:37Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:45:37.309Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:45:37Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:45:37.309Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:45:37Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:45:37.309Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:47:51Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-20T23:47:44.897Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:47:51Z",
+  "metric": "states_mean_desktop",
+  "value": 99.03,
+  "source": "timeline call 2026-10-20T23:47:44.897Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:47:51Z",
+  "metric": "states_mean_laptop",
+  "value": 98.72,
+  "source": "timeline call 2026-10-20T23:47:44.897Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:47:51Z",
+  "metric": "states_mean_mobile",
+  "value": 97.09,
+  "source": "timeline call 2026-10-20T23:47:44.897Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:47:51Z",
+  "metric": "states_mean_tablet",
+  "value": 98.62,
+  "source": "timeline call 2026-10-20T23:47:44.897Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:47:51Z",
+  "metric": "states_mean_wide",
+  "value": 99.22,
+  "source": "timeline call 2026-10-20T23:47:44.897Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:49:10Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:49:01.965Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:49:10Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-20T23:49:01.965Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:49:10Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-20T23:49:01.965Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:52:10.945Z",
+  "metric": "checks_below_target",
+  "value": 4,
+  "source": "timeline said 2026-10-20T23:52:10.945Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-20T23:58:22.189Z",
+  "metric": "checks_below_target",
+  "value": 10,
+  "source": "timeline said 2026-10-20T23:58:22.189Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "hovers_desktop",
+  "value": 92.7,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: interact 1 FAIL)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "states_mean_desktop",
+  "value": 99,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "states_mean_laptop",
+  "value": 98.69,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "states_mean_mobile",
+  "value": 97.12,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "states_mean_tablet",
+  "value": 98.59,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:03:20Z",
+  "metric": "states_mean_wide",
+  "value": 99.28,
+  "source": "timeline call 2026-10-21T00:03:19.929Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:04:34.200Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said 2026-10-21T00:04:34.200Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:04:34Z",
+  "metric": "load_desktop",
+  "value": 76.52,
+  "source": "timeline call 2026-10-21T00:04:34.065Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:04:34Z",
+  "metric": "load_laptop",
+  "value": 73.02,
+  "source": "timeline call 2026-10-21T00:04:34.065Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:04:34Z",
+  "metric": "load_mobile",
+  "value": 78.24,
+  "source": "timeline call 2026-10-21T00:04:34.065Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:04:34Z",
+  "metric": "load_tablet",
+  "value": 76.07,
+  "source": "timeline call 2026-10-21T00:04:34.065Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:04:34Z",
+  "metric": "load_wide",
+  "value": 74.59,
+  "source": "timeline call 2026-10-21T00:04:34.065Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:13:35.308Z",
+  "metric": "checks_below_target",
+  "value": 10,
+  "source": "timeline said 2026-10-21T00:13:35.308Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:16:46Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:16:46.743Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:16:46Z",
+  "metric": "layout_laptop",
+  "value": 99.99,
+  "source": "timeline call 2026-10-21T00:16:46.743Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:16:46Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:16:46.743Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:16:46Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:16:46.743Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:16:46Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:16:46.743Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:18:35Z",
+  "metric": "states_mean_desktop",
+  "value": 99.22,
+  "source": "timeline call 2026-10-21T00:18:35.397Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:18:35Z",
+  "metric": "states_mean_laptop",
+  "value": 99,
+  "source": "timeline call 2026-10-21T00:18:35.397Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:18:35Z",
+  "metric": "states_mean_mobile",
+  "value": 97.58,
+  "source": "timeline call 2026-10-21T00:18:35.397Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:18:35Z",
+  "metric": "states_mean_tablet",
+  "value": 98.9,
+  "source": "timeline call 2026-10-21T00:18:35.397Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:18:35Z",
+  "metric": "states_mean_wide",
+  "value": 99.35,
+  "source": "timeline call 2026-10-21T00:18:35.397Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:08Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:20:08.019Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:08Z",
+  "metric": "detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:20:08.019Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:08Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T00:20:08.019Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:08Z",
+  "metric": "hovers_desktop",
+  "value": 92.7,
+  "source": "timeline call 2026-10-21T00:20:08.019Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:20:08Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "timeline call 2026-10-21T00:20:08.019Z (score output: interact 1 FAIL)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:26:57.209Z",
+  "metric": "checks_below_target",
+  "value": 5,
+  "source": "timeline said 2026-10-21T00:26:57.209Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:26:57Z",
+  "metric": "load_desktop",
+  "value": 59.29,
+  "source": "timeline call 2026-10-21T00:26:56.437Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:26:57Z",
+  "metric": "load_laptop",
+  "value": 56.67,
+  "source": "timeline call 2026-10-21T00:26:56.437Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:26:57Z",
+  "metric": "load_mobile",
+  "value": 73.22,
+  "source": "timeline call 2026-10-21T00:26:56.437Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:26:57Z",
+  "metric": "load_tablet",
+  "value": 70.79,
+  "source": "timeline call 2026-10-21T00:26:56.437Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T00:26:57Z",
+  "metric": "load_wide",
+  "value": 47.88,
+  "source": "timeline call 2026-10-21T00:26:56.437Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:13:09.914Z",
+  "metric": "checks_below_target",
+  "value": 10,
+  "source": "timeline said 2026-10-21T04:13:09.914Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:42Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:14:42.155Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:42Z",
+  "metric": "layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:14:42.155Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:42Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:14:42.155Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:42Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:14:42.155Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:14:42Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:14:42.155Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:16:53Z",
+  "metric": "states_mean_desktop",
+  "value": 99.59,
+  "source": "timeline call 2026-10-21T04:16:53.340Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:16:53Z",
+  "metric": "states_mean_laptop",
+  "value": 99.34,
+  "source": "timeline call 2026-10-21T04:16:53.340Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:16:53Z",
+  "metric": "states_mean_mobile",
+  "value": 97.86,
+  "source": "timeline call 2026-10-21T04:16:53.340Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:16:53Z",
+  "metric": "states_mean_tablet",
+  "value": 99.25,
+  "source": "timeline call 2026-10-21T04:16:53.340Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:16:53Z",
+  "metric": "states_mean_wide",
+  "value": 99.77,
+  "source": "timeline call 2026-10-21T04:16:53.340Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:18:24Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:18:24.615Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:18:24Z",
+  "metric": "detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:18:24.615Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:18:24Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:18:24.615Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:18:24Z",
+  "metric": "hovers_desktop",
+  "value": 98.2,
+  "source": "timeline call 2026-10-21T04:18:24.615Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:18:24Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T04:18:24.615Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:24:58.847Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said 2026-10-21T04:24:58.847Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:27:08.613Z",
+  "metric": "checks_below_target",
+  "value": 3,
+  "source": "timeline said 2026-10-21T04:27:08.613Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:27:08Z",
+  "metric": "load_desktop",
+  "value": 76.02,
+  "source": "timeline call 2026-10-21T04:26:37.609Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:27:08Z",
+  "metric": "load_laptop",
+  "value": 72.66,
+  "source": "timeline call 2026-10-21T04:26:37.609Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:27:08Z",
+  "metric": "load_mobile",
+  "value": 76.41,
+  "source": "timeline call 2026-10-21T04:26:37.609Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:27:08Z",
+  "metric": "load_tablet",
+  "value": 76.23,
+  "source": "timeline call 2026-10-21T04:26:37.609Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:27:08Z",
+  "metric": "load_wide",
+  "value": 74.7,
+  "source": "timeline call 2026-10-21T04:26:37.609Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:31:56.294Z",
+  "metric": "checks_below_target",
+  "value": 10,
+  "source": "timeline said 2026-10-21T04:31:56.294Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:33:57Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:33:56.796Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:33:57Z",
+  "metric": "layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:33:56.796Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:33:57Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:33:56.796Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:33:57Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:33:56.796Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:33:57Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:33:56.796Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:36:04Z",
+  "metric": "states_mean_desktop",
+  "value": 99.52,
+  "source": "timeline call 2026-10-21T04:36:04.387Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:36:04Z",
+  "metric": "states_mean_laptop",
+  "value": 99.39,
+  "source": "timeline call 2026-10-21T04:36:04.387Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:36:04Z",
+  "metric": "states_mean_mobile",
+  "value": 97.9,
+  "source": "timeline call 2026-10-21T04:36:04.387Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:36:04Z",
+  "metric": "states_mean_tablet",
+  "value": 99.27,
+  "source": "timeline call 2026-10-21T04:36:04.387Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:36:04Z",
+  "metric": "states_mean_wide",
+  "value": 99.77,
+  "source": "timeline call 2026-10-21T04:36:04.387Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:02Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:36:51.362Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:02Z",
+  "metric": "detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:36:51.362Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:02Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:36:51.362Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:37:02Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T04:36:51.362Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:12.237Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said 2026-10-21T04:38:12.237Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:12Z",
+  "metric": "load_desktop",
+  "value": 99.33,
+  "source": "timeline call 2026-10-21T04:38:11.761Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:12Z",
+  "metric": "load_laptop",
+  "value": 95.79,
+  "source": "timeline call 2026-10-21T04:38:11.761Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:12Z",
+  "metric": "load_mobile",
+  "value": 98.57,
+  "source": "timeline call 2026-10-21T04:38:11.761Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:12Z",
+  "metric": "load_tablet",
+  "value": 99.49,
+  "source": "timeline call 2026-10-21T04:38:11.761Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:38:12Z",
+  "metric": "load_wide",
+  "value": 98.9,
+  "source": "timeline call 2026-10-21T04:38:11.761Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:41:53.819Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said 2026-10-21T04:41:53.819Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:42:42.109Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said 2026-10-21T04:42:42.109Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:46:55.904Z",
+  "metric": "checks_below_target",
+  "value": 2,
+  "source": "timeline said 2026-10-21T04:46:55.904Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:52:09.212Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T04:52:09.212Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:58Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:56:58.202Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:58Z",
+  "metric": "layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:56:58.202Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:58Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:56:58.202Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:58Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:56:58.202Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:56:58Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T04:56:58.202Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:58:37.059Z",
+  "metric": "checks_below_target",
+  "value": 4,
+  "source": "timeline said 2026-10-21T04:58:37.059Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:58:37Z",
+  "metric": "states_mean_desktop",
+  "value": 99.6,
+  "source": "timeline call 2026-10-21T04:58:23.922Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:58:37Z",
+  "metric": "states_mean_laptop",
+  "value": 99.34,
+  "source": "timeline call 2026-10-21T04:58:23.922Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:58:37Z",
+  "metric": "states_mean_mobile",
+  "value": 97.89,
+  "source": "timeline call 2026-10-21T04:58:23.922Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:58:37Z",
+  "metric": "states_mean_tablet",
+  "value": 99.16,
+  "source": "timeline call 2026-10-21T04:58:23.922Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T04:58:37Z",
+  "metric": "states_mean_wide",
+  "value": 99.76,
+  "source": "timeline call 2026-10-21T04:58:23.922Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:01:30Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T05:01:30.333Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:09:13.167Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T05:09:13.167Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:23:17Z",
+  "metric": "motion_mobile",
+  "value": 99,
+  "source": "timeline call 2026-10-21T05:23:17.741Z (score output: curves mobile ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:23:17Z",
+  "metric": "motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:23:17.741Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:32.716Z",
+  "metric": "checks_below_target",
+  "value": 8,
+  "source": "timeline said 2026-10-21T05:25:32.716Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:25:32Z",
+  "metric": "motion_desktop",
+  "value": 98.1,
+  "source": "timeline call 2026-10-21T05:25:32.385Z (score output: curves desktop ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:29:29Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:29:29.183Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:29:29Z",
+  "metric": "layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:29:29.183Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:29:29Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:29:29.183Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:29:29Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:29:29.183Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:29:29Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:29:29.183Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "detail_desktop",
+  "value": 97.7,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "interactions_failing",
+  "value": 1,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: interact 1 FAIL)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "states_mean_desktop",
+  "value": 99.58,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "states_mean_laptop",
+  "value": 99.27,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "states_mean_mobile",
+  "value": 98.35,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "states_mean_tablet",
+  "value": 99.36,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:31:39Z",
+  "metric": "states_mean_wide",
+  "value": 99.77,
+  "source": "timeline call 2026-10-21T05:31:38.809Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:34:13Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:34:13.681Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:36:45.770Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T05:36:45.770Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:36:45Z",
+  "metric": "load_desktop",
+  "value": 99.42,
+  "source": "timeline call 2026-10-21T05:36:18.021Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:36:45Z",
+  "metric": "load_laptop",
+  "value": 96.25,
+  "source": "timeline call 2026-10-21T05:36:18.021Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:36:45Z",
+  "metric": "load_mobile",
+  "value": 98.14,
+  "source": "timeline call 2026-10-21T05:36:18.021Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:36:45Z",
+  "metric": "load_tablet",
+  "value": 99.88,
+  "source": "timeline call 2026-10-21T05:36:18.021Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:36:45Z",
+  "metric": "load_wide",
+  "value": 98.7,
+  "source": "timeline call 2026-10-21T05:36:18.021Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:40:23.767Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T05:40:23.767Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:45:43Z",
+  "metric": "next_layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:45:43.116Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:45:43Z",
+  "metric": "next_layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:45:43.116Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:45:43Z",
+  "metric": "next_layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:45:43.116Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:45:43Z",
+  "metric": "next_layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:45:43.116Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:45:43Z",
+  "metric": "next_layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:45:43.116Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:48:02Z",
+  "metric": "next_states_mean_desktop",
+  "value": 99.61,
+  "source": "timeline call 2026-10-21T05:48:01.970Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:48:02Z",
+  "metric": "next_states_mean_laptop",
+  "value": 99.33,
+  "source": "timeline call 2026-10-21T05:48:01.970Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:48:02Z",
+  "metric": "next_states_mean_mobile",
+  "value": 98.39,
+  "source": "timeline call 2026-10-21T05:48:01.970Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:48:02Z",
+  "metric": "next_states_mean_tablet",
+  "value": 99.33,
+  "source": "timeline call 2026-10-21T05:48:01.970Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:48:02Z",
+  "metric": "next_states_mean_wide",
+  "value": 99.77,
+  "source": "timeline call 2026-10-21T05:48:01.970Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:50:32Z",
+  "metric": "next_motion_mobile",
+  "value": 99,
+  "source": "timeline call 2026-10-21T05:50:31.831Z (score output: curves mobile ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:50:32Z",
+  "metric": "next_motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:50:31.831Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:52:23Z",
+  "metric": "next_motion_desktop",
+  "value": 97.9,
+  "source": "timeline call 2026-10-21T05:52:23.107Z (score output: curves desktop ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:54:56Z",
+  "metric": "next_detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:54:56.536Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:54:56Z",
+  "metric": "next_detail_mobile",
+  "value": 98.4,
+  "source": "timeline call 2026-10-21T05:54:56.536Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:54:56Z",
+  "metric": "next_detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:54:56.536Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:54:56Z",
+  "metric": "next_hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T05:54:56.536Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T05:54:56Z",
+  "metric": "next_interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T05:54:56.536Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:05:21.973Z",
+  "metric": "next_checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T06:05:21.973Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:17:32Z",
+  "metric": "states_mean_desktop",
+  "value": 99.59,
+  "source": "timeline call 2026-10-21T06:17:24.974Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:17:32Z",
+  "metric": "states_mean_laptop",
+  "value": 99.3,
+  "source": "timeline call 2026-10-21T06:17:24.974Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:17:32Z",
+  "metric": "states_mean_mobile",
+  "value": 98.36,
+  "source": "timeline call 2026-10-21T06:17:24.974Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:17:32Z",
+  "metric": "states_mean_tablet",
+  "value": 99.37,
+  "source": "timeline call 2026-10-21T06:17:24.974Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:17:32Z",
+  "metric": "states_mean_wide",
+  "value": 99.77,
+  "source": "timeline call 2026-10-21T06:17:24.974Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:19:51Z",
+  "metric": "motion_mobile",
+  "value": 98.6,
+  "source": "timeline call 2026-10-21T06:19:48.983Z (score output: curves mobile ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:19:51Z",
+  "metric": "motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:19:48.983Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:23:09Z",
+  "metric": "motion_desktop",
+  "value": 98.4,
+  "source": "timeline call 2026-10-21T06:23:04.528Z (score output: curves desktop ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:14Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:24:05.037Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:14Z",
+  "metric": "detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:24:05.037Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:14Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:24:05.037Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:14Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:24:05.037Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:14Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T06:24:05.037Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:53.621Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T06:24:53.621Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:53.621Z",
+  "metric": "next_checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T06:24:53.621Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:53Z",
+  "metric": "load_desktop",
+  "value": 99.39,
+  "source": "timeline call 2026-10-21T06:24:35.109Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:53Z",
+  "metric": "load_laptop",
+  "value": 81.04,
+  "source": "timeline call 2026-10-21T06:24:35.109Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:53Z",
+  "metric": "load_mobile",
+  "value": 98.19,
+  "source": "timeline call 2026-10-21T06:24:35.109Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:53Z",
+  "metric": "load_tablet",
+  "value": 99.19,
+  "source": "timeline call 2026-10-21T06:24:35.109Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:24:53Z",
+  "metric": "load_wide",
+  "value": 98.94,
+  "source": "timeline call 2026-10-21T06:24:35.109Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:27:25.425Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T06:27:25.425Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:27:25.425Z",
+  "metric": "next_checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T06:27:25.425Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:29:09.118Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T06:29:09.118Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:29:09.118Z",
+  "metric": "next_checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T06:29:09.118Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:29:09Z",
+  "metric": "load_desktop",
+  "value": 99.02,
+  "source": "timeline call 2026-10-21T06:29:08.385Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:29:09Z",
+  "metric": "load_laptop",
+  "value": 96.8,
+  "source": "timeline call 2026-10-21T06:29:08.385Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:29:09Z",
+  "metric": "load_mobile",
+  "value": 99.55,
+  "source": "timeline call 2026-10-21T06:29:08.385Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:29:09Z",
+  "metric": "load_tablet",
+  "value": 99.35,
+  "source": "timeline call 2026-10-21T06:29:08.385Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:29:09Z",
+  "metric": "load_wide",
+  "value": 98.14,
+  "source": "timeline call 2026-10-21T06:29:08.385Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_mean_desktop",
+  "value": 98.2,
+  "source": "sites/varsity/compare/next-states-184-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_mean_laptop",
+  "value": 99.14,
+  "source": "sites/varsity/compare/next-states-184-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_mean_mobile",
+  "value": 94.88,
+  "source": "sites/varsity/compare/next-states-184-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_mean_tablet",
+  "value": 99.25,
+  "source": "sites/varsity/compare/next-states-184-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_mean_wide",
+  "value": 99.56,
+  "source": "sites/varsity/compare/next-states-184-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_worst_desktop",
+  "value": 92.81,
+  "source": "sites/varsity/compare/next-states-184-evidence.json (y 7650)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_worst_laptop",
+  "value": 96.28,
+  "source": "sites/varsity/compare/next-states-184-evidence.json (y 5040)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_worst_mobile",
+  "value": 50.74,
+  "source": "sites/varsity/compare/next-states-184-evidence.json (y 7597)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_worst_tablet",
+  "value": 96.68,
+  "source": "sites/varsity/compare/next-states-184-evidence.json (y 7680)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:32:32.824Z",
+  "metric": "next_canvas_worst_wide",
+  "value": 98.41,
+  "source": "sites/varsity/compare/next-states-184-evidence.json (y 7559)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:34:53Z",
+  "metric": "next_layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:34:46.382Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:34:53Z",
+  "metric": "next_layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:34:46.382Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:34:53Z",
+  "metric": "next_layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:34:46.382Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:34:53Z",
+  "metric": "next_layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:34:46.382Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:34:53Z",
+  "metric": "next_layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:34:46.382Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:36:05Z",
+  "metric": "next_states_mean_desktop",
+  "value": 99.5,
+  "source": "timeline call 2026-10-21T06:35:59.301Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:36:05Z",
+  "metric": "next_states_mean_laptop",
+  "value": 99.36,
+  "source": "timeline call 2026-10-21T06:35:59.301Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:36:05Z",
+  "metric": "next_states_mean_mobile",
+  "value": 98.25,
+  "source": "timeline call 2026-10-21T06:35:59.301Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:36:05Z",
+  "metric": "next_states_mean_tablet",
+  "value": 99.33,
+  "source": "timeline call 2026-10-21T06:35:59.301Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:36:05Z",
+  "metric": "next_states_mean_wide",
+  "value": 99.75,
+  "source": "timeline call 2026-10-21T06:35:59.301Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:38:29Z",
+  "metric": "next_motion_mobile",
+  "value": 99,
+  "source": "timeline call 2026-10-21T06:38:26.596Z (score output: curves mobile ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:38:29Z",
+  "metric": "next_motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:38:26.596Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:42:00Z",
+  "metric": "next_detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:41:59.325Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:42:00Z",
+  "metric": "next_detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:41:59.325Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:42:00Z",
+  "metric": "next_detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:41:59.325Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:42:00Z",
+  "metric": "next_interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T06:41:59.325Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:42:00Z",
+  "metric": "next_motion_desktop",
+  "value": 98.3,
+  "source": "timeline call 2026-10-21T06:41:59.325Z (score output: curves desktop ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:43:09Z",
+  "metric": "next_hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:43:09.318Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:14.357Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T06:44:14.357Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:14Z",
+  "metric": "next_load_desktop",
+  "value": 98.94,
+  "source": "timeline call 2026-10-21T06:44:13.952Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:14Z",
+  "metric": "next_load_laptop",
+  "value": 95.86,
+  "source": "timeline call 2026-10-21T06:44:13.952Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:14Z",
+  "metric": "next_load_mobile",
+  "value": 98.32,
+  "source": "timeline call 2026-10-21T06:44:13.952Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:14Z",
+  "metric": "next_load_tablet",
+  "value": 99.28,
+  "source": "timeline call 2026-10-21T06:44:13.952Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:44:14Z",
+  "metric": "next_load_wide",
+  "value": 99.49,
+  "source": "timeline call 2026-10-21T06:44:13.952Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_mean_desktop",
+  "value": 95,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_mean_laptop",
+  "value": 98.99,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_mean_mobile",
+  "value": 91.07,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_mean_tablet",
+  "value": 97.09,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_mean_wide",
+  "value": 99.03,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_worst_desktop",
+  "value": 49.92,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json (y 7650)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_worst_laptop",
+  "value": 95.21,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json (y 5399)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_worst_mobile",
+  "value": 6.61,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json (y 7596)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_worst_tablet",
+  "value": 78.53,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json (y 7680)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:54:29.205Z",
+  "metric": "canvas_worst_wide",
+  "value": 96.88,
+  "source": "sites/varsity/compare/controller-187-states-evidence.json (y 5399)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:57:29Z",
+  "metric": "layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:57:28.638Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:57:29Z",
+  "metric": "layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:57:28.638Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:57:29Z",
+  "metric": "layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:57:28.638Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:57:29Z",
+  "metric": "layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:57:28.638Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:57:29Z",
+  "metric": "layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T06:57:28.638Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:52Z",
+  "metric": "states_mean_desktop",
+  "value": 99.59,
+  "source": "timeline call 2026-10-21T06:58:52.604Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:52Z",
+  "metric": "states_mean_laptop",
+  "value": 99.32,
+  "source": "timeline call 2026-10-21T06:58:52.604Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:52Z",
+  "metric": "states_mean_mobile",
+  "value": 98.34,
+  "source": "timeline call 2026-10-21T06:58:52.604Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:52Z",
+  "metric": "states_mean_tablet",
+  "value": 99.19,
+  "source": "timeline call 2026-10-21T06:58:52.604Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T06:58:52Z",
+  "metric": "states_mean_wide",
+  "value": 99.68,
+  "source": "timeline call 2026-10-21T06:58:52.604Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:00:24Z",
+  "metric": "motion_mobile",
+  "value": 99,
+  "source": "timeline call 2026-10-21T07:00:24.253Z (score output: curves mobile ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:00:24Z",
+  "metric": "motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:00:24.253Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:17Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:04:17.205Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:17Z",
+  "metric": "detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:04:17.205Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:17Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:04:17.205Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:17Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T07:04:17.205Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:04:17Z",
+  "metric": "motion_desktop",
+  "value": 98.2,
+  "source": "timeline call 2026-10-21T07:04:17.205Z (score output: curves desktop ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:05:52Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:05:52.389Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:05:52Z",
+  "metric": "load_desktop",
+  "value": 99.09,
+  "source": "timeline call 2026-10-21T07:05:52.389Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:05:52Z",
+  "metric": "load_laptop",
+  "value": 96.78,
+  "source": "timeline call 2026-10-21T07:05:52.389Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:05:52Z",
+  "metric": "load_mobile",
+  "value": 99.5,
+  "source": "timeline call 2026-10-21T07:05:52.389Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:05:52Z",
+  "metric": "load_tablet",
+  "value": 99.2,
+  "source": "timeline call 2026-10-21T07:05:52.389Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:05:52Z",
+  "metric": "load_wide",
+  "value": 97.2,
+  "source": "timeline call 2026-10-21T07:05:52.389Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:06:44.877Z",
+  "metric": "checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T07:06:44.877Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:06:44.877Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T07:06:44.877Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:09:38.526Z",
+  "metric": "canvas_mean_desktop",
+  "value": 97.11,
+  "source": "sites/varsity/compare/states-192-partial-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:09:38.526Z",
+  "metric": "canvas_worst_desktop",
+  "value": 67.63,
+  "source": "sites/varsity/compare/states-192-partial-evidence.json (y 7650)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:12:47.500Z",
+  "metric": "checks_below_target",
+  "value": 7,
+  "source": "timeline said 2026-10-21T07:12:47.500Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:12:47.500Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T07:12:47.500Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:12:47Z",
+  "metric": "states_mean_desktop",
+  "value": 99.48,
+  "source": "timeline call 2026-10-21T07:12:47.133Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:17:43Z",
+  "metric": "motion_mobile",
+  "value": 99,
+  "source": "timeline call 2026-10-21T07:17:42.989Z (score output: curves mobile ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:17:43Z",
+  "metric": "motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:17:42.989Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:01Z",
+  "metric": "detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:22:01.442Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:01Z",
+  "metric": "detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:22:01.442Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:01Z",
+  "metric": "detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:22:01.442Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:01Z",
+  "metric": "hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:22:01.442Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:01Z",
+  "metric": "interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T07:22:01.442Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:01Z",
+  "metric": "motion_desktop",
+  "value": 98.4,
+  "source": "timeline call 2026-10-21T07:22:01.442Z (score output: curves desktop ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:42.497Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T07:22:42.497Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:42.497Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T07:22:42.497Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:42Z",
+  "metric": "load_desktop",
+  "value": 99.87,
+  "source": "timeline call 2026-10-21T07:22:41.791Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:42Z",
+  "metric": "load_laptop",
+  "value": 96.66,
+  "source": "timeline call 2026-10-21T07:22:41.791Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:42Z",
+  "metric": "load_mobile",
+  "value": 98.25,
+  "source": "timeline call 2026-10-21T07:22:41.791Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:42Z",
+  "metric": "load_tablet",
+  "value": 99.74,
+  "source": "timeline call 2026-10-21T07:22:41.791Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:22:42Z",
+  "metric": "load_wide",
+  "value": 98.19,
+  "source": "timeline call 2026-10-21T07:22:41.791Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_mean_desktop",
+  "value": 98.78,
+  "source": "sites/varsity/compare/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_mean_laptop",
+  "value": 98.98,
+  "source": "sites/varsity/compare/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_mean_mobile",
+  "value": 96.97,
+  "source": "sites/varsity/compare/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_mean_tablet",
+  "value": 98.53,
+  "source": "sites/varsity/compare/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_mean_wide",
+  "value": 99.52,
+  "source": "sites/varsity/compare/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_worst_desktop",
+  "value": 94.92,
+  "source": "sites/varsity/compare/states/report.mask.json (y 5400)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_worst_laptop",
+  "value": 96.72,
+  "source": "sites/varsity/compare/states/report.mask.json (y 5400)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_worst_mobile",
+  "value": 72.51,
+  "source": "sites/varsity/compare/states/report.mask.json (y 7596)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_worst_tablet",
+  "value": 91.65,
+  "source": "sites/varsity/compare/states/report.mask.json (y 7680)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:23:20.100Z",
+  "metric": "canvas_worst_wide",
+  "value": 97.87,
+  "source": "sites/varsity/compare/states/report.mask.json (y 7561)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:26:24.429Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T07:26:24.429Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:26:24.429Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T07:26:24.429Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:26:24Z",
+  "metric": "states_mean_desktop",
+  "value": 99.51,
+  "source": "timeline call 2026-10-21T07:26:05.960Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:26:24Z",
+  "metric": "states_mean_laptop",
+  "value": 99.34,
+  "source": "timeline call 2026-10-21T07:26:05.960Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:26:24Z",
+  "metric": "states_mean_mobile",
+  "value": 98.37,
+  "source": "timeline call 2026-10-21T07:26:05.960Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:26:24Z",
+  "metric": "states_mean_tablet",
+  "value": 99.4,
+  "source": "timeline call 2026-10-21T07:26:05.960Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:26:24Z",
+  "metric": "states_mean_wide",
+  "value": 99.69,
+  "source": "timeline call 2026-10-21T07:26:05.960Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:36:45.331Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T07:36:45.331Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:36:45.331Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T07:36:45.331Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_mean_desktop",
+  "value": 95.95,
+  "source": "sites/varsity/compare/next-states-202-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_mean_laptop",
+  "value": 99.38,
+  "source": "sites/varsity/compare/next-states-202-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_mean_mobile",
+  "value": 96.93,
+  "source": "sites/varsity/compare/next-states-202-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_mean_tablet",
+  "value": 98.28,
+  "source": "sites/varsity/compare/next-states-202-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_mean_wide",
+  "value": 99.58,
+  "source": "sites/varsity/compare/next-states-202-evidence.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_worst_desktop",
+  "value": 49.57,
+  "source": "sites/varsity/compare/next-states-202-evidence.json (y 7650)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_worst_laptop",
+  "value": 97.79,
+  "source": "sites/varsity/compare/next-states-202-evidence.json (y 5400)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_worst_mobile",
+  "value": 87.13,
+  "source": "sites/varsity/compare/next-states-202-evidence.json (y 7597)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_worst_tablet",
+  "value": 90.23,
+  "source": "sites/varsity/compare/next-states-202-evidence.json (y 7679)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:38:58.081Z",
+  "metric": "next_canvas_worst_wide",
+  "value": 98.12,
+  "source": "sites/varsity/compare/next-states-202-evidence.json (y 7560)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:41:00Z",
+  "metric": "next_layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:41:00.265Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:41:00Z",
+  "metric": "next_layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:41:00.265Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:41:00Z",
+  "metric": "next_layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:41:00.265Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:41:00Z",
+  "metric": "next_layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:41:00.265Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:41:00Z",
+  "metric": "next_layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:41:00.265Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:43:30Z",
+  "metric": "next_states_mean_desktop",
+  "value": 99.56,
+  "source": "timeline call 2026-10-21T07:43:30.076Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:43:30Z",
+  "metric": "next_states_mean_laptop",
+  "value": 99.25,
+  "source": "timeline call 2026-10-21T07:43:30.076Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:43:30Z",
+  "metric": "next_states_mean_mobile",
+  "value": 98.31,
+  "source": "timeline call 2026-10-21T07:43:30.076Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:43:30Z",
+  "metric": "next_states_mean_tablet",
+  "value": 99.25,
+  "source": "timeline call 2026-10-21T07:43:30.076Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:43:30Z",
+  "metric": "next_states_mean_wide",
+  "value": 99.67,
+  "source": "timeline call 2026-10-21T07:43:30.076Z (score output: states ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:45:47Z",
+  "metric": "next_motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:45:46.514Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:47:19Z",
+  "metric": "next_motion_desktop",
+  "value": 98.3,
+  "source": "timeline call 2026-10-21T07:47:19.338Z (score output: curves desktop ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:50:12Z",
+  "metric": "next_detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:50:11.315Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:50:12Z",
+  "metric": "next_detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:50:11.315Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:50:12Z",
+  "metric": "next_detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:50:11.315Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:50:12Z",
+  "metric": "next_hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T07:50:11.315Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:50:12Z",
+  "metric": "next_interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T07:50:11.315Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:12.259Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T07:54:12.259Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:12Z",
+  "metric": "next_load_desktop",
+  "value": 97.82,
+  "source": "timeline call 2026-10-21T07:54:12.004Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:12Z",
+  "metric": "next_load_laptop",
+  "value": 95.73,
+  "source": "timeline call 2026-10-21T07:54:12.004Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:12Z",
+  "metric": "next_load_mobile",
+  "value": 97.34,
+  "source": "timeline call 2026-10-21T07:54:12.004Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:12Z",
+  "metric": "next_load_tablet",
+  "value": 98.02,
+  "source": "timeline call 2026-10-21T07:54:12.004Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:54:12Z",
+  "metric": "next_load_wide",
+  "value": 99.31,
+  "source": "timeline call 2026-10-21T07:54:12.004Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_mean_desktop",
+  "value": 94.82,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_mean_laptop",
+  "value": 98.67,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_mean_mobile",
+  "value": 95.14,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_mean_tablet",
+  "value": 98.1,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_mean_wide",
+  "value": 98.71,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_worst_desktop",
+  "value": 51.55,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json (y 7650)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_worst_laptop",
+  "value": 93.25,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json (y 5400)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_worst_mobile",
+  "value": 44.65,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json (y 7597)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_worst_tablet",
+  "value": 81.22,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json (y 7680)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T07:59:57.043Z",
+  "metric": "refself_canvas_worst_wide",
+  "value": 92.99,
+  "source": "sites/varsity/compare-reference-self-1/states/report.mask.json (y 5400)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_mean_desktop",
+  "value": 95.85,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_mean_laptop",
+  "value": 99.46,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_mean_mobile",
+  "value": 94.08,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_mean_tablet",
+  "value": 98.8,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_mean_wide",
+  "value": 99.74,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_worst_desktop",
+  "value": 49.21,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json (y 7650)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_worst_laptop",
+  "value": 98.13,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json (y 7560)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_worst_mobile",
+  "value": 48.23,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json (y 7596)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_worst_tablet",
+  "value": 92.84,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json (y 5632)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:06:21.373Z",
+  "metric": "refself_canvas_worst_wide",
+  "value": 99.1,
+  "source": "sites/varsity/compare-reference-self-2/states/report.mask.json (y 6480)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_mean_desktop",
+  "value": 95.79,
+  "source": "sites/varsity/compare-next/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_mean_laptop",
+  "value": 99.41,
+  "source": "sites/varsity/compare-next/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_mean_mobile",
+  "value": 96.71,
+  "source": "sites/varsity/compare-next/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_mean_tablet",
+  "value": 97.17,
+  "source": "sites/varsity/compare-next/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_mean_wide",
+  "value": 99.52,
+  "source": "sites/varsity/compare-next/states/report.mask.json",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_worst_desktop",
+  "value": 50.28,
+  "source": "sites/varsity/compare-next/states/report.mask.json (y 7650)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_worst_laptop",
+  "value": 97.79,
+  "source": "sites/varsity/compare-next/states/report.mask.json (y 5040)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_worst_mobile",
+  "value": 75.41,
+  "source": "sites/varsity/compare-next/states/report.mask.json (y 7174)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_worst_tablet",
+  "value": 75.26,
+  "source": "sites/varsity/compare-next/states/report.mask.json (y 7681)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:15:20.048Z",
+  "metric": "next_canvas_worst_wide",
+  "value": 98.07,
+  "source": "sites/varsity/compare-next/states/report.mask.json (y 7560)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:17:00Z",
+  "metric": "next_layout_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:16:55.105Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:17:00Z",
+  "metric": "next_layout_laptop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:16:55.105Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:17:00Z",
+  "metric": "next_layout_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:16:55.105Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:17:00Z",
+  "metric": "next_layout_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:16:55.105Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:17:00Z",
+  "metric": "next_layout_wide",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:16:55.105Z (score output: layout ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:20:59Z",
+  "metric": "next_motion_mobile",
+  "value": 99.2,
+  "source": "timeline call 2026-10-21T08:20:53.202Z (score output: curves mobile ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:20:59Z",
+  "metric": "next_motion_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:20:53.202Z (score output: curves tablet ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:25:03Z",
+  "metric": "next_detail_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:24:58.356Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:25:03Z",
+  "metric": "next_detail_mobile",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:24:58.356Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:25:03Z",
+  "metric": "next_detail_tablet",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:24:58.356Z (score output: detail ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:25:03Z",
+  "metric": "next_hovers_desktop",
+  "value": 100,
+  "source": "timeline call 2026-10-21T08:24:58.356Z (score output: hovers ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:25:03Z",
+  "metric": "next_interactions_failing",
+  "value": 0,
+  "source": "timeline call 2026-10-21T08:24:58.356Z (score output: interact ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:26:24.999Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T08:26:24.999Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:26:24Z",
+  "metric": "next_load_desktop",
+  "value": 98.63,
+  "source": "timeline call 2026-10-21T08:26:19.971Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:26:24Z",
+  "metric": "next_load_laptop",
+  "value": 95.52,
+  "source": "timeline call 2026-10-21T08:26:19.971Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:26:24Z",
+  "metric": "next_load_mobile",
+  "value": 97.21,
+  "source": "timeline call 2026-10-21T08:26:19.971Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:26:24Z",
+  "metric": "next_load_tablet",
+  "value": 98.99,
+  "source": "timeline call 2026-10-21T08:26:19.971Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:26:24Z",
+  "metric": "next_load_wide",
+  "value": 99.13,
+  "source": "timeline call 2026-10-21T08:26:19.971Z (score output: load ok)",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:34:56.309Z",
+  "metric": "checks_below_target",
+  "value": 0,
+  "source": "timeline said 2026-10-21T08:34:56.309Z",
+  "kind": "measured"
+ },
+ {
+  "t": "2026-10-21T08:34:56.309Z",
+  "metric": "next_checks_below_target",
+  "value": 1,
+  "source": "timeline said 2026-10-21T08:34:56.309Z",
+  "kind": "measured"
+ }
+]
