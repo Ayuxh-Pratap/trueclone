@@ -172,7 +172,21 @@ reference frames. Nothing marked as out of date:
 | The loop's history (`compare/loop.json`) | **kept** (same reference id); objectives whose results are invalid wait for new measurements; attempts count again only on new measurements |
 | rc.5 evidence (REPORT, probes, stack traces) | **kept**: archive it before continuing (the copy is in the continuation prompt) |
 
-Every step is one status names in turn. Nothing is edited by hand.
+Every step is one status names in turn, in this order: `journey`, `calibrate`, `seed`, the scores, the review. The
+bundle is checked before the calibration because recording it again re-reads the reference journey, which the
+calibration replays. Nothing is edited by hand.
+
+**Dry run on a copy of the RC5 zero folder** (the preserved run untouched), with the rc.6 code:
+
+| Step | Took | Result |
+|---|---|---|
+| `journey zero` | 7 min | bundle and reference journey read again, past the gate at both sizes |
+| `calibrate zero` | 14 min | 57 keys |
+| `seed zero` | 1 s | 68 files, all whole |
+| `score zero --only journey,load` | 9 min | journey desktop 89.68, mobile 87.98 (RC5: 1.11, 20.27); load 99.5-99.9 (RC5: 44-48) |
+| next | — | review verdicts for the 55 frames |
+
+The continuation procedure and prompt are in `docs/pilot-rc6-zero.md`.
 
 ## 7. Verification
 
