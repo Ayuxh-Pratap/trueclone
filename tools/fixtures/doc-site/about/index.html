@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fixture: about</title>
+<link rel="stylesheet" href="../site.css">
+</head>
+<body>
+<header class="top"><a class="brand" href="/">Fixture</a><nav><a href="/about/">About</a></nav></header>
+<section class="hero"><h1>About this fixture</h1><p>A separate page with two inline scripts of its own.</p></section>
+<section class="faq"><button class="theme" type="button">Toggle theme</button> <button class="side" type="button">Toggle sidebar</button></section>
+<footer class="foot">Fixture footer</footer>
+<!-- two different inline scripts on a route served at a trailing slash (as RC4 astro's routes were) -->
+<script>
+  document.querySelector('.theme').addEventListener('click', () => { document.body.style.background = document.body.style.background ? '' : '#222'; });
+</script>
+<script>
+  document.querySelector('.side').addEventListener('click', () => { document.querySelector('.faq').classList.toggle('open'); localStorage.setItem('sidebar', 'toggled'); });
+</script>
+</body>
+</html>

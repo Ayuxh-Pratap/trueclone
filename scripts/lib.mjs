@@ -104,10 +104,54 @@ export async function openBrowser(cdp) {
 // The same "random" on both sides of a canvas app: Math.random replaced, before any script runs, by a generator with a
 // fixed seed, so a scene that scatters particles or picks a colour at random draws the same on the reference and on
 // the clone, and from one run to the next (an init script: pass to page.addInitScript or context.addInitScript)
+// It counts its draws (window.__tcDraws): two sides that draw a different number of values before a shuffle show a
+// different order for a reason the seed cannot remove, and the count says so.
 export function seededRandomInPage(seed = 20261021) {
   let s = seed >>> 0;
-  Math.random = function random() { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  window.__tcDraws = 0;
+  Math.random = function random() { window.__tcDraws++; s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+
+// Symmetric measurement (docs/plan-rc5/PLAN.md §4, decisions D1 and D2). Every page any check opens, on the reference
+// and on the clone alike, is opened under the same controls, applied through the browser context only (never written
+// into the clone's files):
+//   seed    Math.random seeded the same on both sides, so a gallery shuffled at startup by the same rule shows the same
+//           order (and a clone with another rule, or a fixed order, shows a different one)
+//   clock   Date and performance start at the same instant on both sides (Playwright's clock, running at real speed:
+//           timers and animation frames run as usual), so a page that shows the time or the date shows the same one
+//   motion  prefers-reduced-motion: no-preference: the page every visitor without the setting sees is the one compared.
+//           The reduced-motion page is a separate check (diff --reduce), never a stand-in for the animated one (D2)
+//   loops   before a still, every endless CSS/WAAPI animation is put at the same time, LOOP_AGE ms, and held: equal and
+//           not zero, so a stopped, reversed or faster loop is not at the same place (seekLoops)
+// `TC_STABILISE=0` turns seed and clock off (the behaviour check's live pass opens its pages that way on purpose).
+export const SEED = 20261021;
+export const CLOCK_EPOCH = '2026-01-15T12:00:00.000Z';
+export const LOOP_AGE = 2300;
+// A still is taken at the same virtual age on both sides (holdStill): STILL_AGE ms after the page's DOMContentLoaded,
+// with every timer due by then fired in order (an autoplay carousel that steps every 3 s is on the same slide), and the
+// clock held while the picture is taken. RC4 shot the reference whenever the capture got there and the clone whenever
+// its check did: the carousel was on another slide, and the reference "varied" against itself by 85-96 points there.
+// 46.3 s, not a round number: a timer started at DOMContentLoaded with a common interval (1, 2, 2.5, 3, 4, 5, 6, 8 s)
+// is at least 300 ms from a step here, and at every scroll step after it (states.mjs adds 10 s per step), so a few ms
+// of jitter between two loads never lands one side a slide further (a hold at 45 s did, on a 3 s carousel)
+export const STILL_AGE = 46300;
+export const STABILISERS = { seed: SEED, clock: CLOCK_EPOCH, motion: 'no-preference', loops: `held at ${LOOP_AGE} ms`, stills: `at ${STILL_AGE / 1000} s of page time` };
+
+// Hold the page's clock at `age` ms after its DOMContentLoaded: pause where it is (no jump), then run every timer and
+// frame callback up to that age, in order. The page must have been opened with the clock (newPage). Returns whether it
+// held, and whether the page was already older (then it is held where it is, and says so).
+export async function holdStill(page, age = STILL_AGE) {
+  try {
+    const [now, dcl] = await page.evaluate(() => [Date.now(), window.__tcDcl || null]);
+    if (!dcl) return { held: false, why: 'no clock on this page' };
+    // paused 100 ms ahead of the time read (the page's clock runs on while this call travels): never in its past
+    await page.clock.pauseAt(now + 100);
+    const elapsed = now + 100 - dcl;
+    if (elapsed < age) await page.clock.runFor(age - elapsed);
+    return { held: true, age: Math.max(age, elapsed), late: elapsed > age };
+  } catch (e) { return { held: false, why: String(e.message).split('\n')[0] }; }
+}
+export const releaseStill = (page) => page.clock.resume().catch(() => {});
 
 // Own-bundle recording (exact mode, a canvas app, with the owner's permission): every response the app loads (its
 // documents, scripts and modules, wasm decoders, workers, models, textures, data), saved at its own address under
@@ -164,6 +208,8 @@ export async function withMachineLock(label, fn, { limitMs = 20 * 60 * 1000 } = 
       waited += 1000;
     }
   }
+  // the wait is reported (score sums it per step): time spent queueing is not time spent measuring
+  if (waited >= 2000) console.log(`waited ${Math.round(waited / 1000)}s for another trueclone measurement (${label})`);
   try { return await fn(); } finally { if ((await fs.readFile(file, 'utf8').catch(() => '')) === me) await fs.rm(file, { force: true }); }
 }
 
@@ -175,30 +221,39 @@ export const LOCALE = process.env.TC_LOCALE || 'en-US';
 // (capture --cookie "consent=1; region=us": a choice any visitor makes, never a login). Without them a check compares
 // the clone with a page under a popup. Read from the capture of the site the command names (every check is called
 // with the site's name first), or set by capture itself before it has written meta.json. The clone is never touched.
+// The read is remembered as a promise, never as a value set before the read finishes: checks open their viewports in
+// parallel, and every one of them must wait for the same profile (RC4 allbirds: the first page got the hide list, the
+// other four got null, and four sizes were measured against a page under a dialog).
 let referenceProfile;
-export function setReferenceProfile(p) { referenceProfile = p; }
-async function profileOfSite() {
-  if (referenceProfile !== undefined) return referenceProfile;
-  referenceProfile = null;
-  const [name] = parseArgs(process.argv.slice(2)).pos;
-  if (name && !/^https?:/i.test(name)) {
+export function setReferenceProfile(p) { referenceProfile = Promise.resolve(p); }
+function profileOfSite() {
+  referenceProfile ??= (async () => {
+    const [name] = parseArgs(process.argv.slice(2)).pos;
+    if (!name || /^https?:/i.test(name)) return null;
     const meta = JSON.parse(await fs.readFile(path.join(siteDir(name), 'reference', 'meta.json'), 'utf8').catch(() => 'null'));
-    if (meta?.url) referenceProfile = { url: meta.finalUrl || meta.url, hide: meta.hide || [], cookies: meta.cookies || [], unroll: meta.unroll || 'xy' };
-  }
+    return meta?.url ? { url: meta.finalUrl || meta.url, hide: meta.hide || [], ignore: (meta.ignore || []).map((i) => i.sel), cookies: meta.cookies || [], unroll: meta.unroll || 'xy' } : null;
+  })();
   return referenceProfile;
 }
+export const referenceProfileOfSite = () => profileOfSite();
 // "a=1; b=2" -> [{ name, value }]
 export const parseCookies = (s) => String(s || '').split(';').map((p) => p.trim()).filter((p) => p.includes('=')).map((p) => ({ name: p.slice(0, p.indexOf('=')).trim(), value: p.slice(p.indexOf('=') + 1).trim() }));
 
-export async function newPage(browser, vp, extra = {}) {
+export async function newPage(browser, vp, { stabilise = process.env.TC_STABILISE !== '0', seed = SEED, ...extra } = {}) {
   const context = await browser.newContext({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: 1,
-    reducedMotion: 'reduce',
+    reducedMotion: 'no-preference',
     locale: LOCALE,
     extraHTTPHeaders: { 'accept-language': `${LOCALE},${LOCALE.split('-')[0]};q=0.9` },
     ...extra,
   });
+  if (stabilise) {
+    await context.clock.install({ time: new Date(CLOCK_EPOCH) });
+    await context.addInitScript(seededRandomInPage, seed);
+    // the page's own time zero for holdStill: DOMContentLoaded, in page time
+    await context.addInitScript(() => document.addEventListener('DOMContentLoaded', () => { window.__tcDcl = Date.now(); }, { once: true }));
+  }
   const ref = await profileOfSite();
   if (ref && (ref.hide.length || ref.cookies.length)) {
     const host = new URL(ref.url).hostname.replace(/^www\./, '');
@@ -213,6 +268,16 @@ export async function newPage(browser, vp, extra = {}) {
       document.addEventListener('DOMContentLoaded', adopt);
     }, [host, ref.hide.map((s) => `${s}{display:none!important}`).join('\n')]);
   }
+  // Excluded content (meta.ignore: third-party widgets by default, decision D3) is hidden on EVERY page, the reference
+  // and the clone alike: the same exclusion on both sides, so it can neither cost the clone nor hide one of its defects
+  // (a clone that keeps an excluded widget fails the clone lint, verdict.mjs; review's clone-only test sees the rest)
+  if (ref?.ignore?.length) await context.addInitScript((css) => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(css);
+    const adopt = () => { if (!document.adoptedStyleSheets.includes(sheet)) document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]; };
+    adopt();
+    document.addEventListener('DOMContentLoaded', adopt);
+  }, ref.ignore.map((s) => `${s}{display:none!important}`).join('\n'));
   const page = await context.newPage();
   // Hard limits on Playwright actions: a stuck click or navigation fails loudly instead of hanging for hours.
   page.setDefaultTimeout(30000);
@@ -247,7 +312,9 @@ export function withTimeout(promise, ms, label) {
 // The key includes the capture time, so `npm run capture` invalidates everything automatically.
 async function cacheFile(siteRoot, keyObj) {
   const meta = JSON.parse(await fs.readFile(path.join(siteRoot, 'reference', 'meta.json'), 'utf8'));
-  const key = crypto.createHash('sha1').update(JSON.stringify({ capturedAt: meta.capturedAt, ...((meta.hide || []).length || (meta.cookies || []).length ? { visit: [meta.hide, meta.cookies] } : {}), ...keyObj })).digest('hex').slice(0, 16);
+  // cache generation 2 (rc.5): every reference measurement made before the profile fix (lib.mjs profileOfSite) is
+  // discarded, since it may have been taken without the hide list
+  const key = crypto.createHash('sha1').update(JSON.stringify({ gen: 2, capturedAt: meta.capturedAt, ...((meta.hide || []).length || (meta.cookies || []).length || (meta.ignore || []).length ? { visit: [meta.hide, meta.cookies, meta.ignore] } : {}), ...keyObj })).digest('hex').slice(0, 16);
   return path.join(siteRoot, 'reference', 'cache', `${key}.json`);
 }
 
@@ -393,16 +460,24 @@ export async function mask(page) {
 }
 
 // Endless animations (marquees, rotating borders, pulsing glows) sit at whatever phase the page's clock happens to
-// be at, so two screenshots of the same page differ. Before a still comparison, every infinite animation is put on
-// its first frame and paused, on both sides. Continuous motion is scored by the motion checks, not by stills.
-export async function freezeLoops(page) {
-  await page.evaluate(() => {
+// be at, so two screenshots of the same page differ. Before a still comparison, every infinite animation is put at the
+// same time and held, on both sides: LOOP_AGE ms, not 0. At 0 a stopped marquee looks exactly like a running one
+// (RC4 put every loop on its first frame, so a clone with no marquee animation passed); at an equal, non-zero time a
+// stopped, reversed or faster loop is somewhere else. Loops a script drives frame by frame are not CSS/WAAPI animations:
+// the behaviour check measures their speed and direction on the live page.
+// A finite animation or transition still running at that moment (a slide a timer just started) is finished: its end
+// state is the same on both sides, its halfway point depends on when the picture happened to be taken.
+export async function seekLoops(page, age = LOOP_AGE) {
+  return page.evaluate((t) => {
+    let n = 0;
     for (const a of document.getAnimations()) {
-      if (a.effect?.getTiming().iterations !== Infinity) continue;
-      a.currentTime = 0;
+      if (a.effect?.getTiming().iterations !== Infinity) { if (a.playState === 'running') a.finish(); continue; }
       a.pause();
+      a.currentTime = t;
+      n++;
     }
-  }).catch(() => {});
+    return n;
+  }, age).catch(() => 0);
 }
 
 // Reversible version of mask() for live pages: on() masks, off() removes the stylesheet and every marker.
@@ -535,6 +610,8 @@ export const match = (a, b, diff) => pixelmatch(a.data, b.data, diff ? diff.data
 // seeds), so it is compared by what is drawn rather than where: the colour distribution (64 bins) and how much of the
 // region is covered by drawing at all (pixels away from the region's dominant colour). An empty or wrong canvas scores
 // low; the same scene a frame apart scores high.
+// DIAGNOSTIC ONLY since rc.5: a colour histogram has no spatial term, so it never gates a result (measure.mjs has the
+// measures that do). Kept because it says something S-comp does not: "the colours are there, in another arrangement".
 export function canvasSimilarity(a, b) {
   const stats = (img) => {
     const hist = new Float64Array(64);
@@ -561,21 +638,6 @@ export function matchPct(pngA, pngB, withDiff = false) {
   const diff = withDiff ? new PNG({ width: w, height: h }) : null;
   const bad = match(a, b, diff);
   return { pct: +(100 - (bad / (w * h)) * 100).toFixed(2), diff };
-}
-
-// How much of a shot is drawn on at all: the share of pixels away from its dominant colour (its background). A
-// blank page or a 404 is near 0; a page with boxes and media, masked or not, is well above. Compared between the two
-// sides, it tells "a different page" from "no page".
-export function inkShare(png) {
-  const n = png.width * png.height;
-  const hist = new Map();
-  for (let i = 0; i < n; i += 7) { const k = ((png.data[i * 4] >> 4) << 8) | ((png.data[i * 4 + 1] >> 4) << 4) | (png.data[i * 4 + 2] >> 4); hist.set(k, (hist.get(k) || 0) + 1); }
-  let mode = 0, best = -1;
-  for (const [k, c] of hist) if (c > best) { best = c; mode = k; }
-  const [mr, mg, mb] = [((mode >> 8) & 15) * 16 + 8, ((mode >> 4) & 15) * 16 + 8, (mode & 15) * 16 + 8];
-  let ink = 0, seen = 0;
-  for (let i = 0; i < n; i += 3) { seen++; if (Math.abs(png.data[i * 4] - mr) + Math.abs(png.data[i * 4 + 1] - mg) + Math.abs(png.data[i * 4 + 2] - mb) > 48) ink++; }
-  return ink / (seen || 1);
 }
 
 // The images in view loaded and decoded (lazy ones made eager), at most `ms`: a shot after a navigation or a click

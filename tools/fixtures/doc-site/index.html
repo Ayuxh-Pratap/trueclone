@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fixture: a document with changing content</title>
+<!-- trueclone test fixture (our own code): every kind of change RC4 met, in one page. See tools/fixtures/README.md -->
+<link rel="stylesheet" href="site.css">
+<script>
+  // the intro starts before the load event (as varsity's hero did): the class is set while the document parses
+  document.documentElement.classList.add('intro');
+</script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Fixture</a>
+  <nav><a href="/about/">About</a></nav>
+</header>
+<section class="hero"><h1>Changing content, measured fairly</h1><p>An intro that starts before load.</p></section>
+<section class="gallery" aria-label="Gallery"><div class="grid" id="grid"></div></section>
+<section class="ticker" aria-label="Ticker"><div class="track"><span>alpha</span><span>beta</span><span>gamma</span><span>delta</span><span>epsilon</span><span>zeta</span><span>alpha</span><span>beta</span><span>gamma</span><span>delta</span><span>epsilon</span><span>zeta</span></div></section>
+<section class="carousel" aria-label="Carousel">
+  <div class="slides" id="slides"><div class="slide s1">One</div><div class="slide s2">Two</div><div class="slide s3">Three</div></div>
+  <button class="prev" aria-label="Previous slide">‹</button><button class="next" aria-label="Next slide">›</button>
+</section>
+<section class="faq"><details><summary>What is measured?</summary><p>Layout, behaviour and timing, on both sides the same way.</p></details></section>
+<footer class="foot">Fixture footer</footer>
+<script src="site.js"></script>
+<!-- a third-party widget loaded from another origin, as allbirds' shopping assistant was -->
+<script src="http://localhost:5602/widget.js" async></script>
+</body>
+</html>

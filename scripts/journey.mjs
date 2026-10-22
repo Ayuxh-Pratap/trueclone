@@ -20,7 +20,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, canvasSimilarity, PNG, crop, COMPARE, siteDir, openUrl, seededRandomInPage, withMachineLock, recordBundle } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, openUrl, withMachineLock, recordBundle, maskToggle } from './lib.mjs';
+import { startIdentity } from './identity.mjs';
+import { writeUnits } from './results.mjs';
+import { regionScore, region } from './measure.mjs';
+import { TEMPLATE_ALLOWANCE } from './verdict.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -121,8 +125,8 @@ function canvasBoxInPage() {
 // ---------- running a journey ----------
 async function openSide(browser, url, vp, withInventory, record = false) {
   const touch = vp.name === 'mobile' || vp.name === 'tablet';
+  // newPage seeds Math.random and starts the clock at the same instant on both sides (lib.mjs STABILISERS)
   const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference', ...(touch ? { hasTouch: true, isMobile: vp.name === 'mobile' } : {}) });
-  await context.addInitScript(seededRandomInPage);
   if (withInventory) await context.addInitScript(inventoryInPage);
   const cdp = await context.newCDPSession(page);
   // the reference of an own-bundle capture: what each stage loads joins the bundle (models and textures load late)
@@ -227,6 +231,7 @@ const cpFile = (i, cp) => `${String(i).padStart(2, '0')}-${String(cp).replace(/[
 
 // ---------- --draft: find the journey on the reference ----------
 if (flags.draft) {
+  const stopped = {}; // per size: why the draft ended (written into journey.json)
   // Drafted at each size the journey runs at: a phone reaches its states with swipes of its own length (half a window),
   // which may not land where the desktop's wheel turns do, so every size gets the steps that stop at each of its states.
   const draftAt = async (browser, vp) => {
@@ -345,13 +350,23 @@ if (flags.draft) {
     // a long app (a phone swipes half a window at a time) has many turns: ten minutes and 80 turns per size at most
     const deadline = Date.now() + 10 * 60 * 1000;
     let i = 0;
-    for (; i < 80 && quiet < 3 && Date.now() < deadline; i++) {
-      if (await tryGate()) { quiet = 0; continue; }
+    let rechecked = false;
+    for (; i < 80 && Date.now() < deadline; i++) {
+      if (await tryGate()) { quiet = 0; rechecked = false; await settle(page, 8000); continue; }
       const dy = Math.round(vp.height * (touch ? 0.5 : 1.2));
       await doStep(side, vp, { wheel: { dy } });
-      if (await changed()) { steps.push({ wheel: { dy } }, cp(`step-${++k}`)); quiet = 0; } else { quiet++; steps.push({ wheel: { dy } }); }
+      if (await changed()) { steps.push({ wheel: { dy } }, cp(`step-${++k}`)); quiet = 0; rechecked = false; continue; }
+      quiet++;
+      steps.push({ wheel: { dy } });
+      // three inputs that changed nothing: a long transition after a gate or a hold can swallow input (RC4 zero, phone:
+      // the draft stopped at 18 checkpoints of 27), so the page is waited out once and asked again before it ends
+      if (quiet >= 3 && !rechecked) { rechecked = true; quiet = 1; await settle(page, 8000); continue; }
+      if (quiet >= 3) break;
     }
-    if (quiet < 3) console.warn(`WARNING at ${vp.name} the draft stopped at its limit (${i} turns, ${Math.round((Date.now() - deadline) / 1000 + 600)} s) while input still changed the page: the journey may go on; add the remaining steps to journey.json by hand`);
+    const stoppedWhy = quiet >= 3 ? 'three inputs in a row changed nothing, after waiting out any transition' : i >= 80 ? `the turn limit (80)` : 'the time limit (10 minutes)';
+    console.log(`${vp.name}: the draft stopped: ${stoppedWhy}`);
+    if (quiet < 3) console.warn(`WARNING at ${vp.name} the draft stopped at ${stoppedWhy} while input still changed the page: the journey may go on; add the remaining steps to journey.json by hand`);
+    stopped[vp.name] = stoppedWhy;
     // trailing input that changed nothing is left out
     while (steps.length && steps[steps.length - 1].wheel) steps.pop();
     await side.context.close();
@@ -362,7 +377,8 @@ if (flags.draft) {
   try {
     for (const vpName of ['desktop', 'mobile']) byViewport[vpName] = await draftAt(browser, vpOf(vpName));
   } finally { if (!flags.cdp) await browser.close(); }
-  const journey = { viewports: ['desktop', 'mobile'], drafted: new Date().toISOString(), steps: byViewport.desktop, stepsByViewport: { mobile: byViewport.mobile } };
+  // why each size's draft stopped is kept with it: an agent reading journey.json knows whether the journey can go on
+  const journey = { viewports: ['desktop', 'mobile'], drafted: new Date().toISOString(), stopped, steps: byViewport.desktop, stepsByViewport: { mobile: byViewport.mobile } };
   const exists = await fs.stat(journeyFile).then(() => true, () => false);
   await fs.writeFile(exists ? path.join(root, 'journey.draft.json') : journeyFile, JSON.stringify(journey, null, 2));
   for (const [vpName, steps] of Object.entries(byViewport)) {
@@ -381,6 +397,8 @@ const clone = Boolean(flags.clone || flags.url);
 const server = clone && typeof flags.url !== 'string' ? await serve(path.join(root, 'clone')) : null;
 const url = clone ? (typeof flags.url === 'string' ? flags.url : server.url) : meta.finalUrl || meta.url;
 const outRoot = clone ? path.join(root, COMPARE, 'journey') : path.join(ref, 'journey');
+// what is measured (identity.mjs), taken before the first page opens
+const ident = clone ? await startIdentity(root, 'journey', COMPARE === 'compare-next' ? 'app' : 'clone') : null;
 const browser = await openBrowser(flags.cdp);
 const result = { name, at: new Date().toISOString(), side: clone ? 'clone' : 'reference', viewports: [] };
 try {
@@ -397,6 +415,11 @@ try {
       const errors = await runJourney(side, vp, journey.stepsByViewport?.[vp.name] || journey.steps, async (i, cp, s) => {
         const file = cpFile(i, cp);
         await fs.writeFile(path.join(dir, file), s.buf);
+        // the UI layer: the same screen with text and media masked and the canvas a flat box (lib.mjs mask), so the
+        // interface's structure is compared on its own, apart from the scene
+        await maskToggle(side.page, true).catch(() => {});
+        await fs.writeFile(path.join(dir, file.replace(/\.png$/, '.mask.png')), await side.page.screenshot());
+        await maskToggle(side.page, false).catch(() => {});
         const entry = { i, name: cp, file, still: s.still, ms: s.ms, canvas: await side.page.evaluate(canvasBoxInPage).catch(() => null), ui: await side.page.evaluate(uiTextInPage).catch(() => '') };
         if (inventory) {
           const scene = await side.page.evaluate(sceneInPage).catch(() => null);
@@ -436,9 +459,14 @@ await fs.writeFile(path.join(outRoot, 'journey.json'), JSON.stringify(result, nu
 if (!clone) { console.log(`reference journey -> ${path.relative(process.cwd(), outRoot)}`); process.exit(0); }
 
 // ---------- the comparison ----------
-// at each checkpoint: what the canvas draws (colours and coverage, tolerant to a frame's phase) and the whole screen by
-// pixels (the DOM layer, the exact picture); exact mode holds the clone to both, template mode (placeholder art) to the
-// canvas's look and the screen's layout only
+// At each checkpoint, three spatial measures (measure.mjs), never a colour histogram (RC4 zero: 93.88 on the histogram
+// for a different camera framing of the same palette):
+//   ui     the UI layer, structure-masked (S-dom): the interface over the scene
+//   scene  the canvas region: exact mode the lower of composition and colour layout (S-comp, A-grid); template mode
+//          (decision D4: the art is the clone's own, "media replaced") composition only, with the stated allowance
+//          TEMPLATE_ALLOWANCE (verdict.mjs) added to it; the UI layer gets none
+//   text   the interface's text, as a share of the reference's words the clone shows (and no others)
+// The checkpoint's value is the lowest of them; the histogram is kept beside them as a diagnostic.
 const refRun = JSON.parse(await fs.readFile(path.join(ref, 'journey', 'journey.json'), 'utf8').catch(() => 'null'));
 if (!refRun) { console.error(`no reference journey: trueclone journey ${name} first`); process.exit(1); }
 const exact = meta.mode === 'exact';
@@ -453,11 +481,22 @@ for (const v of result.viewports) {
     if (!mine) { cps.push({ i: c.i, name: c.name, match: 0, note: 'not reached on the clone' }); continue; }
     const a = PNG.sync.read(await fs.readFile(path.join(ref, 'journey', v.viewport, c.file)));
     const b = PNG.sync.read(await fs.readFile(path.join(outRoot, v.viewport, mine.file)));
+    const readMask = (p) => fs.readFile(p.replace(/\.png$/, '.mask.png')).then((x) => PNG.sync.read(x), () => null);
+    const am = await readMask(path.join(ref, 'journey', v.viewport, c.file)), bm = await readMask(path.join(outRoot, v.viewport, mine.file));
     const pixels = matchPct(a, b).pct;
+    const ui = am && bm ? matchPct(am, bm).pct : null;
     const box = c.canvas;
-    const canvas = box && box.w > 8 && box.h > 8 ? canvasSimilarity(crop(a, box.y, Math.min(box.h, a.height - box.y)), crop(b, box.y, Math.min(box.h, b.height - box.y))) : null;
-    const match = +(exact ? (canvas === null ? pixels : (pixels + canvas) / 2) : (canvas ?? pixels)).toFixed(2);
-    cps.push({ i: c.i, name: c.name, match, pixels, canvas, uiRef: c.ui, uiClone: mine.ui });
+    const sb = box && box.w > 8 && box.h > 8 ? [box.x, box.y, box.x + box.w, box.y + box.h] : null;
+    const sc = sb ? regionScore(region(a, sb), region(b, sb), { template: !exact }) : null;
+    const hist = sb ? canvasSimilarity(region(a, sb), region(b, sb)) : null;
+    const scene = sc ? (exact ? sc.value : Math.min(100, sc.value + TEMPLATE_ALLOWANCE)) : null;
+    const words = (t) => new Set(String(t || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1));
+    const wr = words(c.ui), wc = words(mine.ui);
+    const text = wr.size || wc.size ? +((100 * [...wr].filter((w) => wc.has(w)).length) / Math.max(1, new Set([...wr, ...wc]).size)).toFixed(2) : null;
+    // exact mode: the real pixels too, as before; template mode: the UI layer stands for the screen's layout
+    const parts = [exact ? pixels : ui ?? pixels, scene, text].filter((x) => typeof x === 'number');
+    const match = +Math.min(...parts).toFixed(2);
+    cps.push({ i: c.i, name: c.name, match, pixels, ui, scene, sComp: sc?.sComp ?? null, aGrid: sc?.aGrid ?? null, hist, text, uiRef: c.ui, uiClone: mine.ui });
     (reviewLines[v.viewport] ||= []).push({ c, mine, pixels });
   }
   const mean = cps.length ? +(cps.reduce((s, x) => s + x.match, 0) / cps.length).toFixed(2) : null;
@@ -466,6 +505,8 @@ for (const v of result.viewports) {
   console.log(`journey (${v.viewport}): ${mean}% over ${cps.length} checkpoints; worst ${worst ? `${worst.name} ${worst.match}%` : '-'}`);
 }
 await fs.writeFile(path.join(outRoot, 'report.json'), JSON.stringify(report, null, 2));
+// one unit per viewport, every checkpoint a member: the loop sees which checkpoint moved, not only the mean
+await writeUnits(root, COMPARE, 'journey', report.viewports.map((v) => ({ viewport: v.viewport, value: v.match, template: !exact, errors: v.errors, members: v.checkpoints.map((c) => ({ id: c.name, i: c.i, value: c.match, pixels: c.pixels, ui: c.ui, scene: c.scene, sComp: c.sComp, aGrid: c.aGrid, hist: c.hist, text: c.text, note: c.note })) })), ident);
 
 // the checkpoints side by side for the review, in review's format (tokens, frames.json, index.md): verdicts in notes.md
 // as for any frame ("- journey/03-step-2 desktop [token]: same")
@@ -492,7 +533,7 @@ for (const [vpName, lines] of Object.entries(reviewLines)) {
     await fs.writeFile(path.join(dir, `${file}.png`), PNG.sync.write(img));
     frames.push({ id: `journey/${file}`, file, pct: pixels, token: hsh.toString(36).slice(0, 5) });
   }
-  await fs.writeFile(path.join(dir, 'frames.json'), JSON.stringify({ size: vpName, at: new Date().toISOString(), frames }, null, 2));
+  await fs.writeFile(path.join(dir, 'frames.json'), JSON.stringify({ size: vpName, at: new Date().toISOString(), subjectHash: ident.subjectHash, frames }, null, 2));
   await fs.writeFile(path.join(dir, 'index.md'), `# Journey review at ${vpName}: reference left, clone right, at each checkpoint\n\nIn notes.md under "## Review", one line per frame with its token: \`- <frame> ${vpName} [<token>]: same\` (below 85% pixel match, say why), \`differs: <what>\`, or \`tool: <why>; evidence: <file>\`.\n\n| frame | token | pixel match |\n|---|---|---|\n${frames.map((f) => `| [${f.id}](${f.file}.png) | ${f.token} | ${f.pct}% |`).join('\n')}\n`);
 }
 console.log(`-> ${path.relative(process.cwd(), path.join(outRoot, 'report.json'))}; review frames in ${COMPARE}/review/journey-<size>/`);

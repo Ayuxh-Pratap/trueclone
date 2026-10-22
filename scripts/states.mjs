@@ -7,7 +7,14 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, freezeLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, unroll, openUrl } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, seekLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, unroll, openUrl, holdStill, releaseStill, STILL_AGE } from './lib.mjs';
+import { startIdentity, refIdOf } from './identity.mjs';
+import { writeUnits, mergeAggregate } from './results.mjs';
+import { regionScore, region, envelope, presence, presenceInRange } from './measure.mjs';
+import { loadNoise, barFor } from './verdict.mjs';
+
+// page time between two scroll steps' stills (lib.mjs holdStill): longer than any step takes, so every step is held ahead
+const STEP_AGE = 10000;
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -29,21 +36,36 @@ const viewportsAll = SCORED.filter((v) => !wanted || wanted.includes(v.name));
 const routes = (meta.routes?.length ? meta.routes : [{ path: '/', slug: '', dir: 'reference' }]).filter((r) => typeof flags.route !== 'string' || r.path === flags.route);
 const server = cloneMode && typeof flags.clone !== 'string' ? await serve(path.join(root, 'clone')) : null;
 const base = cloneMode ? (typeof flags.clone === 'string' ? flags.clone : server.url) : (meta.finalUrl || meta.url);
+// calibrate.mjs replays the live reference through the clone path (TC_CALIBRATE): its routes are at their own addresses
+const calibrating = process.env.TC_CALIBRATE === '1';
+// template mode: the clone's media and scenes are its own (decision D4), so a canvas region is gated on composition
+const template = meta.mode !== 'exact';
+// the reference's own draws (calibrate.mjs: reference/calib/<k>/), for frames the reference varies on; and its noise
+const noise = cloneMode && !calibrating ? await loadNoise(root, refIdOf(meta)) : null;
+const drawDirs = noise ? (noise.drawDirs || []).map((d) => path.join(root, d)) : [];
+// what is measured (identity.mjs), taken before the first page opens
+const ident = cloneMode ? await startIdentity(root, 'scroll', COMPARE === 'compare-next' ? 'app' : 'clone') : null;
+const scrollUnits = [], canvasUnits = [];
 const browser = await openBrowser(flags.cdp);
 const report = { name, target: base, mode: cloneMode ? (structure ? 'clone-structure' : 'clone-visual') : 'reference', at: new Date().toISOString(), viewports: [], routes: [] };
 
 async function runRoute(r) {
   const refDir = path.join(root, r.dir);
   const outRoot = path.join(cloneMode ? (r.slug ? path.join(root, COMPARE, 'routes', r.slug) : path.join(root, COMPARE)) : refDir, 'states');
-  const target = r.slug ? new URL(cloneMode ? r.path.replace(/^\//, '') : r.path, base).href : base;
+  const target = r.slug ? new URL(cloneMode && !calibrating ? r.path.replace(/^\//, '') : r.path, base).href : base;
   // the clone is only replayed where the reference has states (a capture older than the held-out sizes has none there)
   const viewports = [];
   for (const v of viewportsAll) {
-    if (cloneMode && !(await fs.stat(path.join(refDir, 'states', `${v.name}.json`)).then(() => true, () => false))) { if (!r.slug) console.log(`${v.name}: no reference states (run trueclone states ${name}); skipped`); continue; }
+    if (cloneMode && !(await fs.stat(path.join(refDir, 'states', `${v.name}.json`)).then(() => true, () => false))) { console.log(`${r.path} ${v.name}: no reference states (run trueclone reads ${name})`); scrollUnits.push({ route: r.slug ? r.path : '', viewport: v.name, value: null, error: `the reference has no scroll states at ${v.name}: run trueclone reads` }); continue; }
     viewports.push(v);
   }
-  // Viewports run side by side (one page each): most of a step is waiting for smooth scroll to glide.
-  const result = await Promise.all(viewports.map(async (vp) => {
+  // Viewports run side by side (one page each): most of a step is waiting for smooth scroll to glide. Not where the
+  // reference draws canvases: five WebGL scenes sharing one GPU draw differently from one alone (RC4 varsity), so those
+  // sizes are measured one after another.
+  const refHasCanvas = cloneMode && (await Promise.all(viewports.map((v) => fs.readFile(path.join(refDir, 'states', `${v.name}.json`), 'utf8').then((t) => JSON.parse(t).steps.some((s) => s.canvases?.length), () => false)))).some(Boolean);
+  const each = refHasCanvas ? async (list, fn) => { const out = []; for (const v of list) out.push(await fn(v)); return out; } : (list, fn) => Promise.all(list.map(fn));
+  const result = (await each(viewports, async (vp) => {
+   try {
     const dir = path.join(outRoot, vp.name);
     await fs.rm(dir, { recursive: true, force: true });
     await fs.mkdir(dir, { recursive: true });
@@ -80,12 +102,15 @@ async function runRoute(r) {
       const actual = await wheelTo(page, y, vp);
       const still = await waitStill(page);
       const file = `${String(i).padStart(2, '0')}`;
-      await freezeLoops(page); // loops that started on entering view too, so every step is compared at the same phase
+      // every step at the same page age on both sides (timers fired in order up to it), the clock held for the shots
+      await holdStill(page, STILL_AGE + i * STEP_AGE);
+      await seekLoops(page); // loops that started on entering view too: every step compared at the same, non-zero time
       await page.screenshot({ path: path.join(dir, `${file}.png`) });
       await maskToggle(page, true);
       await page.screenshot({ path: path.join(dir, `${file}.mask.png`) });
       await maskToggle(page, false);
       if (!cloneMode) samples.push(await page.evaluate(statesInPage));
+      await releaseStill(page);
       // the canvases in view (scenes a script draws): masked out of the structure score, so compared on their own
       const canvases = await page.evaluate(() => [...document.querySelectorAll('canvas')].map((c) => {
         const r = c.getBoundingClientRect(), s = getComputedStyle(c);
@@ -98,15 +123,24 @@ async function runRoute(r) {
 
     if (cloneMode) {
       const sfx = structure ? '.mask' : '';
+      const routeKey = r.slug ? r.path : '';
+      const readPng = (p) => fs.readFile(p).then((b) => PNG.sync.read(b), () => null);
+      // the same frame in each of the reference's own draws (calibrate.mjs), for a frame the reference varies on
+      const drawsOf = async (f) => [PNG.sync.read(await fs.readFile(path.join(refDir, 'states', vp.name, f))), ...(await Promise.all(drawDirs.map((d) => readPng(path.join(d, r.slug ? path.join('routes', r.slug) : '', 'states', vp.name, f))))).filter(Boolean)];
       const scored = [];
       for (const s of steps) {
         const f = `${String(s.i).padStart(2, '0')}${sfx}.png`;
         const a = PNG.sync.read(await fs.readFile(path.join(refDir, 'states', vp.name, f)));
         const b = PNG.sync.read(await fs.readFile(path.join(dir, f)));
-        scored.push({ ...s, match: matchPct(a, b).pct });
+        const row = { ...s, match: matchPct(a, b).pct };
+        // E (measure.mjs): only where the reference does not match itself; a stable frame is always scored against the
+        // capture, so a clone cannot pick its best draw where the site is deterministic
+        if (barFor(noise, 'scroll', routeKey, vp.name, String(s.i)).unstable) row.envelope = envelope(b, await drawsOf(f), (x, y) => matchPct(x, y).pct);
+        scored.push(row);
       }
       const avg = +(scored.reduce((n, s) => n + s.match, 0) / scored.length).toFixed(2);
-      // canvases: the reference's canvas regions at each step, compared by what is drawn (real pixels, not the mask)
+      // canvases: the reference's canvas regions at each step, compared by what is drawn (real pixels, not the mask), by
+      // composition and colour layout (measure.mjs regionScore); the colour histogram is kept beside it as a diagnostic
       const refSteps = JSON.parse(await fs.readFile(path.join(refDir, 'states', `${vp.name}.json`), 'utf8')).steps;
       const canvasScores = [];
       for (const s of steps) {
@@ -118,14 +152,29 @@ async function runRoute(r) {
         for (const [x0, y0, x1, y1] of regions) {
           const w = Math.min(x1, a.width, b.width) - x0, h = Math.min(y1, a.height, b.height) - y0;
           if (w < 40 || h < 40) continue;
-          const ca = new PNG({ width: w, height: h }), cb = new PNG({ width: w, height: h });
-          PNG.bitblt(a, ca, x0, y0, w, h, 0, 0);
-          PNG.bitblt(b, cb, x0, y0, w, h, 0, 0);
-          canvasScores.push({ i: s.i, y: s.y, region: [x0, y0, x1, y1], similarity: canvasSimilarity(ca, cb) });
+          const box = [x0, y0, x0 + w, y0 + h];
+          const ca = region(a, box), cb = region(b, box);
+          const sc = regionScore(ca, cb, { template });
+          const id = `${s.i}:${[x0, y0, x1, y1].join(',')}`;
+          const row = { i: s.i, y: s.y, region: [x0, y0, x1, y1], id, similarity: sc.value, sComp: sc.sComp, aGrid: sc.aGrid, gate: sc.gate, hist: canvasSimilarity(ca, cb) };
+          if (barFor(noise, 'canvas', routeKey, vp.name, id).unstable) {
+            // the scene varies between reference loads: its nearest draw, and the share of strong colour in view (a
+            // missing object, RC4 varsity's cords, leaves the share outside every draw's range)
+            const draws = (await drawsOf(f)).map((d) => region(d, box));
+            row.envelope = envelope(cb, draws, (x, y) => regionScore(x, y, { template }).value);
+            const inRange = presenceInRange(presence(cb), draws.map(presence));
+            if (row.envelope && !inRange.pass) row.envelope = { ...row.envelope, pass: false, reason: inRange.reason };
+          }
+          canvasScores.push(row);
         }
       }
       const hasCanvasData = refSteps.some((s) => Array.isArray(s.canvases));
       const canvas = canvasScores.length ? +(canvasScores.reduce((n, c) => n + c.similarity, 0) / canvasScores.length).toFixed(2) : null;
+      const refCanvas = refSteps.some((s) => s.canvases?.length);
+      // a unit judged by its envelope: every frame the reference varies on within its draws, the others at their bars
+      const unitEnvelope = (rows) => { const e = rows.filter((x) => x.envelope); if (!e.length) return undefined; const pass = e.every((x) => x.envelope.pass); return { pass, value: +(e.reduce((n, x) => n + x.envelope.value, 0) / e.length).toFixed(2), reason: pass ? `${e.length} frame(s) the reference varies on, each within its own draws` : e.filter((x) => !x.envelope.pass).map((x) => `y ${x.y}: ${x.envelope.reason}`).join('; ') }; };
+      scrollUnits.push({ route: routeKey, viewport: vp.name, value: avg, refCanvas, envelope: unitEnvelope(scored), members: scored.map((s) => ({ id: String(s.i), y: s.y, value: s.match, ...(s.envelope ? { envelope: s.envelope } : {}) })) });
+      if (refCanvas) canvasUnits.push({ route: routeKey, viewport: vp.name, value: canvas, template, envelope: unitEnvelope(canvasScores), members: canvasScores.map((c) => ({ id: c.id, y: c.y, value: c.similarity, sComp: c.sComp, aGrid: c.aGrid, hist: c.hist, ...(c.envelope ? { envelope: c.envelope } : {}) })) });
       return { viewport: vp.name, match: avg, worst: [...scored].sort((a, b) => a.match - b.match).slice(0, 5), steps: scored, canvas, canvasWorst: [...canvasScores].sort((a, b) => a.similarity - b.similarity).slice(0, 5), ...(hasCanvasData ? {} : { canvasNote: 'reference states predate the canvas check: re-run trueclone states' }) };
     } else {
       const summary = summarize(steps, samples, vp, initial);
@@ -133,8 +182,15 @@ async function runRoute(r) {
       await fs.writeFile(path.join(outRoot, `${vp.name}.summary.json`), JSON.stringify(summary, null, 2));
       return { viewport: vp.name, introMs: intro.ms, steps: steps.length, unsettled: steps.filter((s) => !s.settled).length, ...summary.counts };
     }
-  }));
-  if (r.slug) await fs.writeFile(path.join(outRoot, cloneMode ? `report${structure ? '.mask' : ''}.json` : 'report.json'), JSON.stringify({ ...report, route: r.path, viewports: result, routes: undefined }, null, 2));
+   } catch (e) {
+    // one size that fails is recorded as failed (never as passing, never by aborting the other sizes)
+    const why = String(e.message).split('\n')[0];
+    console.warn(`WARNING ${r.path} ${vp.name}: ${why}`);
+    if (cloneMode) scrollUnits.push({ route: r.slug ? r.path : '', viewport: vp.name, value: null, error: why });
+    return null;
+   }
+  })).filter(Boolean);
+  if (r.slug) await mergeAggregate(path.join(outRoot, cloneMode ? `report${structure ? '.mask' : ''}.json` : 'report.json'), { ...report, route: r.path, viewports: result, routes: undefined });
   return result;
 }
 
@@ -152,7 +208,10 @@ try {
 // the captured page's report (with every other route's summary in it), where it has always been
 const outRoot = path.join(cloneMode ? path.join(root, COMPARE) : ref, 'states');
 await fs.mkdir(outRoot, { recursive: true });
-await fs.writeFile(path.join(outRoot, cloneMode ? `report${structure ? '.mask' : ''}.json` : 'report.json'), JSON.stringify(report, null, 2));
+// the units the evaluator judges (results.mjs); a narrowed run (--viewports, --route) leaves the others as they were
+if (cloneMode && structure) { await writeUnits(root, COMPARE, 'scroll', scrollUnits, ident); await writeUnits(root, COMPARE, 'canvas', canvasUnits, { ...ident, codeHash: (await import('./identity.mjs')).codeHash('canvas') }); }
+if (cloneMode) await mergeAggregate(path.join(outRoot, `report${structure ? '.mask' : ''}.json`), report);
+else await fs.writeFile(path.join(outRoot, 'report.json'), JSON.stringify(report, null, 2));
 for (const r of report.routes) console.log(`route ${r.path}: ${r.viewports.map((v) => `${v.viewport} ${v.match ?? `${v.stepCount ?? 0} steps`}`).join('  ')}`);
 if (cloneMode) {
   console.log(`state match (${report.mode}) - average over scroll steps`);
