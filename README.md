@@ -102,9 +102,12 @@ trueclone bundles [REA](https://github.com/morluto/rea) (Reverse Engineer Anythi
 
 ```bash
 npx @trueclone/cli init                 # set up a project for your agent (then `npx trueclone ...`)
-npx trueclone doctor                    # check Node and Chrome
+npx trueclone doctor                    # check Node, Chrome, DNS, a local page in the browser, the timing lock
 npx trueclone <url> [name]              # capture + design-system draft
-npx trueclone capture <url> [name] [--mode exact --permission "<owner>"]
+npx trueclone capture <url> [name] [--mode exact --permission "<owner>"] [--hide|--ignore|--include "<selectors>"]
+npx trueclone status <name>             # the one next step; exit 0 Verified, 1 work left, 2 Blocked, 3 Incomplete (docs/policy.md)
+npx trueclone calibrate <name>          # the reference against itself (two more loads): the bar of every frame
+npx trueclone behaviour <name>          # what changes by itself on both live pages: loop speed and direction, carousel intervals, a startup shuffle
 npx trueclone motion <name>             # motion inventory
 npx trueclone design <name>             # DESIGN.md + globals.css
 npx trueclone reveals <name>            # record scroll reveals and scroll class changes
@@ -113,7 +116,7 @@ npx trueclone seed <name>               # clone/ from the mirror (template: plac
 npx trueclone rules <name> "<selector>" # the original's CSS rules for an element
 npx trueclone textshape <name> --write  # template mode: placeholder text with the original's line breaks
 npx trueclone load <name>               # load sequence on both sides: settledness 0.25-4 s after navigation, cold cache, same network
-npx trueclone score <name> [--quick]    # every check, then REPORT.md (--only detail,load --viewport tablet after a fix; unchanged checks are kept)
+npx trueclone score <name> [--fresh]    # every check, then REPORT.md (--only detail,load --viewport tablet after a fix; results still current are kept)
 npx trueclone explain <name> <y>        # one place on the page: what every check saw there, plus a reference|clone|diff crop
 npx trueclone review <name> --size wide # reference and clone side by side at a held-out size: load, every section, hover
 npx trueclone journey <name> --draft    # canvas apps: find the journey (gates, wheel, holds); then `journey <name>` shoots the reference

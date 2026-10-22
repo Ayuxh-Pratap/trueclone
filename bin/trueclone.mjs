@@ -32,6 +32,8 @@ const STEPS = {
   widgets: ['widgets.mjs', 'record every tab and menu state by clicking it, so seed can replay them (template mode)'],
   journey: ['journey.mjs', 'app mode (a canvas app): --draft finds the journey (gates, wheel, holds) on the live page; then the reference checkpoints (frames, three.js scene, shaders); --clone scores the clone through it'],
   reads: ['reads.mjs', 'every read of the live page the clone is built from (states, motion, spec, widgets side by side, then reveals alone); only the missing ones'],
+  calibrate: ['calibrate.mjs', 'the reference against itself: two more loads through the same checks -> reference/noise.json, the bar of every frame'],
+  behaviour: ['behaviour.mjs', 'what changes by itself on both live pages: loop speed and direction, carousel intervals, a startup shuffle'],
   states: ['states.mjs', 'live scroll states at every scored size; --clone scores the rebuild step by step (canvases too)'],
   curves: ['curves.mjs', 'motion score: sampled property curves, reference vs clone (motion-map.json)'],
   interact: ['interact.mjs', 'interaction tests: click/hover/drag/key scenarios on both sides (interactions.json)'],
@@ -88,7 +90,7 @@ async function init() {
   await fs.copyFile(path.join(PKG, 'skill', 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
   // 2. AGENTS.md block for Codex, Cursor and other agents
   const agentsFile = path.join(cwd, 'AGENTS.md');
-  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first. Then capture, and loop: run \`npx trueclone status <name>\`, do exactly the step it names, run it again. Do not end your turn or ask whether to continue while \`status\` says work is left (only a real blocker stops you: write it under Findings in notes.md). Done is \`status\` exiting 0 (every gate passes) or 3 (every step left is set aside, each written under Findings); \`sites/<name>/REPORT.md\` is the deliverable.\n\nRunning it: the steps open Chrome (Playwright) and load the live site, so they need network access and permission to start a browser (in Codex: full access, network on). Capture, reads, scores and \`next --verify\` take minutes each: give commands a timeout of at least 15 minutes, and never stop one because it is quiet. Several clones may run at once: timing checks (load, reveals, the journey) wait for each other by themselves.\n<!-- trueclone:end -->\n`;
+  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first. Then capture, and loop: run \`npx trueclone status <name>\`, do exactly the step it names, run it again. \`status\` ends the run itself, by its exit code: 0 Verified (every required result passes on the clone and the app as they are now), 1 work left (do the step it names, then run it again: never end your turn or ask whether to continue on 1), 2 Blocked (something outside the clone stops it: report it, resume with \`status\` once the cause is fixed), 3 Incomplete (the loop concluded with differences left: hand over and say so). Exit 2 and 3 are status's decisions, never yours. Never change the instrument (no NODE_OPTIONS preloads, no edits under node_modules). \`sites/<name>/REPORT.md\` is the deliverable.\n\nRunning it: the steps open Chrome (Playwright) and load the live site, so they need network access and permission to start a browser (in Codex: full access, network on). Capture, reads, calibrate, scores and \`next --verify\` take minutes each: give commands a timeout of at least 15 minutes, and never stop one because it is quiet. Several clones may run at once: timing checks (load, behaviour, reveals, the journey) wait for each other by themselves.\n<!-- trueclone:end -->\n`;
   let agents = (await exists(agentsFile)) ? await fs.readFile(agentsFile, 'utf8') : '';
   agents = agents.includes('<!-- trueclone:start -->') ? agents.replace(/<!-- trueclone:start -->[\s\S]*?<!-- trueclone:end -->\n?/, block) : `${agents}${agents && !agents.endsWith('\n\n') ? '\n' : ''}${block}`;
   await fs.writeFile(agentsFile, agents);
@@ -137,6 +139,31 @@ async function doctor() {
   }
   try { require.resolve('rea-agents/package.json'); console.log('ok   REA bundled, for the rare deep case (trueclone rea doctor checks its decompilers)'); }
   catch { console.log('warn REA not installed (optional)'); }
+  // what a run needs from this machine, checked before an agent spends hours finding out (RC4: a sandbox without DNS,
+  // a timing lock left behind)
+  const dns = await import('node:dns/promises');
+  try { await dns.lookup('example.com'); console.log('ok   DNS (the live site can be reached by name)'); }
+  catch (e) { ok = false; console.log(`FAIL DNS: ${e.code || e.message} (no network in this environment: captures and every live check will fail; in Codex turn network access on)`); }
+  try {
+    const http = await import('node:http');
+    const server = http.createServer((q, r) => r.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>tc</title><p id=ok>ok</p>'));
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const b = await chromium.launch().catch(() => chromium.launch({ channel: 'chrome' }));
+    try {
+      const p = await b.newPage();
+      await p.goto(`http://127.0.0.1:${server.address().port}/`, { timeout: 15000 });
+      if ((await p.textContent('#ok')) !== 'ok') throw new Error('the page did not render');
+    } finally { await b.close(); server.close(); }
+    console.log('ok   a local page opens in the browser (the clone is served on localhost)');
+  } catch (e) { ok = false; console.log(`FAIL a local page in the browser: ${String(e.message).split('\n')[0]} (the browser cannot reach localhost here: no clone can be measured)`); }
+  const os = await import('node:os');
+  const lock = path.join(os.tmpdir(), 'trueclone-timing.lock');
+  const held = await fs.readFile(lock, 'utf8').catch(() => null);
+  if (!held) console.log('ok   timing lock free');
+  else {
+    const min = Math.round((Date.now() - (Number(held.split(':').pop()) || 0)) / 60000);
+    console.log(`${min > 20 ? 'warn' : 'ok  '} timing lock held by "${held.split(':')[1] || '?'}" for ${min} min${min > 20 ? ` (older than any measurement: a crashed run; the next one takes it over, or delete ${lock})` : ' (another trueclone measurement is running)'}`);
+  }
   process.exitCode = ok ? 0 : 1;
 }
 

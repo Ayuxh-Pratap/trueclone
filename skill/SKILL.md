@@ -22,23 +22,31 @@ npx trueclone status <name>
 Capture the right page the first time, once: `--routes 1` when the user wants one page, not the whole site; `--hide`
 for a banner or popup a visitor dismisses (capture warns when a dialog covers the page at load), or `--cookie` with
 the cookie that dismissal sets (a consent or region choice, never a login). Every check after capture applies both.
+Third-party widgets (a chat launcher, an assistant, a reviews badge another site's script injects) are found by the
+capture and **excluded on both sides** by default; `--include "<selector>"` keeps one the user wants cloned.
 
-Then, until it says every gate passes: **do exactly what `status` says, then run `status` again.** It reads the site
-folder and names the one next step as a command, with why and what follows: the reads, the design system, the seed, a
-brief per section, your Behaviours, `script.js`, scores (re-measured whenever the clone changed, on one size while you
-iterate), the failing checks in fix order (each with the command to look closer), the review at every size, the
-Next.js app. It exits 0 only when everything passes.
+Then: **do exactly what `status` says, then run `status` again.** It reads the site folder and names the one next
+step as a command, with why and what follows: the reads, the calibration, the design system, the seed, a brief per
+section, your Behaviours, `script.js`, scores (re-measured whenever the clone changed), the failing checks one
+objective at a time (each with the command to look closer), the review at every size, the Next.js app.
 
-**Never end your turn, ask "should I continue?", or hand over a progress summary while `status` says work is left.**
-The user asked for the finished clone. The only reason to stop is a real blocker (a login wall, a bot check, a tool
-defect you proved): write it under `## Findings` in notes.md with what you tried, then say so. A long loop is not a
-blocker; a check that is hard is not a blocker. "Large work" (a three.js scene, a carousel) is the work: see Recipes.
-A step that does not improve after three real tries (you changed the clone, it was scored again, no gain) is set aside
-by `status` (it says so) and the next one comes up; write what blocks the set-aside step under `## Findings`.
-Re-scoring an unchanged clone is not a try, and scripting re-scores to reach a set-aside is gaming the loop: never.
+`status` ends the run itself, with one of four exit codes:
 
-**The loop ends only at exit 0 (every gate passes) or exit 3 (every step left is set aside: make sure each is in
-Findings, then hand over).** Stopping anywhere else is an unfinished run, and your summary must say it is unfinished.
+| Exit | Outcome | What you do |
+|---|---|---|
+| 0 | **Verified**: every required result passes on the clone and the app as they are now | hand over REPORT.md |
+| 1 | **Work left**: it named the next step | do it, run `status` again |
+| 2 | **Blocked**: something outside the clone stops it (the live site does not load, the instrument is modified) | report what it says; resume with `status` after the cause is fixed |
+| 3 | **Incomplete**: the loop concluded with differences left (no progress after its attempts and a change of strategy) | hand over REPORT.md and say it is incomplete, naming what is unresolved |
+
+**Never end your turn, ask "should I continue?", or hand over a progress summary while `status` exits 1.** The user
+asked for the finished clone. A long loop is not a reason to stop; a hard check is not either. "Large work" (a
+three.js scene, a carousel) is the work: see Recipes. Exit 2 and exit 3 are `status`'s calls, never yours: you do not
+declare a blocker or conclude an objective. When an objective makes no progress, `status` asks for a change of strategy (one
+line under `## Attempts` in notes.md: what the evidence shows, what the next attempt does differently, `evidence:
+<file>` you made now); only after that does it conclude. Re-scoring an unchanged clone is not an attempt, and scripting
+re-scores to reach a conclusion is gaming the loop: never.
+
 A canvas app (one full-window canvas, a page that never scrolls) takes the app path: see Apps below; `status` switches
 by itself.
 
@@ -67,13 +75,31 @@ result.
    re-score. Your own controls also handle `pointercancel` and `lostpointercapture` (a drag that ends outside the
    window must not stick to the cursor).
 5. **Never edit generated files** (`clone/index.html`, `next/`). Add what the clone needs in `clone/patches/`. A fix
-   that needs generated markup changed is a tool defect: write it in Findings.
+   that needs generated markup changed is a tool defect: write it in Findings, with evidence, and carry on.
 6. **Look, don't just score.** `review` shows reference and clone side by side at every size, sections and hovers; give
    every frame a verdict. A frame that differs is open, whatever the numbers say.
 7. **Exact mode only with permission.** `template` (default) is for anyone's site: placeholder text and media, the
    original's structure and behaviour. `exact` copies the site's own text and media and needs
    `--permission "<who authorised it>"`. Never get past bot checks, logins or paywalls. No tracking scripts; forms
    submit nowhere; `noindex`.
+8. **Never change the instrument.** No `NODE_OPTIONS`, `--import` or `--require` preloads, no edits under
+   `node_modules`, no hand edits to `motion-map.json`, `journey.json` or `interactions.json` unless `status` asks for
+   them. Status detects a modified instrument and stops (exit 2); results measured that way never count. A suspected
+   tool defect goes under `## Findings` with evidence, and the work goes on: status routes what the tool cannot measure
+   itself (it lists it in REPORT as "not verifiable by the tool"), never to you.
+9. **Change follows the site's rules.** Every check opens both sides with the same seeded `Math.random`, the same
+   clock start and the same motion setting, and takes stills at the same page age: so a shuffled gallery, a carousel
+   and a marquee are compared at equal states. The behaviour check then watches the live pages: the same loop speed
+   and direction, the same carousel interval, the same shuffle at startup. Port the rule; never fix a state (no
+   `Math.random`, `Date.now`, `performance.now` or `requestAnimationFrame` replaced, no `animation: none` the site does
+   not have outside a `prefers-reduced-motion` rule: the clone lint fails both). The reduced-motion page is a check of
+   its own: port the site's `prefers-reduced-motion` rules too.
+10. **Template mode: your own art, the site's composition.** Never sample, fit or extract the reference's pixels,
+    textures, models or animation data. Art and motion are ported from the site's code; media are your own. Canvas
+    scenes are judged by where things are (composition), not by matching the palette.
+11. **Third-party content follows the recorded decision.** An excluded widget (REPORT lists them) stays out of the clone
+    (the lint fails a clone that keeps it). One kept with `--include` is cloned and verified like everything else.
+    Probes you write to diagnose an objective never take the timing lock and never replace a check.
 
 ## What you write in notes.md
 
@@ -82,14 +108,17 @@ result.
   from the brief, e.g. `- hero cells: scroll 0→5600 (pin), scale 1→0.58, scrub 0.3; 23-hero.pretty.js:1108`. The
   report fails while this is empty or cites nothing.
 - **Review**: one line per frame of `compare/review/<size>/index.md`, with the frame's token from that table:
-  `- 03-section-2 wide [k3x9a]: same` or `- 07-section-4-hover wide [p02ld]: differs: the panel opens on the wrong
-  card`. A verdict holds for the picture you looked at: a frame shot again that looks different has a new token and
-  needs a new look. Below 85% pixel match, "same" says why (`same: the reference's photo arrives later`); "tool" needs
-  evidence you made (a crop, a measurement), not one of the site's files. Never write verdicts from pixel match or with
-  a script: look at every sheet.
+  `- 03-section-2 wide [0608cbcb01110180]: same` or `- 07-section-4-hover wide [060ecbcb00110180]: differs: the panel
+  opens on the wrong card`. A verdict holds for the picture you looked at: a frame shot again that looks different has
+  a new token and needs a new look (one that only moved by noise keeps it). Below 85% pixel match, "same" says why
+  (`same: the reference's photo arrives later`). "tool" closes a frame only where the table shows the reference
+  differing from itself there, or with `evidence: <file>` named after that frame; a frame marked "clone only" is a
+  difference whatever you write. Never write verdicts from pixel match or with a script: look at every sheet.
+- **Attempts**: when `status` asks for a change of strategy, one line naming the objective (its label or key), what
+  the evidence shows, what the next attempt does differently, and `evidence: <file>` made for it.
 - **Accepted differences**: `- <check> <size> <where>: <why>; evidence: compare/explain/wide-5200.png`, only for the
   last points of a check already ≥ 95.
-- **Findings**: tool defects, with evidence; a step `status` set aside, with what blocks it; and each of the site's
+- **Findings**: tool defects, with evidence; what you learned about an objective `status` concluded; and each of the site's
   scripts or scroll curves you do not port, by name, with why (an app, a polyfill, analytics). The report's Coverage
   check fails while one of the site's busiest scripts, or a recorded curve, is in neither Behaviours nor Findings.
 
@@ -116,17 +145,21 @@ and scroll states are scored per route; navigation is scored (each link: the rig
 Back); `brief --route /about` and `review --route /about` work on one route. An app shell (a fixed sidebar and a pane
 that scrolls on its own) is measured with the pane unrolled, the same way on both sides.
 
-**The checks**: layout, scroll states (the mean and every frame: none below 80%), canvases (every frame ≥ 60%), motion
+**The checks**: layout, scroll states (the mean and every frame, each against the bar the reference's own replays set
+for it, `reference/noise.json` from `calibrate`), canvases (composition and colour layout, never a colour histogram;
+template mode: composition, with a stated allowance), behaviour (what changes by itself, desktop and phone, every
+route), reduced motion (the page with `prefers-reduced-motion: reduce`, desktop and phone), motion
 curves (`curves --draft` maps the recorded ones), detail, hovers ("not measurable" when the reference has none to
 compare), interactions (the capture finds every scroller, carousel, tab set, accordion, menu and dialog,
 `reference/interactions.auto.json`; your `interactions.json` adds, overrides by name, or retires one with
 `{ "name": "…", "skip": "<why>" }`; a scenario passes on what the visitor sees: the end state, the address relative to
 the start page, a real page there, not a 404 or an empty one; one that could not run on the reference is listed for
-Findings, never counted as a pass), load, notes, coverage and review. Sizes: built from 390, 768, 1440; held out
-(scored, never built from) 1280 and 1920. Unstable probes are measured twice on the reference and excluded, and a route
-that differs from itself between loads (random order) is held to its own worst match, its scenarios not scored; do not
-chase a number inside the noise. If `drift` says the live site changed, re-capture (status then asks for fresh reads).
-The Next app is held to the clone within a point everywhere, including its own review frames.
+Findings, never counted as a pass), load, notes, coverage, the clone lint and review. Sizes: built from 390, 768,
+1440; held out (scored, never built from) 1280 and 1920. A frame the reference differs from itself on is judged by its
+nearest reference draw and what stays the same between draws (how much of the view a scene fills), never passed by
+being declared noisy; do not chase a number inside the noise. If `drift` says the live site changed (its height, its
+sections, or where its scripts come from), re-capture (status then asks for fresh reads). The Next app is verified as
+delivered, with every check and its own review frames.
 
 **Recipes** (the work that looks large is ordinary work):
 - *A canvas (three.js, WebGL, 2D)*: `motion` names the engine and its version, `vendor` puts it in `clone/patches/`.
@@ -146,7 +179,8 @@ The Next app is held to the clone within a point everywhere, including its own r
 
 **Tools status points you to**: `reads <name>` (every read of the live page, side by side where that is safe),
 `brief <name> [<n>] [--viewport]`, `explain <name> <y> --viewport <size>`,
-`score <name> [--only layout,states,interact,…] [--viewport <size>]`, `review <name> --size <size>`,
+`calibrate <name>`, `score <name> [--only layout,states,behaviour,reduced,interact,…] [--viewport <size>]`,
+`behaviour <name>`, `review <name> --size <size>`,
 `rules <name> "<selector>" [--clone]`, `tiles <name>`, `owned <name>`, `serve <name> [--next]`,
 `next <name> --verify`. REA is bundled for the rare part no script reading explains (`npx trueclone rea --help`).
 
@@ -160,7 +194,9 @@ app is served at every address, a site of separate pages gets one route per page
 Capture marks a site a canvas app (`meta.canvasApp`) when one canvas fills the window and the page never scrolls: a
 visitor reaches its states by input (wheel or touch moving a virtual scroll, a gesture gate such as "draw a zero", a
 hold button), not by scrolling. Its states are the **checkpoints of a journey**, and its checks are the journey (every
-checkpoint, desktop and phone, worst one ≥ 80, mean ≥ 95), interactions and load; the document checks do not apply.
+checkpoint, desktop and phone, worst one ≥ 80, mean ≥ 95; each checkpoint the lowest of its UI layer, its scene and
+its interface text; template mode judges the scene by composition with a stated 15-point allowance and reports "media
+replaced"), interactions and load; the document checks do not apply.
 `status` walks it like any site: journey draft, reads, seed, the clone, scores, review, Next.
 
 **The journey** (`sites/<name>/journey.json`): `journey <name> --draft` finds it on the live page at desktop and phone
@@ -189,10 +225,10 @@ seeded `Math.random`.
   camera, geometry, material values, shader code ported), the stage machine moved by the virtual scroll with the
   site's lerp constants (the brief and `reference/scripts/` give them, file:line), gates that pass with the same input.
   `vendor` gives three.js at the site's revision. A whole multi-stage app is long work: the first stages to their
-  checkpoints, then the next; `status` set-asides apply.
+  checkpoints, then the next; `status` concludes an objective that stops progressing.
 
 **Review**: `compare/review/journey-desktop/` and `journey-mobile/`, one frame per checkpoint; verdict lines as for any
-frame: `- journey/02-step-1 desktop [uvnuc]: same`.
+frame: `- journey/02-step-1 desktop [0608cbcb01110180]: same`.
 
 ## Honest limits
 
