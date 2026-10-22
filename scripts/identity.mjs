@@ -73,7 +73,8 @@ export async function refId(root) {
 }
 
 // The instrument configuration each check reads besides the capture (an edit invalidates that check's results)
-export const CONFIG_FILES = { journey: ['journey.json'], curves: ['motion-map.json'], interact: ['interactions.json', 'reference/interactions.auto.json'] };
+// the journey's results are compared with the reference's own run of it (its frames): read again, they are measured again
+export const CONFIG_FILES = { journey: ['journey.json', 'reference/journey/journey.json'], curves: ['motion-map.json'], interact: ['interactions.json', 'reference/interactions.auto.json'] };
 export async function configHash(root, check) {
   const files = CONFIG_FILES[check];
   if (!files) return null;

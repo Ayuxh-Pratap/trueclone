@@ -144,3 +144,18 @@ test('a concluded objective that later passes is counted as passed', async () =>
   observe(loop, ev('hpass', { desktop: [{ id: 'a', value: 99 }, { id: 'b', value: 99 }] }), '', os.tmpdir());
   assert.equal(Object.values(loop.objectives)[0].state, 'passed');
 });
+
+// rc.6: a review frame marked "differs" whose picture is gone stale (the clone changed; RC5 zero after its re-seed) is
+// not passed: it waits to be shot and looked at again. Only a fresh frame with a closing verdict passes it.
+test('a "differs" review frame that went stale is not counted as passed', async () => {
+  const loop = fresh();
+  const frame = (state) => ({ side: 'clone', subjectHash: 'h', units: [], review: { frames: [{ dir: 'compare/review/journey-mobile', id: 'journey/04-step-3', size: 'mobile', state, pct: 40, verdict: 'differs: asset error' }], missingDirs: [] } });
+  observe(loop, frame('differs'), '', os.tmpdir());
+  const o = Object.values(loop.objectives)[0];
+  assert.equal(o.kind, 'review');
+  assert.equal(o.state, 'open');
+  observe(loop, { ...frame('stale'), subjectHash: 'h2' }, '', os.tmpdir());
+  assert.equal(o.state, 'open', 'a stale picture is not a pass');
+  observe(loop, { ...frame('closed'), subjectHash: 'h2' }, '', os.tmpdir());
+  assert.equal(o.state, 'passed');
+});

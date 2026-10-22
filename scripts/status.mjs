@@ -16,9 +16,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, siteDir } from './lib.mjs';
+import { parseArgs, siteDir, bundleIntegrity } from './lib.mjs';
 import { evaluate, unitName, ORDER } from './verdict.mjs';
-import { envIdentity, refIdOf } from './identity.mjs';
+import { envIdentity, refIdOf, toolVersion } from './identity.mjs';
 import { loadLoop, saveLoop, observe, nextObjective, recordActivity, objectiveKey } from './loop.mjs';
 
 const { pos } = parseArgs(process.argv.slice(2));
@@ -45,14 +45,33 @@ const outcomeFile = path.join(root, 'compare', 'outcome.json');
 const writeOutcome = async (o) => { await fs.mkdir(path.dirname(outcomeFile), { recursive: true }); await fs.writeFile(outcomeFile, JSON.stringify({ ...o, at: new Date().toISOString() }, null, 2)); };
 const renderReport = () => spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'report.mjs'), name], { stdio: 'ignore' });
 
+// status never ends in a crash. A failure of trueclone itself (a bug in a check's bookkeeping, a file it cannot read)
+// is Blocked, owned by the tool, with the error and how to resume: Node's own crash exits 1, which an agent reads as
+// "work left" and would answer by re-running status forever (RC5 zero: loop.mjs failed on a review frame)
+let crashing = false;
+const crashed = async (e) => {
+  if (crashing) process.exit(2);
+  crashing = true;
+  const msg = String(e?.stack || e).split('\n').slice(0, 3).join(' | ');
+  await writeOutcome({ outcome: 'blocked', owner: 'tool', why: `trueclone itself failed: ${msg}`, error: String(e?.stack || e), tool: toolVersion(), next: 'report this error to the trueclone maintainers with sites/<name>/compare/outcome.json; do not edit the installed package. Once a fixed version is installed, run status again', resume: `${T(`status ${name}`)} (everything done so far is kept)` }).catch(() => {});
+  renderReport();
+  console.log(`trueclone status: ${name}\n\nBlocked: trueclone itself failed (a defect in the tool, not in the clone):\n  ${msg}\nNothing more can be done in this run until trueclone is fixed; everything done so far is kept. Report this error (it is in sites/${name}/compare/outcome.json and REPORT.md), and once a fixed version is installed run \`${T(`status ${name}`)}\` again to resume. Do not edit the installed package.`);
+  process.exit(2);
+};
+process.on('uncaughtException', crashed);
+process.on('unhandledRejection', crashed);
+
 // ---- 1. capture and what it reads ----
 const meta = await json('reference/meta.json');
 if (!meta) await next(T(`capture <url> ${name}`), 'nothing captured yet (add --mode exact --permission "<owner>" only with the owner\'s permission)');
 // a capture that did not finish (no completion mark) is not a reference: it is captured again (capture.mjs)
-if (meta.complete === false) await next(T(`capture ${meta.url} ${name}`), 'the last capture did not finish (crashed or stopped part-way): a partial reference is never measured against');
+// capture again with the site's own settings (an exact-mode site stays exact, with its permission; its hide list,
+// cookies, locale, routes and hand-made exclusions and inclusions are kept)
+const recapture = () => T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${meta.permission}"` : ''}${(meta.hide || []).length ? ` --hide "${meta.hide.join(',')}"` : ''}${(meta.cookies || []).length ? ` --cookie "${meta.cookies.map((c) => `${c.name}=${c.value}`).join('; ')}"` : ''}${meta.locale && meta.locale !== 'en-US' ? ` --locale ${meta.locale}` : ''}${(meta.routes || []).length > 1 ? ` --routes ${meta.routes.length}` : ''}${(meta.ignore || []).filter((i) => !i.auto).length ? ` --ignore "${meta.ignore.filter((i) => !i.auto).map((i) => i.sel).join(',')}"` : ''}${(meta.thirdParty || []).filter((t) => /--include/.test(t.decision || '')).length ? ` --include "${meta.thirdParty.filter((t) => /--include/.test(t.decision || '')).map((t) => t.sel).join(',')}"` : ''}${meta.bundle && !meta.canvasApp ? ' --bundle' : ''}`);
+if (meta.complete === false) await next(recapture(), 'the last capture did not finish (crashed or stopped part-way): a partial reference is never measured against');
 // a reference captured before symmetric measurement (rc.5: the same seed, clock and motion setting on both sides, loops
 // held at an equal non-zero time) was shot under other conditions than every clone measurement now: captured again
-if (!meta.stabilise) await next(T(`capture ${meta.url} ${name}`), 'the reference was captured before symmetric measurement (rc.5: the same seed, clock and motion setting on both sides): every comparison with it would be uneven');
+if (!meta.stabilise) await next(recapture(), 'the reference was captured before symmetric measurement (rc.5: the same seed, clock and motion setting on both sides): every comparison with it would be uneven');
 // App mode: a canvas app (capture: meta.canvasApp) is not a document. Its states are the checkpoints of a journey
 // (journey.json: the input a visitor makes, gates included), read on the reference and scored on the clone.
 const app = Boolean(meta.canvasApp);
@@ -97,8 +116,34 @@ done.push('reads');
 // the reference against itself, before any clone work (PLAN.md 5.4 validity gate): every bar is set from it, and a
 // frame the reference varies on is known before the loop spends time on it
 const noiseRec = await json('reference/noise.json');
-if (!noiseRec || noiseRec.refId !== refIdOf(meta)) await next(T(`calibrate ${name}`), `${noiseRec ? 'the calibration belongs to an earlier capture' : 'the reference has not been measured against itself yet'}: two more loads of the live page through the same checks set the bar of every frame (reference/noise.json); about ${app ? '10' : '5-15'} minutes, once per capture`, ['while it runs (in the background), read reference/scripts/INDEX.md']);
+// the reference's own reads that the calibration replays (its states, an app's reference journey) read again after it
+// was made: it describes reference frames that are gone (RC5 zero: the journey re-recorded to complete the bundle)
+const readAfter = Math.max((await stat(app ? 'reference/journey/journey.json' : 'reference/states/desktop.json'))?.mtimeMs || 0, 0);
+const noiseOld = noiseRec && Date.parse(noiseRec.at || 0) < readAfter - 1000;
+if (!noiseRec || noiseRec.refId !== refIdOf(meta) || noiseOld) await next(T(`calibrate ${name}`), `${noiseOld ? 'the reference was read again after the calibration' : noiseRec ? 'the calibration belongs to an earlier capture' : 'the reference has not been measured against itself yet'}: two more loads of the live page through the same checks set the bar of every frame (reference/noise.json); about ${app ? '10' : '5-15'} minutes, once per capture`, ['while it runs (in the background), read reference/scripts/INDEX.md']);
 done.push('calibrated');
+// the site's own files, whole (own bundle: the clone runs them). A file the recorder could not get is recorded as failed
+// (lib.mjs recordBundle); a bundle from rc.5 may hold empty files. The reference journey records every file again, once;
+// a file still missing after that cannot be fixed by the clone's work: Blocked, the files named, the work kept
+if (ownBundle) {
+  const integrity = await bundleIntegrity(path.join(root, 'reference'));
+  const tried = await json('compare/bundle-rerecord.json');
+  const manifestAt = (await stat('reference/bundle/manifest.json'))?.mtimeMs || 0;
+  if (integrity.problems.length) {
+    const list = integrity.problems.slice(0, 8).map((p) => `${p.url.replace(/^https?:\/\//, '')} (${p.why})`).join('; ');
+    if (!tried || Date.parse(tried.at) > manifestAt) {
+      await fs.mkdir(path.join(root, 'compare'), { recursive: true });
+      await fs.writeFile(path.join(root, 'compare', 'bundle-rerecord.json'), JSON.stringify({ at: new Date().toISOString(), problems: integrity.problems }, null, 1));
+      await next(T(`journey ${name}`), `${integrity.problems.length} of the site's ${integrity.entries} recorded files are not whole: ${list}${integrity.problems.length > 8 ? '…' : ''}. The reference journey loads the app again and records every file it asks for (each checked, and recovered when the browser does not hand it over)`, [T(`status ${name}`)]);
+    }
+    await writeOutcome({ outcome: 'blocked', owner: 'tool', why: `${integrity.problems.length} of the site's own files could not be recorded, after the reference journey recorded them again: ${list}`, next: 'the clone cannot run without them (no change to the clone can supply them). Check that the site serves them to this machine (open one of the addresses in a browser); if it does, report this with sites/<name>/reference/bundle/manifest.json', resume: `${T(`journey ${name}`)}, then ${T(`status ${name}`)} (everything done so far is kept)`, problems: integrity.problems });
+    renderReport();
+    console.log(`trueclone status: ${name}\n\nBlocked: ${integrity.problems.length} of the site's own files could not be recorded, after a second recording: ${list}\nNo change to the clone can supply them. What to do: check that the site serves them to this machine; if it does, report it with sites/${name}/reference/bundle/manifest.json. Everything done so far is kept; ${T(`journey ${name}`)} then ${T(`status ${name}`)} resumes.`);
+    process.exit(2);
+  }
+  await fs.rm(path.join(root, 'compare', 'bundle-rerecord.json'), { force: true });
+  done.push(`bundle (${integrity.entries} files whole)`);
+}
 
 // ---- 2. design and seed (each re-run when its inputs are newer) ----
 const tokens = await stat('design-tokens.json');
@@ -152,7 +197,7 @@ const blocked = async (why, what, data = {}) => {
 };
 if (env.instrumentModified) await blocked(`the instrument is modified in this environment (${env.reasons.join('; ')}): nothing measured here could be trusted`, 'unset NODE_OPTIONS (or remove the edited package files and reinstall @trueclone/cli), then run status again');
 const drift = await json('compare/drift.json');
-if (drift?.refId === ev.refId && drift.stale) await next(T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${meta.permission}"` : ''}${(meta.hide || []).length ? ` --hide "${meta.hide.join(',')}"` : ''}`), 'the live site has changed since the capture (drift, seen on two loads): every result would compare the clone with a page that no longer exists; capture again (the clone, notes and patches are kept)');
+if (drift?.refId === ev.refId && drift.stale) await next(recapture(), 'the live site has changed since the capture (drift, seen on two loads): every result would compare the clone with a page that no longer exists; capture again (the clone, notes and patches are kept)');
 if (drift?.refId === ev.refId && drift.unreachable?.length) {
   loop.errors.drift = (loop.errors.drift || 0) + 1;
   if (loop.errors.drift >= 2) await blocked(`the live site does not load (${drift.viewports.find((v) => v.unreachable)?.unreachable}) at ${drift.unreachable.join(', ')}: the reference cannot be measured`, `check the network and that ${meta.url} opens in a browser here (a sandbox with no network access cannot reach it), then run status again`);
@@ -182,7 +227,7 @@ for (const u of errs) {
   const id = unitIdOf(u);
   const seen = loop.errors[id];
   if (seen?.subjectHash === ev.subjectHash && seen.count >= 1) {
-    if (TOOL_ERR.test(u.reason || '')) await blocked(`${unitName(u)} cannot be measured: ${u.reason}`, /capture|re-capture|reads/i.test(u.reason) ? `${T(`capture ${meta.url} ${name}`)} (the reference is incomplete), then status` : 'check the network and the browser (npx trueclone doctor), then run status again');
+    if (TOOL_ERR.test(u.reason || '')) await blocked(`${unitName(u)} cannot be measured: ${u.reason}`, /capture|re-capture|reads/i.test(u.reason) ? `${recapture()} (the reference is incomplete), then status` : 'check the network and the browser (npx trueclone doctor), then run status again');
   }
 }
 const toRemeasure = ev.units.filter((u) => !u.plan && ['missing', 'invalid', 'error'].includes(u.status) && !(u.status === 'error' && loop.errors[unitIdOf(u)]?.subjectHash === ev.subjectHash && loop.errors[unitIdOf(u)].count >= 1));

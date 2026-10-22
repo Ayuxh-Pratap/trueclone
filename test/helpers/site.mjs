@@ -31,7 +31,7 @@ export async function makeSite(project, name, kind = 'doc', opts = {}) {
   const meta = { url: 'http://127.0.0.1:9/', name, mode: opts.exact ? 'exact' : 'template', ...(opts.exact ? { permission: 'test' } : {}), hide: [], routes: routes.length > 1 ? routes : [], unroll: 'y', ...(opts.ignore ? { ignore: opts.ignore } : {}), stabilise: { seed: 20261021, clock: '2026-01-15T12:00:00.000Z', motion: 'no-preference', loops: 'held at 2300 ms' }, capturedAt: '2026-10-22T00:00:00.000Z', complete: true, viewports: VPS.map((v) => ({ viewport: v, pageHeight: 2000, sections: 3 })), ...(app ? { canvasApp: { canvas: 'canvas#c', engine: 'three' } } : {}) };
   await put(root, 'reference/meta.json', meta);
   // calibrated (calibrate.mjs), with no entry: every bar is the fixed target
-  await put(root, 'reference/noise.json', { refId: refIdOf(meta), at: meta.capturedAt, draws: 2, drawDirs: [], entries: {} });
+  await put(root, 'reference/noise.json', { refId: refIdOf(meta), at: '2026-10-22T02:00:00.000Z', draws: 2, drawDirs: [], entries: {} });
   await put(root, 'reference/motion.desktop.json', { libs: {}, triggers: [], onScroll: [], css: [] });
   await put(root, 'reference/scripts/scripts.json', { listeners: [], scripts: [] });
   if (app) {

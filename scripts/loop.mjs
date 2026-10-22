@@ -66,7 +66,7 @@ export function objectivesOf(ev) {
     out.push({ key: objectiveKey(ev.side, u), side: ev.side, kind: 'unit', check: u.check, route: u.route, viewport: u.viewport, scenario: u.scenario, label: `${ev.side === 'app' ? 'Next.js app: ' : ''}${unitName(u)}`, shortfall: u.shortfall, conditions: conditionsOf(u), value: u.value, bar: u.bar, members: (u.record?.members || []).map((m) => ({ id: m.id, value: m.value })), below: (u.membersBelow || []).length ? u.membersBelow : lowestOf(u.record?.members), eps: Math.max(DEFAULTS.eps, u.calibration?.spread || 0) });
   }
   for (const f of ev.review.frames.filter((x) => x.state === 'differs')) {
-    out.push({ key: `${ev.side}:review:${f.dir}:${f.id}`, side: ev.side, kind: 'review', check: 'review', viewport: f.size, frame: f.id, dir: f.dir, label: `${ev.side === 'app' ? 'Next.js app: ' : ''}review frame ${f.id} (${f.size})`, shortfall: 1, conditions: { mean: 1, floors: 0, below: 0 }, value: f.pct, verdict: f.verdict, why: f.why, eps: 0 });
+    out.push({ key: `${ev.side}:review:${f.dir}:${f.id}`, side: ev.side, kind: 'review', check: 'review', viewport: f.size, frame: f.id, dir: f.dir, label: `${ev.side === 'app' ? 'Next.js app: ' : ''}review frame ${f.id} (${f.size})`, shortfall: 1, conditions: { mean: 1, floors: 0, below: 0 }, below: [], value: f.pct, verdict: f.verdict, why: f.why, eps: 0 });
   }
   return out;
 }
@@ -138,7 +138,7 @@ export function observe(loop, ev, notesText, root, now = new Date()) {
     if (o.bestShortfall === null || o.bestShortfall === undefined) { o.bestShortfall = cur.shortfall; o.bestValue = cur.value; o.bestAt = ev.subjectHash; }
     if (!o.best) o.best = { ...cur.conditions };
     o.lastShortfall = cur.shortfall; o.lastValue = cur.value;
-    o.current = { value: cur.value, bar: cur.bar, below: cur.below.slice(0, 5), verdict: cur.verdict, why: cur.why };
+    o.current = { value: cur.value, bar: cur.bar, below: (cur.below || []).slice(0, 5), verdict: cur.verdict, why: cur.why };
     loop.objectives[k] = o;
   }
   // objectives no longer failing on this side (measured and passing, or no longer required) are passed; a concluded
@@ -146,7 +146,12 @@ export function observe(loop, ev, notesText, root, now = new Date()) {
   for (const o of Object.values(loop.objectives)) {
     if (o.side !== ev.side || !['open', 'concluded'].includes(o.state) || current.has(o.key)) continue;
     const still = ev.units.some((u) => !u.plan && objectiveKey(ev.side, u) === o.key && ['missing', 'stale', 'invalid', 'error'].includes(u.status));
-    if (!still) { o.state = 'passed'; o.lastShortfall = 0; }
+    // a review frame passes only when it is looked at again and closed: one whose picture went stale, or whose folder is
+    // not shot yet, is not passed (RC5 zero: 55 "differs" frames before a re-seed)
+    const frame = o.kind === 'review' && (ev.review?.frames || []).find((f) => `${ev.side}:review:${f.dir}:${f.id}` === o.key);
+    // (a frame the new shots no longer have is retired, like any result no longer required)
+    const unseen = o.kind === 'review' && (frame ? frame.state !== 'closed' : (ev.review?.missingDirs || []).some((d) => d.dir === o.dir));
+    if (!still && !unseen) { o.state = 'passed'; o.lastShortfall = 0; }
   }
   // change of strategy, then conclusion; and the run-level plateau
   for (const o of Object.values(loop.objectives)) {

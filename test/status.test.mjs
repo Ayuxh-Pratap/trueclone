@@ -162,3 +162,86 @@ test('true pass (D3): a widget excluded on both sides and left out of the clone;
   const r = status(p, 'tp');
   assert.equal(r.code, 0, r.out);
 });
+
+// RC5 zero (2026-10-22): a review frame marked "differs" crashed status in loop.mjs (a review objective had no member
+// list), and the crash exited 1, which an agent reads as "work left". It must be a step; and any failure of status
+// itself must end Blocked (exit 2) with the cause, never as work left.
+test('a review frame marked "differs" is a step (exit 1, the frame named), not a crash', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'rv', 'app');
+  const n = await fs.readFile(path.join(site.root, 'notes.md'), 'utf8');
+  await edit(site, 'notes.md', n.replace(/(journey\/00-load desktop \[[^\]]+\]): same/, '$1: differs: the clone shows a loader where the reference shows the scene'));
+  const r = status(p, 'rv');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /review frame journey\/00-load/);
+  assert.doesNotMatch(r.out, /TypeError/);
+});
+
+test('a failure inside status itself ends Blocked (exit 2) with the cause and a resume line, never exit 1', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'crash');
+  const { refIdOf } = await import('../scripts/identity.mjs');
+  // a loop record status cannot read (objectives not an object)
+  await fs.mkdir(path.join(site.root, 'compare'), { recursive: true });
+  await fs.writeFile(path.join(site.root, 'compare', 'loop.json'), JSON.stringify({ refId: refIdOf(site.meta), objectives: 'broken', run: null }));
+  const r = status(p, 'crash');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /Blocked: trueclone itself failed/);
+  const out = await readJson(site, 'compare/outcome.json');
+  assert.equal(out.outcome, 'blocked');
+  assert.equal(out.owner, 'tool');
+  // the cause is kept whole (the error and where it happened), never hidden behind the safety net
+  assert.match(out.error, /Error/);
+  assert.match(out.error, /at /);
+});
+
+// rc.6: "capture again" keeps the site's own settings (rc.5 printed `capture <url> <name>`, which would have turned an
+// exact-mode site into template mode)
+test('a re-capture step keeps exact mode and its permission', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'z5', 'app', { exact: true });
+  const meta = JSON.parse(await fs.readFile(path.join(site.root, 'reference', 'meta.json'), 'utf8'));
+  await edit(site, 'reference/meta.json', JSON.stringify({ ...meta, complete: false }));
+  const r = status(p, 'z5');
+  assert.equal(r.code, 1, r.out);
+  assert.ok(r.out.includes('next: npx trueclone capture http://127.0.0.1:9/ z5 --mode exact --permission "test"'), r.out);
+});
+
+// a reference journey read again (here: to complete the bundle) makes its calibration and the journey's results stale
+test('reading the reference journey again calls for calibration again, and the journey results measured against the old run stop counting', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'zr', 'app');
+  await new Promise((r) => setTimeout(r, 20));
+  await edit(site, 'reference/journey/journey.json', JSON.stringify({ viewports: [], at: new Date().toISOString() }));
+  const r = status(p, 'zr');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /next: npx trueclone calibrate zr/);
+  assert.match(r.out, /read again after the calibration/);
+  const { evaluate } = await import('../scripts/verdict.mjs');
+  const ev = await evaluate(site.root, { side: 'clone' });
+  assert.ok(ev.units.filter((u) => u.check === 'journey').every((u) => u.status === 'invalid'), JSON.stringify(ev.units.map((u) => [u.check, u.status])));
+});
+
+// RC5 zero: empty files in the own bundle. Re-recorded once by the reference journey; still not whole: Blocked
+test('an own bundle with files that are not whole is recorded again once, then Blocked with the files named', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'zb', 'app', { exact: true });
+  const meta = JSON.parse(await fs.readFile(path.join(site.root, 'reference', 'meta.json'), 'utf8'));
+  await edit(site, 'reference/meta.json', JSON.stringify({ ...meta, bundle: true }));
+  const { refIdOf } = await import('../scripts/identity.mjs');
+  await edit(site, 'reference/noise.json', JSON.stringify({ refId: refIdOf({ ...meta, bundle: true }), at: '2026-10-22T02:00:00.000Z', entries: {}, drawDirs: [] }));
+  await fs.mkdir(path.join(site.root, 'reference', 'bundle', 'x.test'), { recursive: true });
+  await fs.writeFile(path.join(site.root, 'reference', 'bundle', 'x.test', 'frost.webp'), '');
+  await fs.writeFile(path.join(site.root, 'reference', 'bundle', 'manifest.json'), JSON.stringify({ entries: { 'https://x.test/frost.webp': { file: 'x.test/frost.webp', type: 'image/webp', kind: 'fetch' } } }));
+  let r = status(p, 'zb');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /next: npx trueclone journey zb/);
+  assert.match(r.out, /frost\.webp/);
+  // the journey ran (the manifest is written again) and the file is still empty
+  await new Promise((res) => setTimeout(res, 30));
+  await fs.writeFile(path.join(site.root, 'reference', 'bundle', 'manifest.json'), JSON.stringify({ entries: { 'https://x.test/frost.webp': { type: 'image/webp', kind: 'fetch', failed: 'lost body (0 of 145028 bytes), recovery answered HTTP 403', attempts: 2 } } }));
+  r = status(p, 'zb');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /Blocked: 1 of the site's own files could not be recorded/);
+  assert.equal((await readJson(site, 'compare/outcome.json')).outcome, 'blocked');
+});
