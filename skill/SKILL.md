@@ -207,7 +207,8 @@ counts. **Read the draft against the live site**: every checkpoint a state you s
 hand (steps: `checkpoint`, `wheel {dy}`, `gesture {shape|path, at, size}`, `hold {at, ms}`, `click`, `pointer`, `key`,
 `wait`; points are fractions of the window; `stepsByViewport.mobile` for the phone). Passing a gate means making the
 input it asks for, never a debug route or a URL parameter the site did not give visitors. Both sides run with the same
-seeded `Math.random`.
+seeded `Math.random`. A gate the page names in words is replayed when its words are on screen and checked to have
+passed; one that does not pass is a journey error in REPORT (the page's words quoted), never a silent checkpoint.
 
 `journey <name>` (part of `reads`) shoots the reference's checkpoints and records what the app is made of:
 `reference/scene/*.json` (the three.js scene graph per checkpoint: objects, geometry, materials, cameras) and
@@ -220,6 +221,8 @@ seeded `Math.random`.
   to a backend are answered without being sent, tracking is dropped, anything never recorded is a 404 (never the live
   site). Your work is the review: a checkpoint that differs is usually a file the journey never loaded (re-run
   `journey <name>` on the reference, then `seed`), or a call the site makes that needs a recorded answer (Findings).
+  Every recorded file is checked; `status` re-records a bundle with files that are not whole, and if they still cannot
+  be recorded it stops Blocked with them named: never edit `reference/bundle/` or download files into it yourself.
 - **Port** (template mode, or exact without the bundle): you write the app in `clone/script.js`, stage by stage, in
   journey order: the renderer and post chain, each stage's scene from `reference/scene/` and `reference/shaders/` (same
   camera, geometry, material values, shader code ported), the stage machine moved by the virtual scroll with the

@@ -16,7 +16,7 @@ result and never counts as an attempt.
 |---|---|---|
 | 0 | Verified | Every required result passes (or is accepted with evidence, or has nothing to measure) on the HTML clone **and** on the Next.js app, each measured on its content as it is now, against the current reference; the review closed by eye; notes, coverage and the clone lint pass; nothing invalid, stale, missing, errored or tool-owned |
 | 1 | Work left | Not terminal: the next step is printed. Building, measuring, restoring a regression, working an objective, recording a change of strategy, the final sweep, app verification |
-| 2 | Blocked | The required measurement cannot be made valid after one bounded recovery: the live reference does not load, a capture is incomplete, the browser or sandbox fails, the instrument is modified (NODE_OPTIONS preload, edited package files) |
+| 2 | Blocked | The required measurement cannot be made valid after one bounded recovery: the live reference does not load, a capture is incomplete, the browser or sandbox fails, the instrument is modified (NODE_OPTIONS preload, edited package files), the site's own files cannot be recorded (own bundle), or trueclone itself fails (status never ends in a crash: the error is kept whole in `compare/outcome.json`, owner "tool") |
 | 3 | Incomplete | The loop concluded with differences left, or results remain that the tool cannot verify; the clone and app are verified as they are |
 
 **Wording (D5).** REPORT.md and status say, in these words:
@@ -155,6 +155,43 @@ itself, a faithful port with its own art about 80, and a different framing (RC4 
 "structure- and behaviour-equivalent; media replaced", never a pixel percentage. On the canvas-app fixture, the same
 colours in another arrangement score 98-99 on the histogram and 4-62 on composition, and fail
 (test/e2e/canvas-app.test.mjs).
+
+## Journeys: gates
+
+A canvas app's journey replays the inputs its draft found. A gate the page names in words (the draft passes "draw ..."
+with a gesture and "hold ..." with a hold, and counts it passed when the words leave the screen) is replayed by the
+same rule, on the reference and the clone alike (`journey.mjs gateStep`, rc.6):
+
+- wait up to 15 s for the gate's words to appear;
+- make the input, then check that the words left;
+- try again at most twice;
+- report a gate that never passes as a journey error naming what the page still says.
+
+RC5 zero's load checkpoint held still within about 2 s while its loader counted, and the gesture was drawn before the
+gate existed (it appears 3-6 s after load). Every later checkpoint stayed at "DRAW A ZERO", silently. Drawn 6 s after
+load the gesture passed 2 of 2 times; at 0.5-3 s, 0 of 6. Neither the seed nor the page clock changed that (8 of 8
+passed with each combination).
+
+## The site's own files (own bundle, exact mode)
+
+A canvas app in exact mode runs the site's own recorded files offline, so each recorded file is checked before it is
+kept (`lib.mjs recordBundle`, rc.6):
+
+- **Verdicts.** Each body is compared with what the browser received and with the length the server declared (when
+  the body is not content-encoded). The verdicts are ok, empty (legitimately: a 204, a zero-length answer), lost,
+  incomplete, and partial (a 206 range answer).
+- **Recovery.** Lost, incomplete and partial bodies are asked for again through the page's own browser context: its
+  cookies, the request's headers, no Range, at most twice.
+- **Validation.** An answer is kept only when it is the same resource: status 200, the same address after any
+  redirect, the same media type, not an HTML page standing in for something else, and its own declared length.
+  Otherwise the file is recorded as failed, with why.
+- **Provenance.** Every manifest entry records how it was obtained (`via: browser` or `recovered`, the verdict, the
+  bytes, a sha1) or why it failed.
+- **The cause found on RC5 zero.** Chrome's DevTools protocol hands over an empty body for a fetch the page consumes
+  as a Blob, although the bytes arrived; nine textures and videos were saved as 0-byte files.
+- **Status checks the record, not the folder.** If a file is not whole (failed, missing, of another size, or an empty
+  file from before rc.6), the reference journey records every file again, once. If a file is still not whole after
+  that, the run is Blocked with the files named: no change to the clone can supply them.
 
 ## Third-party content (D3)
 
