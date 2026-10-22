@@ -10,6 +10,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, readCache, PNG, withTimeout, COMPARE, siteDir, withMachineLock } from './lib.mjs';
+import { startIdentity } from './identity.mjs';
+import { writeUnits } from './results.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -37,7 +39,9 @@ async function sequence(browser, url, vp, dir) {
     await fs.mkdir(dir, { recursive: true });
     const frames = {};
     const t0 = Date.now();
-    const nav = page.goto(url, { waitUntil: 'load', timeout: 60000 }).catch(() => null);
+    // a page that did not load (no answer, an error status) is no load sequence at all: the run fails and is never
+    // kept, least of all as the reference (an error page cached as the original would score any clone)
+    const nav = page.goto(url, { waitUntil: 'load', timeout: 60000 }).then((res) => ({ res }), (err) => ({ err }));
     for (const t of TIMES) {
       const wait = t0 + t - Date.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -49,7 +53,9 @@ async function sequence(browser, url, vp, dir) {
       if (shot) await fs.writeFile(path.join(dir, `${vp.name}-${t}.png`), shot);
       else await fs.rm(path.join(dir, `${vp.name}-${t}.png`), { force: true });
     }
-    await nav;
+    const loaded = await nav;
+    if (loaded.err && !/Timeout/i.test(String(loaded.err.name || loaded.err.message))) throw new Error(`${url} did not load: ${String(loaded.err.message).split('\n')[0]}`);
+    if (loaded.res && loaded.res.status() >= 400) throw new Error(`${url} answered HTTP ${loaded.res.status()}`);
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
     await page.evaluate(() => document.fonts.ready).catch(() => {});
     await page.waitForTimeout(1500);
@@ -67,6 +73,8 @@ async function sequence(browser, url, vp, dir) {
 
 const cloneUrl = typeof flags.url === 'string' ? flags.url : null;
 const server = cloneUrl ? null : await serve(path.join(root, 'clone'));
+const ident = await startIdentity(root, 'load', COMPARE === 'compare-next' ? 'app' : 'clone');
+const units = [];
 const browser = await openBrowser(flags.cdp);
 const viewports = [];
 try {
@@ -84,8 +92,9 @@ try {
     return { curve, noise, settledAt: TIMES.find((t) => curve[t] !== null && curve[t] >= SETTLED) ?? null, runs, ...(incomplete ? { incomplete: true } : {}) };
   };
   for (const vp of vps) {
+   try {
     // a reference run with a moment still missing is measured again next time, never kept as the reference
-    const refKey = { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 3 };
+    const refKey = { tool: 'load', vp: vp.name, times: TIMES, network: NETWORK, v: 4 };
     // timed frames: one such measurement at a time on this machine (lib.mjs withMachineLock), whatever else runs
     const { ref, clone } = await withMachineLock(`load ${name} ${vp.name}`, async () => ({
       ref: await cached(root, refKey, () => twice(meta.url, path.join(root, 'reference', 'load'), vp), Boolean(flags['refresh-ref']) || Boolean((await readCache(root, refKey))?.incomplete)),
@@ -102,19 +111,29 @@ try {
     const unstable = ref.noise > NOISE_LIMIT;
     const cloneUnstable = !unstable && clone.noise > NOISE_LIMIT;
     const score = unstable ? null : cloneUnstable ? Math.min(...clone.runs.map((r) => match(r.curve)).filter((x) => x !== null)) : match(clone.curve);
-    viewports.push({ viewport: vp.name, score, unstable, cloneUnstable, noise, gap, ref, clone });
+    viewports.push({ viewport: vp.name, at: new Date().toISOString(), score, unstable, cloneUnstable, noise, gap, ref, clone });
+    units.push(unstable
+      ? { viewport: vp.name, value: null, tool: `the reference loads differently each time (±${ref.noise} between runs of itself): no single curve to compare with`, noise: ref.noise }
+      : { viewport: vp.name, value: score, noise, cloneUnstable, members: Object.entries(gap).map(([t, g]) => ({ id: `${t}ms`, value: +(100 - g).toFixed(2) })) });
     const curves = `curves ref ${TIMES.map((t) => ref.curve[t]).join('/')} clone ${clone.runs.map((r) => TIMES.map((t) => r.curve[t]).join('/')).join(' | ')}`;
     console.log(unstable
       ? `${vp.name}: load unstable (the reference differs by ±${ref.noise} between two runs of itself; not scored; ${curves})`
       : `${vp.name}: load match ${score}%${cloneUnstable ? ` (the clone loads differently each time, ±${clone.noise}: scored by its worse run)` : ` (noise ±${noise})`}; settled: reference ${ref.settledAt ?? '>4000'}ms, clone ${clone.settledAt ?? '>4000'}ms; ${curves}`);
+   } catch (e) {
+    const why = String(e.message).split('\n')[0];
+    console.warn(`WARNING load ${vp.name}: ${why}`);
+    units.push({ viewport: vp.name, value: null, error: why });
+   }
   }
 } finally {
   if (!flags.cdp) await browser.close();
   server?.close();
 }
 await fs.mkdir(path.join(root, COMPARE), { recursive: true });
+await writeUnits(root, COMPARE, 'load', units, ident);
 const out = path.join(root, COMPARE, 'load.json');
 const previous = await fs.readFile(out, 'utf8').then(JSON.parse).catch(() => null);
+// each size keeps the time it was measured (an older size merged in is never relabelled with this run's time)
 const merged = vps.length === VIEWPORTS.length || !previous ? viewports : [...(previous.viewports || []).filter((v) => !viewports.some((n) => n.viewport === v.viewport)), ...viewports];
-await fs.writeFile(out, JSON.stringify({ at: new Date().toISOString(), clone: cloneUrl || server?.url, times: TIMES, network: NETWORK, viewports: merged }, null, 2));
+await fs.writeFile(out, JSON.stringify({ at: ident.startedAt, clone: cloneUrl || server?.url, times: TIMES, network: NETWORK, viewports: merged }, null, 2));
 console.log(`-> ${path.relative(process.cwd(), out)}`);

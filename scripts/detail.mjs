@@ -10,6 +10,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE, siteDir, openUrl } from './lib.mjs';
+import { startIdentity } from './identity.mjs';
+import { writeUnits, mergeAggregate } from './results.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -200,10 +202,13 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 const rgba = (c) => (c.match(/[\d.]+/g) || []).map(Number).concat([1]).slice(0, 4);
 const colorDist = (a, b) => { const x = rgba(a), y = rgba(b); return Math.abs(x[0] - y[0]) + Math.abs(x[1] - y[1]) + Math.abs(x[2] - y[2]) + Math.abs(x[3] - y[3]) * 255; };
 
+const ident = await startIdentity(root, 'detail', COMPARE === 'compare-next' ? 'app' : 'clone');
+const units = [];
 const browser = await openBrowser(flags.cdp);
-const report = { name, at: new Date().toISOString(), viewports: [] };
+const report = { name, at: ident.startedAt, viewports: [] };
 try {
   for (const vpName of wanted) {
+   try {
     const vp = VIEWPORTS.find((v) => v.name === vpName);
     // reference probes are cached until the next capture (--refresh-ref to re-measure). The reference is read twice:
     // a probe that does not agree with itself (random motion, a hover that lands by timing, a rotating word) can
@@ -247,15 +252,22 @@ try {
     const total = ref.list.filter((p, i) => ref.results[i]?.style && !ref.unstable?.[i]).length;
     const byProp = {};
     issues.forEach((it) => it.props.forEach((pr) => { const k = pr.split(' ')[0] === 'no' ? 'missing element' : pr.split(' ')[0]; byProp[k] = (byProp[k] || 0) + 1; }));
-    report.viewports.push({ viewport: vpName, probes: total, clean, missing, unstable: unstableList.length, score: +(100 * clean / Math.max(1, total)).toFixed(1), byProp, issues, unstableProbes: unstableList });
+    const v = { viewport: vpName, probes: total, clean, missing, unstable: unstableList.length, score: +(100 * clean / Math.max(1, total)).toFixed(1), byProp, issues, unstableProbes: unstableList };
+    report.viewports.push(v);
+    units.push(total ? { viewport: vpName, value: v.score, probes: total, issues: issues.length } : { viewport: vpName, value: null, error: 'no style probe could be read on the reference' });
+   } catch (e) {
+    const why = String(e.message).split('\n')[0];
+    console.warn(`WARNING detail ${vpName}: ${why}`);
+    units.push({ viewport: vpName, value: null, error: why });
+   }
   }
 } finally {
   if (!flags.cdp) await browser.close();
   server?.close();
 }
 const out = path.join(root, COMPARE, 'detail.json');
-await fs.mkdir(path.dirname(out), { recursive: true });
-await fs.writeFile(out, JSON.stringify(report, null, 2));
+await writeUnits(root, COMPARE, 'detail', units, ident);
+await mergeAggregate(out, report);
 for (const v of report.viewports) {
   console.log(`\n${v.viewport}: detail match ${v.score}% (${v.clean}/${v.probes} probes clean, ${v.missing} with no counterpart${v.unstable ? `; ${v.unstable} unstable on the reference itself, not scored: ${[...new Set(v.unstableProbes.map((u) => u.ref))].slice(0, 4).join(', ')}` : ''})  by property: ${JSON.stringify(v.byProp)}`);
   // group identical issues so one root cause prints once with a count

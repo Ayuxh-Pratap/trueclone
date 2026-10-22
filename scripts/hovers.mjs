@@ -11,6 +11,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE, siteDir, openUrl } from './lib.mjs';
+import { startIdentity } from './identity.mjs';
+import { writeUnits } from './results.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -28,6 +30,7 @@ const OUTCOME_MIN = template ? 95 : 97;
 const REACTS_BELOW = 99.5; // the region before vs after the hover: below this, the hover changed something visible
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
 const cloneUrl = server ? server.url : flags.url;
+const hoverIdent = await startIdentity(root, 'hovers', COMPARE === 'compare-next' ? 'app' : 'clone');
 
 // Elements with a hover-type listener, marked data-lab-hover through CDP (one call for the whole document).
 async function markListened(page) {
@@ -233,6 +236,13 @@ const report = { name, viewport: vp.name, at: new Date().toISOString(), score: s
 const out = path.join(root, COMPARE, `hovers.${vp.name}.json`);
 await fs.mkdir(path.dirname(out), { recursive: true });
 await fs.writeFile(out, JSON.stringify(report, null, 2));
+// the unit: no hover effect on the reference is nothing to measure (na); an overlay that blocks the reference is the
+// tool's problem to solve (re-capture with --hide), never a pass
+await writeUnits(root, COMPARE, 'hovers', [report.score !== null
+  ? { viewport: vp.name, value: report.score, members: scored.map((r, i) => ({ id: `${i}:${r.ref}`, y: r.y, value: r.status === 'ok' ? 100 : 0, status: r.status })) }
+  : ref.blocked
+    ? { viewport: vp.name, value: null, tool: `the reference's page is covered by ${ref.blocked} at load: capture again with --hide "${ref.blocked}"` }
+    : { viewport: vp.name, value: null, na: 'no hover effect on the reference to compare' }], hoverIdent);
 if (report.score === null) console.log(`hover match (${vp.name}): not measurable: no hover effect to compare${ref.blocked ? ` (the reference's page is covered by ${ref.blocked}: capture again with --hide "${ref.blocked}")` : ''}`);
 else console.log(`hover match (${vp.name}): ${report.score}% of ${scored.length} hover effects reproduced with the same outcome (${rows.length} elements probed, ${rows.filter((r) => r.found === 'listener').length} found by their mouse listeners${unstable ? `, ${unstable} unstable on the reference itself, not scored` : ''})`);
 console.table(rows.filter((r) => !['static', 'ok', 'unstable'].includes(r.status)).slice(0, 25));

@@ -6,9 +6,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
-import { detectInPage } from './interactions-auto.mjs';
+import { detectInPage, operable } from './interactions-auto.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [url, nameArg] = pos;
@@ -25,8 +25,17 @@ if (cookies.some((c) => /sess|auth|token|login|jwt|sid$/i.test(c.name))) {
   console.error(`--cookie is for a visitor's choices (consent, region), never a signed-in session: ${cookies.map((c) => c.name).join(', ')}`);
   process.exit(1);
 }
+// Third-party content (decision D3, docs/policy.md): a widget another origin's script puts on the page (an assistant, a
+// chat launcher, a reviews badge) is excluded on both sides by default, found below and listed in meta.ignore and
+// REPORT. --ignore "<sel>,…" excludes more by hand; --include "<sel>,…" keeps a found widget in (it is then cloned and
+// verified like the rest). An exclusion never covers the page's own content (a main, a heading, most of the window).
+const ignoreAsked = typeof flags.ignore === 'string' ? flags.ignore.split(',').map((s) => s.trim()).filter(Boolean) : [];
+const include = typeof flags.include === 'string' ? flags.include.split(',').map((s) => s.trim()).filter(Boolean) : [];
+let ignore = ignoreAsked.map((sel) => ({ sel, why: 'excluded by hand (capture --ignore)' }));
+let thirdParty = [];
+let scriptOrigins = null;
 // unroll "y": an app shell is unrolled vertically only (lib.mjs); recorded in meta so every check unrolls the clone alike
-setReferenceProfile({ url, hide, cookies, unroll: 'y' });
+setReferenceProfile({ url, hide, cookies, unroll: 'y', ignore: ignore.map((i) => i.sel) });
 // --mode template (default): assets are kept as reference only; the clone uses placeholder content.
 // --mode exact: the clone may reuse the site's own text and media. Only for sites you own or are
 // authorised to copy, so it refuses to run without --permission "<who authorised it>". Output stays in
@@ -67,6 +76,13 @@ if (flags['mirror-only']) {
   process.exit(0);
 }
 
+// A capture in progress is not a reference: the previous capture (if any) is marked incomplete before anything is
+// overwritten, and only the end of this run marks the new one complete. A capture that crashes or is stopped part-way
+// therefore never passes for the earlier, complete one (status asks for the capture again).
+{
+  const prev = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8').catch(() => 'null'));
+  if (prev) await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ ...prev, complete: false, capturingSince: new Date().toISOString() }, null, 2));
+}
 // Only clear what capture owns; states/, motion.*, *.spec.json come from other scripts and stay.
 await fs.rm(path.join(ref, 'assets'), { recursive: true, force: true });
 await fs.rm(path.join(ref, 'mirror'), { recursive: true, force: true });
@@ -135,6 +151,7 @@ const rootFontSize = {};
 const inlineStyles = {};
 const scriptQueries = new Set(); // media queries the page's scripts asked (matchMedia), at any size
 const autoScenarios = []; // interaction scenarios found on the page (interactions-auto.mjs)
+const droppedScenarios = []; // found, but their element cannot be operated on the reference (listed, never scored)
 // the language and region the page is asked for (meta.locale; every later step uses the same, see lib.mjs LOCALE)
 const locale = typeof flags.locale === 'string' ? flags.locale : LOCALE;
 const asked = { locale, extraHTTPHeaders: { 'accept-language': `${locale},${locale.split('-')[0]};q=0.9` } };
@@ -145,10 +162,12 @@ let canvasApp = null; // a full-window canvas driven by input, the document not 
 let bundleDone = null; // own-bundle recording (exact mode, desktop)
 try {
   // the seed sizes and the held-out sizes: the held-out ones are shot and measured for scoring, nothing else
-  for (const vp of SCORED) {
+  // desktop first: what it finds (third-party widgets to exclude) applies to every size shot after it
+  for (const vp of [...SCORED.filter((v) => v.name === 'desktop'), ...SCORED.filter((v) => v.name !== 'desktop')]) {
     const desktop = vp.name === 'desktop';
     const { context, page } = await newPage(browser, vp, { ...asked, ...(desktop ? { recordHar: { path: path.join(ref, 'desktop.har'), content: 'omit' } } : {}) });
     await page.addInitScript(recordMediaQueries);
+    if (desktop) await page.addInitScript(trackOriginsInPage);
     // at every size: a phone gets its own sources (<picture>, srcset, a mobile-only photo)
     page.on('response', recordAsset);
     // desktop: the page's own scripts and what ran, saved as evidence (reference/scripts/)
@@ -221,6 +240,24 @@ try {
       for (const o of overlays.filter((x) => !hide.includes(x.sel))) console.warn(`WARNING \`${o.sel}\` covers ${o.share}% of the window at load (a popup?). If a visitor sees it only until a first choice, capture again with --hide "${o.sel}" (or --cookie "<the choice's cookie>"): otherwise every check compares the clone with it`);
       // kept in meta.json too: status asks for the re-capture instead of letting every check run against the popup
       if (overlays.length) overlaysAtLoad = overlays.filter((x) => !hide.includes(x.sel));
+      // third-party widgets, found after the same wait (they arrive late too): excluded on both sides unless included
+      thirdParty = await page.evaluate(thirdPartyInPage, new URL(page.url()).hostname).catch(() => []);
+      for (const t of thirdParty) {
+        t.decision = t.core ? 'kept: page content' : !t.sel ? 'kept: no stable selector (capture --ignore "<selector>" to exclude it)' : include.includes(t.sel) ? 'kept: capture --include' : 'excluded on both sides';
+        if (t.decision.startsWith('excluded') && !ignore.some((i) => i.sel === t.sel)) ignore.push({ sel: t.sel, why: `third-party widget from ${t.origin}`, origin: t.origin, auto: true });
+        console.log(`third-party: ${t.sel || t.label} from ${t.origin}: ${t.decision}`);
+      }
+      // where the page's scripts came from: drift compares it on every score (a third-party script added or gone)
+      scriptOrigins = await page.evaluate(() => {
+        const o = new Set();
+        for (const e of performance.getEntriesByType('resource')) if (e.initiatorType === 'script') { try { o.add(new URL(e.name).origin); } catch { /* not an address */ } }
+        for (const s of document.scripts) if (s.src) { try { o.add(new URL(s.src).origin); } catch { /* not an address */ } }
+        return [...o].sort();
+      }).catch(() => null);
+      if (ignore.length) {
+        setReferenceProfile({ url, hide, cookies, unroll: 'y', ignore: ignore.map((i) => i.sel) });
+        await page.addStyleTag({ content: ignore.map((i) => `${i.sel}{display:none!important}`).join('\n') }).catch(() => {});
+      }
     }
     // A canvas app (why.zero.university): a canvas fills the window, the document does not scroll, and the site's own
     // code drives what a visitor sees (wheel, touch, a gesture) inside the canvas. The seed would copy a loading
@@ -248,7 +285,10 @@ try {
     if (!vp.heldOut) {
       const top = await page.evaluate(() => scrollY);
       await page.evaluate(() => scrollTo(0, 0));
-      autoScenarios.push(...await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 48]).catch((e) => { console.warn(`WARNING interactions not detected at ${vp.name}: ${e.message.split('\n')[0]}`); return []; }));
+      const found = await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 48]).catch((e) => { console.warn(`WARNING interactions not detected at ${vp.name}: ${e.message.split('\n')[0]}`); return []; });
+      const { kept, dropped } = await operable(page, found);
+      autoScenarios.push(...kept);
+      droppedScenarios.push(...dropped);
       await page.evaluate((y) => scrollTo(0, y), top);
     }
     if (finishEvidence) {
@@ -261,6 +301,8 @@ try {
     // state): the saved page (rendered.html, after the shots) and the shots show the same moment.
     await page.evaluate(() => { scrollTo(0, 0); dispatchEvent(new Event('scroll')); });
     await page.waitForTimeout(600);
+    // at the same page age as every clone shot (lib.mjs holdStill): timers (an autoplay carousel) at the same step
+    await holdStill(page);
     let shot = await page.screenshot({ fullPage: true });
     for (let tries = 0; tries < 3; tries++) {
       await page.waitForTimeout(2000);
@@ -275,6 +317,8 @@ try {
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     rootFontSize[vp.name] = await page.evaluate(() => getComputedStyle(document.documentElement).fontSize);
     if (desktop) {
+      // an excluded widget is not part of the page the clone is built from
+      if (ignore.length) await page.evaluate((sels) => { for (const s of sels) for (const el of document.querySelectorAll(s)) el.remove(); }, ignore.map((i) => i.sel)).catch(() => {});
       const html = await page.evaluate(serializeInPage);
       await fs.writeFile(path.join(ref, 'rendered.html'), html);
       await fs.writeFile(path.join(ref, 'tokens.json'), JSON.stringify(await page.evaluate(tokensInPage), null, 2));
@@ -350,6 +394,7 @@ if (others.length) {
           // at the top, settled there, then shot; the page is saved right after the shot, so both show one moment
           await page.evaluate(() => { scrollTo(0, 0); dispatchEvent(new Event('scroll')); });
           await page.waitForTimeout(600);
+          await holdStill(page);
           let shot = await page.screenshot({ fullPage: true });
           for (let tries = 0; tries < 3; tries++) {
             await page.waitForTimeout(2000);
@@ -367,7 +412,9 @@ if (others.length) {
           if (!vp.heldOut) {
             const top = await page.evaluate(() => scrollY);
             await page.evaluate(() => scrollTo(0, 0));
-            routeScenarios.push(...(await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 48]).catch(() => [])).map((s) => ({ ...s, path: r.path, name: `${r.path}: ${s.name}` })));
+            const { kept, dropped } = await operable(page, await page.evaluate(detectInPage, [vp.name, mode === 'exact' ? 'visual' : 'structure', 48]).catch(() => []));
+            routeScenarios.push(...kept.map((s) => ({ ...s, path: r.path, name: `${r.path}: ${s.name}` })));
+            droppedScenarios.push(...dropped.map((d) => ({ ...d, name: `${r.path}: ${d.name}` })));
             await page.evaluate((y) => scrollTo(0, y), top);
           }
           await mask(page);
@@ -470,6 +517,8 @@ if (fitSizes.length) {
   }
 }
 await fs.writeFile(path.join(ref, 'interactions.auto.json'), JSON.stringify(autoScenarios, null, 2));
+await fs.writeFile(path.join(ref, 'interactions.dropped.json'), JSON.stringify(droppedScenarios, null, 2));
+if (droppedScenarios.length) console.log(`interactions: ${droppedScenarios.length} found but not operable on the reference, left out (reference/interactions.dropped.json): ${droppedScenarios.slice(0, 3).map((d) => d.name).join('; ')}${droppedScenarios.length > 3 ? '…' : ''}`);
 console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
@@ -478,7 +527,7 @@ console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (si
 const ownBundle = mode === 'exact' && (Boolean(canvasApp) || Boolean(flags.bundle)) && await fs.stat(path.join(ref, 'bundle', 'manifest.json')).then(() => true, () => false);
 if (!ownBundle) await fs.rm(path.join(ref, 'bundle'), { recursive: true, force: true });
 else console.log(`own bundle: ${Object.keys(JSON.parse(await fs.readFile(path.join(ref, 'bundle', 'manifest.json'), 'utf8')).entries).length} files the app loaded, kept in reference/bundle/ (exact mode: the clone runs the site's own code)`);
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), capturedAt: new Date().toISOString(), rootFontSize, viewports: summary }, null, 2));
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', stabilise: STABILISERS, ...(ignore.length ? { ignore } : {}), ...(thirdParty.length ? { thirdParty } : {}), ...(scriptOrigins ? { scriptOrigins } : {}), ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), capturedAt: new Date().toISOString(), complete: false, rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
 // with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.
@@ -501,6 +550,12 @@ if (ownPages.length) {
   console.log(`mirror: ${ownPages.length} separate page(s) mirrored in reference/mirror/routes/ (${ownPages.map((r) => r.path).join(', ')})`);
 }
 console.table(summary);
+// the commit mark: everything above is written, so this capture is a reference
+{
+  const done = JSON.parse(await fs.readFile(path.join(ref, 'meta.json'), 'utf8'));
+  delete done.capturingSince;
+  await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ ...done, complete: true }, null, 2));
+}
 console.log(`${manifest.length} assets saved. Reference: ${path.relative(process.cwd(), ref)}, mirror in reference/mirror${mode === 'exact' ? ` (exact mode, authorised by: ${permission})` : ''}`);
 
 // ---------- Static local mirror of the rendered page ----------
@@ -686,6 +741,57 @@ function readInlineStyles() {
 
 // Every media query the page's scripts ask (GSAP matchMedia, Webflow, a component's own breakpoint): what a script
 // does can switch at a width no stylesheet mentions.
+// Which origin's script put an element on the page: DOM insertions into the body (or beside its children) are wrapped,
+// and the first script address in the call stack that is not the page's own marks the element (data-tc-origin).
+// Capture only (the desktop pass), never a check, never the clone.
+function trackOriginsInPage() {
+  const own = location.origin;
+  const originOf = () => {
+    for (const u of String(new Error().stack || '').match(/https?:\/\/[^\s)]+/g) || []) {
+      try { const o = new URL(u).origin; if (o !== own) return o; } catch { /* not an address */ }
+    }
+    return null;
+  };
+  const mark = (node) => { if (node instanceof Element && !node.hasAttribute('data-tc-origin')) { const o = originOf(); if (o) node.setAttribute('data-tc-origin', o); } };
+  const top = (el) => el === document.body || el === document.documentElement;
+  for (const [proto, names] of [[Node.prototype, ['appendChild', 'insertBefore']], [Element.prototype, ['append', 'prepend', 'after', 'before']]]) {
+    for (const n of names) {
+      const f = proto[n];
+      proto[n] = function wrapped(...args) {
+        if (top(this) || ((n === 'after' || n === 'before') && this.parentElement && top(this.parentElement))) for (const x of args) mark(x);
+        return f.apply(this, args);
+      };
+    }
+  }
+}
+
+// The third-party widgets on the page: elements another site's script inserted (marked above) and frames from another
+// site. "Another site": another registrable domain (cdn.example.com is example.com's own). Each with a selector that
+// names it on any load (an id, or its tag and classes, or a frame's address), and whether it is page content (a main,
+// a heading, a navigation, or most of the window), which is never excluded.
+function thirdPartyInPage(pageHost) {
+  const site = (h) => (/^[\d.]+$|^localhost$|^\[/.test(h) ? h : h.split('.').slice(-2).join('.'));
+  const out = [];
+  const found = [...document.querySelectorAll('[data-tc-origin]'), ...document.querySelectorAll('iframe[src]')];
+  for (const el of found) {
+    if (out.some((o) => o.el.contains(el))) continue;
+    let origin = el.getAttribute('data-tc-origin');
+    if (!origin && el.tagName === 'IFRAME') { try { origin = new URL(el.src).origin; } catch { continue; } }
+    if (!origin) continue;
+    if (site(new URL(origin).hostname) === site(pageHost)) continue;
+    const r = el.getBoundingClientRect();
+    // a frame in the page's flow (a video, a map in an article) is content; a fixed one (a launcher) is a widget
+    let fixed = false;
+    for (let p = el; p && p !== document.body; p = p.parentElement) if (/fixed|sticky/.test(getComputedStyle(p).position)) { fixed = true; break; }
+    const embed = el.tagName === 'IFRAME' && !fixed && r.width >= 40 && r.height >= 40;
+    const core = embed || Boolean(el.querySelector('main, h1, nav, [role="main"]')) || el.matches('main, nav') || r.width * r.height > innerWidth * innerHeight * 0.3;
+    const cls = [...el.classList].filter((c) => !/^tc-|^data-tc/.test(c)).slice(0, 2);
+    const sel = el.id ? `#${CSS.escape(el.id)}` : el.tagName === 'IFRAME' ? `iframe[src^="${origin}"]` : cls.length ? `${el.tagName.toLowerCase()}${cls.map((c) => `.${CSS.escape(c)}`).join('')}` : null;
+    out.push({ el, sel, origin, label: `${el.tagName.toLowerCase()}${el.shadowRoot ? ' (shadow root)' : ''}`, kind: el.tagName === 'IFRAME' ? 'frame' : el.shadowRoot ? 'shadow host' : 'element', core });
+  }
+  return out.map(({ el, ...t }) => t);
+}
+
 function recordMediaQueries() {
   const seen = (window.__tcMediaQueries = []);
   const original = window.matchMedia;

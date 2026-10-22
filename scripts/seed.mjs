@@ -283,7 +283,9 @@ const clone = path.join(root, 'clone');
 // belong to another document and are not used. The main seed runs one of these per separate page.
 const routePage = typeof flags['route-page'] === 'string' ? (meta.routes || []).find((r) => r.path === routeArg(flags['route-page'])) : null;
 if (typeof flags['route-page'] === 'string' && !routePage) { console.error(`no separate page ${flags['route-page']} in this capture`); process.exit(1); }
-const passFile = routePage ? `.page-${routePage.slug}.html` : 'index.html';
+// the browser pass works on a temporary page, never on clone/index.html: a pass that crashes leaves no index.html that
+// looks seeded (the completion record clone/.seed.json is written only at the very end)
+const passFile = routePage ? `.page-${routePage.slug}.html` : '.seed-pass.html';
 const t0 = Date.now();
 const step = (msg) => console.log(`seed ${String(Math.round((Date.now() - t0) / 1000)).padStart(4)}s  ${msg}`);
 // The captured page lives at the clone's root and at its own address too (/products/x, /en/getting-started):
@@ -326,7 +328,9 @@ if (meta.bundle && !routePage) {
   process.exit(0);
 }
 const exists = await fs.stat(path.join(clone, 'index.html')).then(() => true, () => false);
-if (exists && !flags.force && !routePage) {
+// a seed that did not finish (no completion record for this capture) is simply run again, without --force
+const completed = JSON.parse(await fs.readFile(path.join(clone, '.seed.json'), 'utf8').catch(() => 'null'))?.capturedAt === meta.capturedAt;
+if (exists && completed && !flags.force && !routePage) {
   console.error(`${path.relative(process.cwd(), clone)} already has an index.html: add --force to seed again (your script.js, patches/ and notes.md are kept), or --patches to only re-apply clone/patches/`);
   process.exit(1);
 }
@@ -465,7 +469,10 @@ if (routePage) {
   console.log(`seeded ${routePage.path}: clone/${parts.join('/')}/index.html (a separate page of the site)`);
   process.exit(0);
 }
-await fs.writeFile(path.join(clone, 'index.html'), html);
+// written whole and then moved into place: a reader never sees half a page
+await fs.writeFile(path.join(clone, '.index.tmp.html'), html);
+await fs.rename(path.join(clone, '.index.tmp.html'), path.join(clone, 'index.html'));
+await fs.rm(path.join(clone, passFile), { force: true });
 await writeStartAlias(html);
 step(`index.html written${startParts.length ? ` (and at its own address, clone/${startParts.join('/')}/index.html)` : ''}`);
 
@@ -525,8 +532,12 @@ if (patches.length) console.log(`patches applied from clone/patches/: ${patches.
 const ownPages = (meta.routes || []).filter((r) => r.slug && !r.sameDocument && fsSync.existsSync(path.join(mirror, 'routes', `${r.slug}.html`)));
 for (const r of ownPages) {
   const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), name, '--route-page', r.path, ...(typeof flags['hide-until-boot'] === 'string' ? ['--hide-until-boot', flags['hide-until-boot']] : [])], { cwd: process.cwd(), encoding: 'utf8' });
-  console.log((child.stdout || '').split('\n').filter((l) => l.startsWith('seeded ')).join('\n') || `WARNING ${r.path} not seeded: ${(child.stderr || '').split('\n')[0]}`);
+  const ok = (child.stdout || '').split('\n').filter((l) => l.startsWith('seeded ')).join('\n');
+  console.log(ok || `WARNING ${r.path} not seeded: ${(child.stderr || '').split('\n')[0]}`);
+  if (!ok) { console.error(`seed incomplete: the separate page ${r.path} did not seed; run trueclone seed ${name} again`); process.exit(1); }
 }
+// the completion record: every page of the seed is written (status requires it, so a seed that crashed is redone)
+await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: 1 + ownPages.length }, null, 2));
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------
@@ -544,7 +555,8 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
   const server = await serve(root);
   const browser = await openBrowser(flags.cdp);
   try {
-    const { page } = await newPage(browser, VIEWPORTS.find((v) => v.name === 'desktop'), {});
+    // the clone's own files are made here: no evaluation control (seed, clock) may run while they are written
+    const { page } = await newPage(browser, VIEWPORTS.find((v) => v.name === 'desktop'), { stabilise: false });
     await page.goto(`${server.url}clone/${passFile}`, { waitUntil: 'load', timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
     // the site's own links point at the clone's routes: an address on the site's host becomes a path (/about), in

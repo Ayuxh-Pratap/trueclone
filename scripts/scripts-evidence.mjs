@@ -11,14 +11,23 @@ import { createHash } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const TRACKING = /google-analytics|googletagmanager|gtag|doubleclick|facebook\.(com|net)|fbevents|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|hs-scripts|linkedin|licdn|tiktok|twitter|ads-twitter|redditstatic|marketo|munchkin|challenges\.cloudflare|recaptcha|hcaptcha|turnstile|cdn-cgi\/rum|debugbear/i;
 
+// An inline script carries its document's address as its url. The document is the one the page actually navigated to
+// (a route asked as /tutorial/intro is served at /tutorial/intro/): compared without the fragment or a trailing slash,
+// against every address the main frame was at. RC4 astro: every inline script of a route was taken for an external
+// file named by the page's address, so twelve scripts overwrote one file.
+const docKey = (u) => { try { const x = new URL(u); x.hash = ''; return `${x.origin}${x.pathname.replace(/\/+$/, '') || '/'}${x.search}`; } catch { return String(u); } };
+export const isInlineScript = (scriptUrl, documentUrls) => [...documentUrls].some((d) => docKey(d) === docKey(scriptUrl));
+
 // Before navigation: start collecting. Returns finish(), to call once the page has loaded and been scrolled through.
 export async function startScriptEvidence(page, pageUrl) {
   const cdp = await page.context().newCDPSession(page);
-  const scripts = new Map(); // scriptId -> { url, inline }
+  const scripts = new Map(); // scriptId -> { url }
+  const documents = new Set([pageUrl]);
+  page.on('framenavigated', (f) => { if (f === page.mainFrame()) documents.add(f.url()); });
   cdp.on('Debugger.scriptParsed', (e) => {
     if (!e.executionContextAuxData?.isDefault) return; // the page's own world, not tooling
     if (!e.url) return; // eval'd code
-    scripts.set(e.scriptId, { url: e.url, inline: e.url.split('#')[0] === pageUrl.split('#')[0], start: e.startLine, startColumn: e.startColumn });
+    scripts.set(e.scriptId, { url: e.url, start: e.startLine, startColumn: e.startColumn });
   });
   await cdp.send('Debugger.enable');
   await cdp.send('Profiler.enable');
@@ -117,16 +126,22 @@ export async function startScriptEvidence(page, pageUrl) {
     await fs.mkdir(outDir, { recursive: true });
     const beautify = require('js-beautify').js;
     const files = new Map(); // scriptId -> record
+    const written = new Map(); // file name -> content hash: two different scripts never share a file
     let n = 0;
+    try { documents.add(page.url()); } catch { /* closed */ }
     for (const [scriptId, s] of scripts) {
       let source = '';
       try { ({ scriptSource: source } = await cdp.send('Debugger.getScriptSource', { scriptId })); } catch { continue; }
       if (!source || source.length < 40) continue;
+      s.inline = isInlineScript(s.url, documents);
       // named by what the script is (its address, or an inline script's code), never by its rank in this load: the
       // same script keeps its name in the next capture and on every page, so a notes.md citation keeps pointing at it
-      const id = createHash('sha1').update(s.inline ? source : s.url.split('#')[0]).digest('hex').slice(0, 6);
+      const contentId = createHash('sha1').update(source).digest('hex').slice(0, 6);
+      const id = s.inline ? contentId : createHash('sha1').update(s.url.split('#')[0]).digest('hex').slice(0, 6);
       n++;
-      const base = s.inline ? `inline-${id}` : `${id}-${(new URL(s.url).pathname.split('/').pop() || 'script').replace(/[^a-z0-9._-]/gi, '_').replace(/\.m?js$/i, '').slice(-60)}`;
+      let base = s.inline ? `inline-${id}` : `${id}-${(new URL(s.url).pathname.split('/').pop() || 'script').replace(/[^a-z0-9._-]/gi, '_').replace(/\.m?js$/i, '').slice(-60)}`;
+      if (written.has(base) && written.get(base) !== contentId) base = `${base}-${contentId}`;
+      written.set(base, contentId);
       const file = `${base}.js`;
       await fs.writeFile(path.join(outDir, file), source);
       // a readable copy when the code is minified (long lines); line numbers in INDEX.md refer to the original

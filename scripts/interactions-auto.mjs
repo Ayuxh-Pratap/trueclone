@@ -6,13 +6,18 @@
 // retires it with { "name": "...", "skip": "<why>" }.
 
 // In the page: candidates at this viewport, as scenarios. Runs on a settled page scrolled to the top.
-export function detectInPage([vpName, compare, max]) {
+export function detectInPage([vpName, compare, max, captured = null]) {
   const W = innerWidth, H = innerHeight;
-  const visible = (el) => {
+  // visible to a visitor: a box, not hidden by itself or an ancestor (checkVisibility), and not inside a closed
+  // disclosure (content of a closed <details> keeps a box, but nothing in it can be operated until it is opened)
+  const closedDetails = (el) => { const d = el.closest('details:not([open])'); return d && !(el.tagName === 'SUMMARY' && el.parentElement === d) && !el.closest('summary') ? d : null; };
+  const visible = (el, { inClosed = false } = {}) => {
     const r = el.getBoundingClientRect();
     if (r.width < 8 || r.height < 8) return false;
     const s = getComputedStyle(el);
-    return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) > 0.05;
+    if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) <= 0.05) return false;
+    if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
+    return inClosed || !closedDetails(el);
   };
   // An id is used only when it reads like a name a developer gave (letters first, words): component libraries mint
   // ids per load ("2qrqcsbptab1", ":r3:", "radix-…"), and a selector built on one finds nothing on the next load.
@@ -82,11 +87,16 @@ export function detectInPage([vpName, compare, max]) {
     add({ key: `scroll:${selOf(el)}`, name: `${native ? 'scroll' : 'swipe'} ${label(el)} (${vpName})`, at: at(el), steps, expectChange: { ref: selOf(moving), clone: selOf(moving) } });
   }
 
-  // tab lists: the second and third tab
+  // tab lists: the second and third tab; a tab list inside a closed disclosure (a mobile table of contents) is opened
+  // first, as a visitor would (RC4 astro: six scenarios clicked tabs inside a closed <details> and could not run)
   for (const list of document.querySelectorAll('[role="tablist"]')) {
-    const tabs = [...list.querySelectorAll('[role="tab"]')].filter(visible);
+    const tabs = [...list.querySelectorAll('[role="tab"]')].filter((t) => visible(t, { inClosed: true }));
     if (tabs.length < 2) continue;
     const steps = [];
+    const disclosure = closedDetails(list);
+    const summary = disclosure?.querySelector(':scope > summary');
+    if (disclosure && (!summary || !visible(summary))) continue;
+    if (summary) steps.push({ click: { ref: selOf(summary), clone: selOf(summary) } }, { wait: 600 });
     for (const [i, t] of tabs.slice(1, 3).entries()) steps.push({ click: { ref: selOf(t), clone: selOf(t) } }, { wait: 900 }, { shot: `tab-${i + 2}` });
     add({ key: `tabs:${selOf(list)}`, name: `tabs ${label(tabs[1])} (${vpName})`, at: at(list), steps, expectChange: { ref: selOf(tabs[1]), clone: selOf(tabs[1]) } });
   }
@@ -106,12 +116,14 @@ export function detectInPage([vpName, compare, max]) {
   const seenRoutes = new Set();
   let navs = 0;
   for (const a of document.querySelectorAll('a[href]')) {
-    // every link to another route is drafted here (the caller keeps the ones to captured routes, then the first 8)
-    if (navs >= 40 || !visible(a)) continue;
+    // links to the captured routes when the caller names them (filtered before the cap, so a sidebar of uncaptured
+    // pages never uses it up: RC4 astro had no desktop navigation from its start page), otherwise every route link
+    if (navs >= (captured ? 8 : 300) || !visible(a)) continue;
     let u;
     try { u = new URL(a.href); } catch { continue; }
     const to = u.pathname.replace(/\/+$/, '') || '/';
     if (u.host.replace(/^www\./, '') !== location.host.replace(/^www\./, '') || to === here || seenRoutes.has(to) || /\.(pdf|png|jpe?g|svg|webp|zip|mp4|xml|txt)$/i.test(to) || a.target === '_blank') continue;
+    if (captured && !captured.includes(to)) continue;
     seenRoutes.add(to);
     navs++;
     add({ key: `nav:${to}`, name: `go to ${to} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(a) - OFFSET)) }, steps: [{ click: { ref: selOf(a), clone: selOf(a) } }, { wait: 1500 }, { shot: 'arrived' }, { back: true }, { wait: 1200 }, { shot: 'back' }], navigation: true });
@@ -127,4 +139,25 @@ export function detectInPage([vpName, compare, max]) {
     menus++;
   }
   return out;
+}
+
+// On the live page the scenarios were found on (same size, scrolled to the top): keep a scenario only if the element
+// its first click needs can actually be operated there (a trial click: visible, enabled, not covered, stable). RC4
+// heybhaskar: two desktop links could not be clicked on either side and failed every score. The dropped ones are
+// returned with the reason, never silently lost.
+export async function operable(page, scenarios) {
+  const kept = [], dropped = [];
+  for (const s of scenarios) {
+    const first = (s.steps || []).find((st) => st.click && typeof st.click === 'object')?.click?.ref;
+    if (!first) { kept.push(s); continue; }
+    const [sel, i] = first.split('@');
+    try {
+      await page.locator(sel).nth(Number(i || 0)).click({ trial: true, timeout: 2500 });
+      kept.push(s);
+    } catch (e) {
+      dropped.push({ name: s.name, viewport: s.viewport, why: `its element ${first} cannot be clicked on the reference (${String(e.message).split('\n')[0].slice(0, 120)})` });
+    }
+  }
+  await page.evaluate(() => scrollTo(0, 0)).catch(() => {});
+  return { kept, dropped };
 }

@@ -15,6 +15,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE, siteDir, openUrl } from './lib.mjs';
+import { startIdentity } from './identity.mjs';
+import { writeUnits } from './results.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -55,8 +57,16 @@ if (flags.draft) {
       const props = propsFor({ ...tw.vars, ...(tw.vars.startAt || {}) });
       if (!sel || !props.length || seen.has(sel + props)) continue;
       seen.add(sel + props);
-      const pos = (v) => String(v).replace(/^clamp((.*))$/, '$1');
-      entries.push({ name: `${st.trigger.section || ''} ${sel}`.trim(), ref: sel, clone: 'TODO', props, scroll: { of: { ref: st.trigger.sel, clone: 'TODO' }, start: pos(st.start), end: pos(st.end), steps: 10 } });
+      const pos = (v) => String(v).replace(/^clamp\((.*)\)$/, '$1');
+      // a position the resolver reads ("top bottom", "center 80%") stays relative, so one map serves every size; any
+      // other form (a function, "+=5600", a pixel number) is replaced by the trigger's live pixel range at this size,
+      // never left to resolve to nothing (RC4 varsity: 72 of 88 drafted ranges could not be measured)
+      const simple = (v) => /^(top|bottom|center|-?\d+(\.\d+)?%)\s+(top|bottom|center|-?\d+(\.\d+)?%)$/.test(pos(v).trim());
+      const range = simple(st.start) && simple(st.end)
+        ? { of: { ref: st.trigger.sel, clone: 'TODO' }, start: pos(st.start), end: pos(st.end), steps: 10 }
+        : Number.isFinite(st.startPx) && Number.isFinite(st.endPx) && st.endPx > st.startPx ? { from: st.startPx, to: st.endPx, steps: 10 } : null;
+      if (!range) continue;
+      entries.push({ name: `${st.trigger.section || ''} ${sel}`.trim(), ref: sel, clone: 'TODO', props, scroll: range, ...(range.from !== undefined ? { viewports: [vp.name] } : {}) });
     }
   }
   for (const tw of motion.onScroll.slice(0, 40)) {
@@ -87,6 +97,10 @@ if (flags.draft) {
     fromScrubs++;
     entries.push({ name: `scrub ${s.cls || s.path}`, ref: `path:${s.path}`, clone: 'TODO', props, viewports: [vp.name], scroll: { from: samples[0].y, to: samples.at(-1).y, steps: Math.min(12, Math.max(4, samples.length - 1)) } });
   }
+  // every entry's name is unique: names key the reference cache and the report, and two curves sharing one name would
+  // overwrite each other's measurements (RC4 varsity: 53 of 88 drafted names were shared)
+  const counts = new Map();
+  for (const e of entries) { const n = (counts.get(e.name) || 0) + 1; counts.set(e.name, n); if (n > 1) e.name = `${e.name} #${n}`; }
   const out = path.join(root, 'motion-map.draft.json');
   // A seeded clone keeps the original's markup: its elements are the reference's, at the same selectors and paths,
   // so the map is complete as drafted and becomes motion-map.json (when there is none yet). A hand-built clone's
@@ -109,8 +123,17 @@ if (mapText === null) {
   process.exit(0);
 }
 let map = JSON.parse(mapText);
-if (typeof flags.only === 'string') map = map.filter((e) => e.name.includes(flags.only));
+// what is measured (identity.mjs); a run narrowed with --only is a look at some curves, never the check's result
+const ident = await startIdentity(root, 'curves', COMPARE === 'compare-next' ? 'app' : 'clone');
+const partial = typeof flags.only === 'string';
+if (partial) map = map.filter((e) => e.name.includes(flags.only));
 map = map.filter((e) => e.clone && e.clone !== 'TODO' && (!e.viewports || e.viewports.includes(vp.name)));
+// no curve at this size: nothing to measure here (not a score of 0, and not a pass of something unmeasured)
+if (!map.length && !partial) {
+  await writeUnits(root, COMPARE, 'curves', [{ viewport: vp.name, value: null, na: `no curve in motion-map.json applies at ${vp.name}` }], ident);
+  console.log(`motion score (${vp.name}): no curve applies at this size`);
+  process.exit(0);
+}
 
 // `path:section:3>div:2` is a recorded element path (from trueclone reveals: tag:position among the children that
 // are not script/style/meta, 1-based, from <body>); anything else is a CSS selector with an optional @n.
@@ -288,7 +311,11 @@ for (const [i, e] of map.entries()) {
 report.score = +(report.entries.reduce((n, e) => n + e.score, 0) / Math.max(1, report.entries.length)).toFixed(1);
 const out = path.join(root, COMPARE, `curves.${vp.name}.json`);
 await fs.mkdir(path.dirname(out), { recursive: true });
-await fs.writeFile(out, JSON.stringify(report, null, 2));
+if (!partial) {
+  await fs.writeFile(out, JSON.stringify(report, null, 2));
+  // every curve is a member with its own score: a mean of 96 with one curve at 40 shows that curve
+  await writeUnits(root, COMPARE, 'curves', [{ viewport: vp.name, value: report.score, members: report.entries.map((e) => ({ id: e.name, value: e.score, note: e.note })) }], ident);
+}
 
 const spark = (vals) => { const lo = Math.min(...vals), hi = Math.max(...vals); const bars = '▁▂▃▄▅▆▇█'; return vals.map((v) => bars[hi === lo ? 0 : Math.round(((v - lo) / (hi - lo)) * 7)]).join(''); };
 console.log(`motion score (${vp.name}): ${report.score}%  over ${report.entries.length} curves`);

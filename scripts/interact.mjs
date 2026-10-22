@@ -18,7 +18,10 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl, mediaReady, inkShare } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl, mediaReady } from './lib.mjs';
+import { isEmpty } from './measure.mjs';
+import { startIdentity } from './identity.mjs';
+import { writeUnits } from './results.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -53,9 +56,10 @@ if (flags.draft) {
 // --auto: find what a visitor can operate on the live reference (older captures, or after the site changed)
 const autoFile = path.join(ref, 'interactions.auto.json');
 if (flags.auto) {
-  const { detectInPage } = await import('./interactions-auto.mjs');
+  const { detectInPage, operable } = await import('./interactions-auto.mjs');
   const browser = await openBrowser(flags.cdp);
   const found = [];
+  const dropped = [];
   // the captured page and every other captured route, as capture does: a route's scenarios start at its address
   const captured = new Set((meta.routes || [{ path: '/' }]).map((r) => r.path));
   const pages = [{ path: null, url: meta.url }, ...(meta.routes || []).filter((r) => r.slug).map((r) => ({ path: r.path, url: new URL(r.path, meta.finalUrl || meta.url).href }))];
@@ -67,17 +71,18 @@ if (flags.auto) {
           await openUrl(page, pg.url);
           await waitStill(page, { timeout: 15000, interval: 200 });
           await page.evaluate(() => scrollTo(0, 0));
-          // navigation only to the routes this capture has (the others have nothing to compare with), at most 8 links
-          // per page and size, counted among those
-          let navs = 0;
-          const here = (await page.evaluate(detectInPage, [vp.name, meta.mode === 'exact' ? 'visual' : 'structure', 40])).filter((s) => !s.navigation || (captured.has(s.name.replace(/^go to (\S+).*/, '$1')) && ++navs <= 8));
-          found.push(...(pg.path ? here.map((s) => ({ ...s, path: pg.path, name: `${pg.path}: ${s.name}` })) : here));
+          // navigation only to the routes this capture has (filtered inside the detection, before its cap of 8), and
+          // only what can be operated on the live page (a trial click)
+          const { kept, dropped: gone } = await operable(page, await page.evaluate(detectInPage, [vp.name, meta.mode === 'exact' ? 'visual' : 'structure', 40, [...captured]]));
+          found.push(...(pg.path ? kept.map((s) => ({ ...s, path: pg.path, name: `${pg.path}: ${s.name}` })) : kept));
+          dropped.push(...gone);
         } catch (e) { console.warn(`WARNING ${pg.path || 'the captured page'} at ${vp.name}: ${e.message.split('\n')[0]}`); } finally { await context.close(); }
       }
     }
   } finally { if (!flags.cdp) await browser.close(); }
   await fs.writeFile(autoFile, JSON.stringify(found, null, 2));
-  console.log(`${found.length} scenario(s) found on the reference -> ${path.relative(process.cwd(), autoFile)}`);
+  await fs.writeFile(path.join(ref, 'interactions.dropped.json'), JSON.stringify(dropped, null, 2));
+  console.log(`${found.length} scenario(s) found on the reference -> ${path.relative(process.cwd(), autoFile)}${dropped.length ? `; ${dropped.length} not operable there, left out (reference/interactions.dropped.json)` : ''}`);
   process.exit(0);
 }
 
@@ -88,12 +93,18 @@ const auto = JSON.parse(await fs.readFile(autoFile, 'utf8').catch(() => '[]'));
 const ownNames = new Set(own.map((s) => s.name));
 const skipped = own.filter((s) => s.skip);
 let scenarios = [...own.filter((s) => !s.skip), ...auto.filter((s) => !ownNames.has(s.name))];
+// what is measured (identity.mjs); the plan (every scenario the configuration names) is recorded with it, so a scenario
+// that was never run is "missing", never absent, and a retired one does not linger as a pass
+const ident = await startIdentity(root, 'interact', COMPARE === 'compare-next' ? 'app' : 'clone');
+const partial = typeof flags.only === 'string';
 if (!scenarios.length) {
+  await writeUnits(root, COMPARE, 'interact', [{ state: '_plan', scenarios: [], skipped: skipped.map((s) => ({ name: s.name, why: s.skip })) }], ident, { replaceRoutes: () => true });
   console.log('interactions: none (no interactions.json, and the capture found nothing to operate; trueclone interact <name> --auto re-checks the live page)');
   process.exit(0);
 }
 if (skipped.length) console.log(`retired by the agent: ${skipped.map((s) => `${s.name} (${s.skip})`).join('; ')}`);
-if (typeof flags.only === 'string') scenarios = scenarios.filter((s) => s.name.includes(flags.only));
+const planned = scenarios.map((s) => s.name);
+if (partial) scenarios = scenarios.filter((s) => s.name.includes(flags.only));
 const outDir = path.join(root, COMPARE, 'interact');
 await fs.mkdir(outDir, { recursive: true });
 
@@ -267,8 +278,9 @@ const routePathOf = (u) => { try { return new URL(u).pathname.replace(/\/index\.
 const startPath = routePathOf(meta.finalUrl || meta.url);
 const canon = (p) => (p === startPath ? '/' : p);
 const unstableRoutes = new Set((meta.routes || []).filter((r) => r.unstable).map((r) => r.path));
-// a shot this much emptier than the reference's (its share of drawn pixels) shows no page: a 404, a blank route
-const EMPTY_SHARE = 0.3;
+// a shot with almost nothing drawn on it (measure.mjs isEmpty: under 1% of it differs from its own background) where
+// the reference shows content is no page: a 404, a blank route. Absolute, not relative to the reference: the 0.3 ratio
+// it replaces read light cards on white as "empty" (RC4 BHASKAR-4)
 for (const sc of scenarios) {
   const a = refRes.find((r) => r.name === sc.name && r.shots), b = cloneRes.find((r) => r.name === sc.name && r.shots);
   const refErrors = [...new Set([...(a?.refErrors || []), ...refRes.filter((r) => r.name === sc.name && r.error).map((r) => r.error)])];
@@ -279,8 +291,7 @@ for (const sc of scenarios) {
     if (!b?.shots[label]) continue;
     const pa = PNG.sync.read(await fs.readFile(a.shots[label])), pb = PNG.sync.read(await fs.readFile(b.shots[label]));
     shots[label] = matchPct(pa, pb).pct;
-    const ia = inkShare(pa), ib = inkShare(pb);
-    if (ia > 0.04 && ib < ia * EMPTY_SHARE) empty.push(label);
+    if (isEmpty(pb) && !isEmpty(pa)) empty.push(label);
   }
   for (const l of empty) errors.push(`${l}: the clone shows an almost empty page where the reference shows content`);
   // a document that answered with an error (a 404 after a link or Back) is not the site's page, whatever it looks like
@@ -317,7 +328,23 @@ for (const sc of scenarios) {
   report.scenarios.push({ name: sc.name, ...(sc.auto ? { auto: true } : {}), ...(sc.path ? { path: sc.path } : {}), score, shots, ...(a?.paths ? { paths: { ref: a.paths, clone: b?.paths || {} } } : {}), expect, errors });
 }
 report.skipped = skipped.map((s) => ({ name: s.name, why: s.skip }));
+// a run narrowed with --only merges its scenarios into the last full report instead of replacing it
+if (partial) {
+  const prev = JSON.parse(await fs.readFile(path.join(outDir, 'report.json'), 'utf8').catch(() => 'null'));
+  if (prev?.scenarios) report.scenarios = [...prev.scenarios.filter((s) => !report.scenarios.some((x) => x.name === s.name) && planned.includes(s.name)), ...report.scenarios];
+}
 await fs.writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
+// one unit per scenario (results.mjs). Not a behaviour of the site (the reference does not react): na. Could not run on
+// the reference, or on a route the reference draws differently every load: the tool's, never a pass.
+const unitOf = (s) => {
+  const base = { state: s.name, value: s.score ?? null, score: s.score ?? null, errors: s.errors, ...(s.path ? { path: s.path } : {}) };
+  if (s.notBehaviour) return { ...base, na: 'the reference does not react to it' };
+  if (s.broken) return { ...base, pass: false, toolOnly: `could not run on the reference: ${(s.errors || []).find((e) => /^reference:/.test(e)) || 'its element was not found'}` };
+  if (s.unstable) return { ...base, tool: 'on a route the reference itself draws differently on every load: not comparable draw for draw' };
+  const toolOnly = !s.expect.pass && (s.errors || []).length > 0 && s.errors.every((e) => /^reference:/.test(e));
+  return { ...base, pass: Boolean(s.expect.pass), ...(toolOnly ? { toolOnly: `the instrument could not run it on the reference: ${s.errors.slice(0, 2).join('; ')}` } : {}), changed: { ref: s.expect.ref, clone: s.expect.clone } };
+};
+await writeUnits(root, COMPARE, 'interact', [...report.scenarios.filter((s) => scenarios.some((x) => x.name === s.name)).map(unitOf), ...(partial ? [] : [{ state: '_plan', scenarios: planned, skipped: report.skipped }])], ident, partial ? {} : { replaceRoutes: (k) => k.state !== '_plan' && !planned.includes(k.state) });
 const notBehaviour = report.scenarios.filter((s) => s.notBehaviour);
 if (notBehaviour.length) console.log(`set aside (found by the capture, but the reference does not react): ${notBehaviour.map((s) => s.name).join('; ')}`);
 console.table(report.scenarios.filter((s) => !s.notBehaviour).map((s) => ({
