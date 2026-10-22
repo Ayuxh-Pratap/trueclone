@@ -216,13 +216,38 @@ async function doStep(side, vp, st) {
   return null;
 }
 
+// A gate a page names in words (the draft passes "draw ..." with a gesture and "hold ..." with a hold, and counts it
+// passed when its words leave the screen) is replayed by the same rule, on the reference and the clone alike: wait for
+// the words to appear (up to 15 s), make the input, check they left, try again at most twice, and report a gate that
+// never passes. RC5 zero: the load checkpoint held still within ~2 s while the loader counted, the gesture was drawn
+// before the gate existed (it appears 3-6 s after load), and every later checkpoint stayed at "DRAW A ZERO".
+// An input with no such words on screen within the wait is made as written.
+const GATE_WORDS = { gesture: /\b(draw|trace|sketch)\b/i, hold: /\bhold\b/i };
+async function gateStep(side, vp, st) {
+  const re = st.gesture ? GATE_WORDS.gesture : GATE_WORDS.hold;
+  const text = () => side.page.evaluate(uiTextInPage).catch(() => '');
+  const t0 = Date.now();
+  let shown = re.test(await text());
+  while (!shown && Date.now() - t0 < 15000) { await side.page.waitForTimeout(250); shown = re.test(await text()); }
+  if (!shown) return doStep(side, vp, st);
+  let ui = '';
+  for (let i = 1; i <= 3; i++) {
+    const err = await doStep(side, vp, st);
+    if (err) return err;
+    await side.page.waitForTimeout(1500);
+    ui = await text();
+    if (!re.test(ui)) return null;
+  }
+  return `${st.gesture ? 'gesture' : 'hold'} gate not passed after 3 tries: the page still says "${String(ui).replace(/\s+/g, ' ').slice(0, 60)}"`;
+}
+
 // runs every step; at each checkpoint, calls shoot(index, name, settled)
 async function runJourney(side, vp, steps, shoot) {
   const errors = [];
   let n = 0;
   for (const st of steps) {
     if (st.checkpoint) { const s = await settle(side.page, st.settle || 6000); await shoot(n++, st.checkpoint, s); continue; }
-    const err = await doStep(side, vp, st).catch((e) => e.message.split('\n')[0]);
+    const err = await (st.gesture || st.hold ? gateStep(side, vp, st) : doStep(side, vp, st)).catch((e) => e.message.split('\n')[0]);
     if (err) errors.push(err);
   }
   return errors;
