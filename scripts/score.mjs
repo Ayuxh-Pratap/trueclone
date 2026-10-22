@@ -1,112 +1,98 @@
 // One command for all scores, with a time limit per step and a summary at the end.
-//   --quick   layout (all viewports) + live states (desktop) + interactions: the fast loop while building
-//   (full)    layout + states (all) + motion curves (desktop/tablet/mobile) + interactions + hovers + detail
-//   --url <clone url>  score another build (e.g. the Next.js app); --refresh-ref re-measures the reference
-// A step that runs past its limit is killed and reported as TIMEOUT; the rest still run.
-// Steps run in three parallel groups (layout+states, the three curve viewports, interact+hovers+detail): each
-// tool mostly waits on smooth scroll and settling, so running them side by side costs little. --serial runs
-// one at a time (for debugging a flaky score).
+//   (full)    every check the site requires (verdict.mjs requiredUnits), at every size
+//   --only detail,load   those checks alone;  --viewport tablet   narrowed to one width where the check can be
+//   --url <app url>      score another build (the Next.js app: next --verify sets TC_COMPARE=compare-next)
+//   --fresh              re-measure even what is already current;  --refresh-ref re-measures the reference too
+// A step that runs past its limit is killed and reported as TIMEOUT; the rest still run. Steps run in parallel groups
+// (layout + states, the curve viewports, interact + hovers + detail; load alone, last: it is timed).
 //
-// A check whose inputs are unchanged since its last run is reported from its last result instead of re-measured
-// (--fresh re-measures). --only detail,load runs those checks alone; --viewport tablet narrows every check to one width.
+// What is current is decided by identity (identity.mjs, results.mjs): a step is skipped only when every unit it owns is
+// already measured on the clone (or app) as it is now, against this capture, with this configuration and this code.
+// Nothing is reused by file times. A step that fails or times out leaves error units for what it did not measure, and
+// this command exits non-zero, so a failed measurement is never read as a pass. A modified instrument (code preloaded
+// with NODE_OPTIONS, an edited package) is refused before anything is measured.
 //
-// usage: node scripts/score.mjs <name> [--quick] [--only <checks>] [--viewport <vp>] [--fresh] [--url <clone url>] [--refresh-ref] [--step-minutes 20] [--serial]
+// usage: node scripts/score.mjs <name> [--only <checks>] [--viewport <vp>] [--fresh] [--url <url>] [--refresh-ref] [--step-minutes 20] [--serial]
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, COMPARE, siteDir } from './lib.mjs';
+import { envIdentity, startIdentity } from './identity.mjs';
+import { evaluate } from './verdict.mjs';
+import { writeErrors } from './results.mjs';
 
-// steps are the sibling scripts of this file, wherever the package is installed; sites/ is in the current folder
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
 if (!name) {
-  console.error('usage: npm run score -- <name> [--quick] [--url <clone url>] [--refresh-ref] [--serial]');
+  console.error('usage: trueclone score <name> [--only <checks>] [--viewport <vp>] [--fresh] [--url <url>]');
   process.exit(1);
 }
+const env = envIdentity();
+if (env.instrumentModified) {
+  console.error(`trueclone score: the instrument is modified in this environment, so nothing it measured could be trusted:\n  ${env.reasons.join('\n  ')}\nRemove the modification (unset NODE_OPTIONS, reinstall the package) and score again.`);
+  process.exit(2);
+}
+const root = siteDir(name);
 const url = typeof flags.url === 'string' ? flags.url : null;
+const side = COMPARE === 'compare-next' ? 'app' : 'clone';
 const refresh = flags['refresh-ref'] ? ['--refresh-ref'] : [];
 const limitMs = Number(flags['step-minutes'] || 20) * 60 * 1000;
 const withUrl = (args) => (url ? [...args, '--url', url] : args);
-
-// --viewport desktop narrows every check that can run per width; --only detail,load runs those checks alone
 const vpOnly = typeof flags.viewport === 'string' ? flags.viewport : null;
-const vpList = vpOnly ? [vpOnly] : ['desktop', 'tablet', 'mobile'];
+const vpArg = vpOnly ? ['--viewport', vpOnly] : [];
 const only = typeof flags.only === 'string' ? flags.only.split(',').map((s) => s.trim()).filter(Boolean) : null;
-// App mode (a canvas app, capture's meta.canvasApp): its states are the checkpoints of a journey (journey.mjs), not a
-// document's sections; the document checks (one screen's layout, scroll states of a page that does not scroll, styles
-// of a loader) would read high on nothing, so they are not run
-const appMode = Boolean((await fs.readFile(path.join(siteDir(name), 'reference', 'meta.json'), 'utf8').then(JSON.parse).catch(() => ({}))).canvasApp);
+const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').catch(() => 'null'));
+if (!meta) { console.error(`no capture for ${name}: trueclone capture <url> ${name}`); process.exit(1); }
+const appMode = Boolean(meta.canvasApp);
+const curveVps = vpOnly ? [vpOnly] : ['desktop', 'tablet', 'mobile'];
+
+// each step owns the units of one check (`check`); `label` is what --only names
 const appSteps = [
-  { group: 1, label: 'journey', args: ['scripts/journey.mjs', name, '--clone', ...(url ? ['--url', url] : [])], pick: /journey \((\w+)\): ([\d.]+)%/g, unit: 'journey %' },
-  { group: 3, label: 'interact', args: withUrl(['scripts/interact.mjs', name, ...refresh]), pick: /│ \d+\s+│ '([^']+)'\s+│ ([\d.]+)/g, unit: 'interaction %', fail: /FAIL/g },
-  ...(flags.quick ? [] : [{ group: 4, label: 'load', args: withUrl(['scripts/load.mjs', name, ...(vpOnly ? ['--viewport', vpOnly] : []), ...refresh]), pick: /(\w+): load match ([\d.]+)%/g, unit: 'load %' }]),
+  { group: 1, label: 'journey', check: 'journey', args: ['journey.mjs', name, '--clone', ...(url ? ['--url', url] : [])], pick: /journey \((\w+)\): ([\d.]+)%/g },
+  { group: 3, label: 'interact', check: 'interact', args: withUrl(['interact.mjs', name, ...refresh]), pick: /│ \d+\s+│ '([^']+)'\s+│ ([\d.]+)/g },
+  { group: 4, label: 'load', check: 'load', args: withUrl(['load.mjs', name, ...vpArg, ...refresh]), pick: /(\w+): load match ([\d.]+)%/g },
 ];
 const docSteps = [
-  // first and alone: has the live page changed since the capture? (the live-measured checks are then marked stale)
-  ...(flags.quick ? [] : [{ group: 0, label: 'drift', args: ['scripts/drift.mjs', name, ...(vpOnly ? ['--viewport', vpOnly] : [])], pick: /(\w+): live (\d+)px/g, unit: 'live px', live: true }]),
-  { group: 1, label: 'layout', args: withUrl(['scripts/diff.mjs', name, '--structure']), pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g, unit: 'layout %' },
-  { group: 1, label: 'states', args: ['scripts/states.mjs', name, '--clone', ...(url ? [url] : []), '--structure', ...(flags.quick || vpOnly ? ['--viewports', vpOnly || 'desktop'] : [])], pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g, unit: 'states %' },
-  ...(flags.quick ? [] : vpList.map((v) => ({ group: 2, label: `curves ${v}`, args: withUrl(['scripts/curves.mjs', name, '--viewport', v, ...refresh]), pick: /motion score \((\w+)\): ([\d.]+)%/g, unit: 'motion %' }))),
-  { group: 3, label: 'interact', args: withUrl(['scripts/interact.mjs', name, ...refresh]), pick: /│ \d+\s+│ '([^']+)'\s+│ ([\d.]+)/g, unit: 'interaction %', fail: /FAIL/g },
-  ...(flags.quick ? [] : [
-    { group: 3, label: 'hovers', args: withUrl(['scripts/hovers.mjs', name, ...refresh]), pick: /hover match \((\w+)\): ([\d.]+)%/g, unit: 'hover %' },
-    { group: 3, label: 'detail', args: withUrl(['scripts/detail.mjs', name, '--viewport', vpOnly || 'all', ...refresh]), pick: /(\w+): detail match ([\d.]+)%/g, unit: 'detail %' },
-    // alone, last: the load sequence is a timing measurement, and the other checks must not be starved by it either
-    { group: 4, label: 'load', args: withUrl(['scripts/load.mjs', name, ...(vpOnly ? ['--viewport', vpOnly] : []), ...refresh]), pick: /(\w+): load match ([\d.]+)%/g, unit: 'load %' },
-  ]),
+  // first and alone: has the live page changed since the capture? (status then asks for a re-capture)
+  { group: 0, label: 'drift', check: null, args: ['drift.mjs', name, ...vpArg], pick: /(\w+): live (\d+)px/g, always: true },
+  { group: 1, label: 'layout', check: 'layout', args: withUrl(['diff.mjs', name, '--structure', ...vpArg]), pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g },
+  ...(meta.mode === 'exact' ? [{ group: 1, label: 'layout-real', check: 'layout-real', args: withUrl(['diff.mjs', name, ...vpArg]), pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g }] : []),
+  // the reduced-motion page, its own check (decision D2)
+  { group: 1, label: 'reduced', check: 'reduced', args: withUrl(['diff.mjs', name, '--reduce', ...vpArg]), pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g },
+  { group: 1, label: 'states', check: 'scroll', args: ['states.mjs', name, '--clone', ...(url ? [url] : []), '--structure', ...(vpOnly ? ['--viewports', vpOnly] : [])], pick: /│ \d+\s+│ '(\w+)'\s+│ ([\d.]+)/g },
+  ...curveVps.map((v) => ({ group: 2, label: `curves ${v}`, check: 'curves', vp: v, args: withUrl(['curves.mjs', name, '--viewport', v, ...refresh]), pick: /motion score \((\w+)\): ([\d.]+)%/g })),
+  { group: 3, label: 'interact', check: 'interact', args: withUrl(['interact.mjs', name, ...refresh]), pick: /│ \d+\s+│ '([^']+)'\s+│ ([\d.]+)/g },
+  { group: 3, label: 'hovers', check: 'hovers', args: withUrl(['hovers.mjs', name, ...refresh]), pick: /hover match \((\w+)\): ([\d.]+)%/g },
+  { group: 3, label: 'detail', check: 'detail', args: withUrl(['detail.mjs', name, '--viewport', vpOnly || 'all', ...refresh]), pick: /(\w+): detail match ([\d.]+)%/g },
+  // alone, last: the load sequence and what changes by itself (behaviour) are timing measurements
+  { group: 4, label: 'load', check: 'load', args: withUrl(['load.mjs', name, ...vpArg, ...refresh]), pick: /(\w+): load match ([\d.]+)%/g },
+  { group: 5, label: 'behaviour', check: 'behaviour', args: withUrl(['behaviour.mjs', name, ...vpArg, ...refresh]), pick: /(\w+): behaviour ([\d.]+)/g },
 ];
 const allSteps = appMode ? appSteps : docSteps;
-const steps = only ? allSteps.filter((st) => only.some((o) => st.label === o || st.label.startsWith(`${o} `))) : allSteps;
+const wantsCheck = (st) => !only || only.some((o) => st.label === o || st.label.startsWith(`${o} `) || st.check === o || (o === 'states' && st.check === 'scroll') || (o === 'curves' && st.check === 'curves') || (o === 'canvas' && st.check === 'scroll'));
+const steps = allSteps.filter(wantsCheck);
 if (!steps.length) {
   console.error(`--only matched no check; checks: ${[...new Set(allSteps.map((st) => st.label.split(' ')[0]))].join(', ')}`);
   process.exit(1);
 }
 
-// Incremental: a check whose inputs have not changed since its last run (the clone's files, the capture, the
-// options) is not re-measured; its last result is reported again. --fresh re-measures everything. Scoring another
-// build (--url) is always measured, since its files are not the clone's.
-const root = siteDir(name);
-const metaJson = await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8').then(JSON.parse).catch(() => ({}));
-const capturedAt = metaJson.capturedAt || null;
-// every step asks the live page in the capture's language and region (lib.mjs LOCALE)
-const stepEnv = { ...process.env, ...(metaJson.locale ? { TC_LOCALE: metaJson.locale } : {}) };
-async function cloneHash() {
-  const h = crypto.createHash('sha1');
-  const walk = async (dir) => {
-    for (const e of (await fs.readdir(dir, { withFileTypes: true }).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name))) {
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) { if (e.name !== 'node_modules') await walk(p); continue; }
-      const st = await fs.stat(p);
-      h.update(`${path.relative(root, p)}:${st.size}:${Math.round(st.mtimeMs)}\n`);
-    }
-  };
-  await walk(path.join(root, 'clone'));
-  for (const f of ['interactions.json', 'motion-map.json', 'journey.json']) h.update(`${f}:${await fs.readFile(path.join(root, f), 'utf8').catch(() => '')}\n`);
-  // reference measurements other steps produce (live scroll states, reveals, motion, cached probe reads) are inputs too
-  for (const e of (await fs.readdir(path.join(root, 'reference'), { withFileTypes: true }).catch(() => [])).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (['assets', 'mirror', 'load', 'tiles', 'bundle'].includes(e.name)) continue;
-    const p = path.join(root, 'reference', e.name);
-    if (e.isDirectory()) await walk(p); else { const st = await fs.stat(p); h.update(`reference/${e.name}:${st.size}:${Math.round(st.mtimeMs)}\n`); }
-  }
-  return h.digest('hex');
-}
-const stampsFile = path.join(root, COMPARE, '.stamps.json');
-const stamps = url ? {} : await fs.readFile(stampsFile, 'utf8').then(JSON.parse).catch(() => ({}));
-const inputs = url ? null : { hash: await cloneHash(), capturedAt, args: null };
-// the step's own code is an input too: a changed check must re-measure, never report its old number
-const codeHash = async (file) => crypto.createHash('sha1').update(await fs.readFile(path.join(HERE, path.basename(file)), 'utf8').catch(() => '')).update(await fs.readFile(path.join(HERE, 'lib.mjs'), 'utf8').catch(() => '')).digest('hex').slice(0, 12);
-const codeHashes = Object.fromEntries(await Promise.all(steps.map(async (st) => [st.label, await codeHash(st.args[0])])));
-const stampKey = (step) => JSON.stringify({ hash: inputs?.hash, capturedAt, args: step.args, code: codeHashes[step.label] });
-const reusable = (step) => !step.live && !url && !flags.fresh && !flags['refresh-ref'] && stamps[step.label]?.key === stampKey(step) && stamps[step.label].values !== undefined;
+// what is already current (verdict.mjs): a step whose units are all measured on what is there now is not run again
+const before = await evaluate(root, { side });
+const unitsOf = (st) => before.units.filter((u) => !u.plan && (u.check === st.check || (st.check === 'scroll' && u.check === 'canvas')) && (!vpOnly || !u.viewport || u.viewport === vpOnly) && (!st.vp || u.viewport === st.vp));
+const CURRENT = new Set(['pass', 'fail', 'accepted', 'na', 'tool']);
+const current = (st) => {
+  if (flags.fresh || flags['refresh-ref'] || st.always || url) return false;
+  const us = unitsOf(st);
+  if (st.check === 'interact') { const plan = before.units.find((u) => u.check === 'interact' && u.plan); if (!plan || plan.status !== 'pass') return false; }
+  return us.length > 0 && us.every((u) => CURRENT.has(u.status));
+};
 
 const runStep = (step) => new Promise((resolve) => {
   const started = Date.now();
   const [file, ...args] = step.args;
-  const child = spawn(process.execPath, [path.join(HERE, path.basename(file)), ...args], { cwd: process.cwd(), env: stepEnv });
+  const child = spawn(process.execPath, [path.join(HERE, file), ...args], { cwd: process.cwd(), env: { ...process.env, ...(meta.locale ? { TC_LOCALE: meta.locale } : {}) } });
   let out = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { out += d; });
@@ -119,29 +105,36 @@ const runStep = (step) => new Promise((resolve) => {
 });
 
 const summary = [];
+let failed = 0;
 const t0 = Date.now();
-const finish = (step, { code, out, ms }) => {
+const finish = async (step, { code, out, ms }) => {
   const values = [...out.matchAll(step.pick)].map((m) => `${m[1]} ${m[2]}`);
-  const fails = step.fail ? (out.match(step.fail) || []).length : 0;
   const timedOut = out.includes('\nTIMEOUT');
-  const errors = (out.match(/PAGE ERROR[^\n]*/g) || []).slice(0, 2);
-  const warnings = (out.match(/WARNING[^\n]*/g) || []).slice(0, 2);
-  const status = timedOut ? 'TIMEOUT' : code !== 0 ? `EXIT ${code}` : fails ? `${fails} FAIL` : 'ok';
-  console.log(`  ${step.label.padEnd(16)} ${status} in ${(ms / 1000).toFixed(0)}s   ${values.join('  ')}`);
-  if (code !== 0 && !timedOut) console.log(out.split('\n').filter(Boolean).slice(-4).map((l) => `    ${l}`).join('\n'));
-  [...errors, ...warnings].forEach((l) => console.log(`    ${l}`));
-  summary.push({ step: step.label, status, seconds: Math.round(ms / 1000), [step.unit]: values.join('  ') || '-' });
-  if (!url && (status === 'ok' || status.endsWith('FAIL'))) stamps[step.label] = { key: stampKey(step), status, values: values.join('  '), seconds: Math.round(ms / 1000), at: new Date().toISOString() };
+  const waits = [...out.matchAll(/waited (\d+)s for another trueclone measurement/g)].reduce((n, m) => n + Number(m[1]), 0);
+  const status = timedOut ? 'TIMEOUT' : code !== 0 ? `EXIT ${code}` : 'ok';
+  console.log(`  ${step.label.padEnd(16)} ${status} in ${(ms / 1000).toFixed(0)}s${waits ? ` (${waits}s waiting for the machine's timing lock)` : ''}   ${values.join('  ')}`);
+  for (const l of (out.match(/(PAGE ERROR|WARNING)[^\n]*/g) || []).slice(0, 3)) console.log(`    ${l}`);
+  if (status !== 'ok') {
+    failed++;
+    console.log(out.split('\n').filter(Boolean).slice(-4).map((l) => `    ${l}`).join('\n'));
+    // what the step did not get to measure is recorded as an error for this clone (never left looking current)
+    if (step.check) {
+      const after = await evaluate(root, { side });
+      const left = after.units.filter((u) => !u.plan && unitsOf(step).some((x) => x.check === u.check && x.route === u.route && x.viewport === u.viewport && x.state === u.state) && ['missing', 'stale', 'invalid'].includes(u.status));
+      if (left.length) {
+        const ident = await startIdentity(root, step.check, side);
+        for (const check of new Set(left.map((u) => u.check))) await writeErrors(root, COMPARE, check, left.filter((u) => u.check === check).map((u) => ({ route: u.route, viewport: u.viewport, state: u.state })), ident, `${step.label} ${status.toLowerCase()}: ${(out.split('\n').filter(Boolean).slice(-1)[0] || '').slice(0, 200)}`);
+      }
+    }
+  }
+  summary.push({ step: step.label, status, seconds: Math.round(ms / 1000), lockWaitSeconds: waits, result: values.join('  ') || '-' });
 };
-const groups = flags.serial
-  ? steps.map((st) => [st])
-  : [...new Set(steps.map((st) => st.group))].map((g) => steps.filter((st) => st.group === g));
+const groups = flags.serial ? steps.map((st) => [st]) : [...new Set(steps.map((st) => st.group))].map((g) => steps.filter((st) => st.group === g));
 for (const group of groups) {
-  const todo = group.filter((st) => !reusable(st));
-  for (const st of group.filter(reusable)) {
-    const s = stamps[st.label];
-    console.log(`  ${st.label.padEnd(16)} ${s.status} (unchanged since ${s.at.slice(0, 16).replace('T', ' ')}, not re-measured; --fresh to re-run)   ${s.values}`);
-    summary.push({ step: st.label, status: `${s.status} (kept)`, seconds: 0, [st.unit]: s.values || '-' });
+  const todo = group.filter((st) => !current(st));
+  for (const st of group.filter(current)) {
+    console.log(`  ${st.label.padEnd(16)} current (every unit measured on the ${side} as it is now; --fresh re-measures)`);
+    summary.push({ step: st.label, status: 'current', seconds: 0, result: '-' });
   }
   if (!todo.length) continue;
   console.log(`running: ${todo.map((st) => st.label).join(', ')}`);
@@ -149,12 +142,15 @@ for (const group of groups) {
 }
 summary.sort((x, y) => steps.findIndex((st) => st.label === x.step) - steps.findIndex((st) => st.label === y.step));
 const totalMin = +((Date.now() - t0) / 60000).toFixed(1);
-console.log(`\n${flags.quick ? 'quick' : 'full'} score for ${name}${url ? ` (${url})` : ''} in ${totalMin} min`);
-console.table(summary.map((s) => ({ step: s.step, status: s.status, 's': s.seconds, result: Object.entries(s).find(([k]) => k.endsWith('%') || k.endsWith('px'))?.[1] })));
+console.log(`\nscore for ${name}${url ? ` (${url})` : ''} in ${totalMin} min${failed ? `: ${failed} step(s) failed` : ''}`);
+console.table(summary.map((s) => ({ step: s.step, status: s.status, s: s.seconds, result: s.result })));
 await fs.mkdir(path.join(root, COMPARE), { recursive: true });
-if (!url) await fs.writeFile(stampsFile, JSON.stringify(stamps, null, 2));
-// where the time went, for REPORT.md and for choosing what to re-run
-await fs.writeFile(path.join(root, COMPARE, 'score-times.json'), JSON.stringify({ at: new Date().toISOString(), kind: flags.quick ? 'quick' : 'full', only, viewport: vpOnly, url, totalMin, steps: Object.fromEntries(summary.map((s) => [s.step, { status: s.status, seconds: s.seconds }])) }, null, 2));
-// REPORT.md: every score against its target, what to fix first, and what was not copied
+// where the time went (REPORT.md shows it): per step, with the time spent waiting for the machine's timing lock
+const timesFile = path.join(root, COMPARE, 'score-times.json');
+const history = JSON.parse(await fs.readFile(timesFile, 'utf8').catch(() => 'null'));
+const entry = { at: new Date(t0).toISOString(), kind: only ? 'partial' : 'full', only, viewport: vpOnly, url, totalMin, steps: Object.fromEntries(summary.map((s) => [s.step, { status: s.status, seconds: s.seconds, lockWaitSeconds: s.lockWaitSeconds || 0 }])) };
+await fs.writeFile(timesFile, JSON.stringify({ ...entry, history: [...(history?.history || []), entry].slice(-200) }, null, 2));
+// REPORT.md: the evaluation (verdict.mjs), rendered
 const report = await runStep({ args: ['report.mjs', name] });
 console.log(report.out.trim());
+if (failed) process.exitCode = 1;

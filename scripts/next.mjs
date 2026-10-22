@@ -10,7 +10,7 @@
 // The HTML clone stays the source of truth: regenerate after every change, then verify the build with the same
 // four scores (`npm run next -- <name> --verify`).
 //
-// usage: node scripts/next.mjs <name> [--install] [--build] [--verify [--quick]] [--port 3100]
+// usage: node scripts/next.mjs <name> [--install] [--build] [--verify] [--port 3100]
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -834,14 +834,23 @@ if (flags.verify) {
     process.exit(1);
   }
   const lab = path.resolve('.');
+  const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
   // Same checks, same entry point as the HTML clone, written straight to compare-next/ and REPORT.next.md (lib.mjs
   // COMPARE / REPORT_FILE): the HTML clone's compare/ and REPORT.md are never touched or moved.
   try {
-    await run('node', [path.join(path.dirname(toPath(import.meta.url)), 'score.mjs'), name, '--url', url, ...(flags.quick ? ['--quick'] : [])], { cwd: lab, env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md' } });
-    // the app looked at next to the original too, frame by frame, at the widest and a phone size (compare-next/review/):
-    // status compares each frame with the clone's, so a difference only the app has is seen, not only scored
-    for (const size of ['wide', 'mobile']) {
-      await run('node', [path.join(path.dirname(toPath(import.meta.url)), 'review.mjs'), name, '--size', size, '--url', url], { cwd: lab, env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md' } }).catch((e) => console.warn(`WARNING the app's review at ${size} did not run: ${e.message}`));
+    // every check, every size, on the app as built (no quick mode: an app verdict is a whole verdict, never older
+    // results paired with newer ones). The units carry the app's own content hash (identity.mjs, next/), so an app
+    // changed after this verification is stale, and the delivered app is the one verified.
+    await run('node', [path.join(path.dirname(toPath(import.meta.url)), 'score.mjs'), name, '--url', url, '--fresh'], { cwd: lab, env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md' } });
+    // the app looked at next to the original too, frame by frame, at the widest and a phone size, on every route
+    // (compare-next/review/): a frame where the app differs from the clone's is reviewed by eye like any other. A review
+    // that cannot run is a failed verification, not a warning.
+    if (!meta.canvasApp) {
+      const routePaths = [null, ...(meta.routes || []).filter((r) => r.slug).map((r) => r.path)];
+      for (const r of routePaths) for (const size of ['wide', 'mobile']) {
+        await run('node', [path.join(path.dirname(toPath(import.meta.url)), 'review.mjs'), name, '--size', size, '--url', url, ...(r ? ['--route', r] : [])], { cwd: lab, env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md' } });
+      }
+      await run('node', [path.join(path.dirname(toPath(import.meta.url)), 'report.mjs'), name], { cwd: lab, env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md' } });
     }
   } finally {
     stop();
