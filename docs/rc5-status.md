@@ -137,62 +137,90 @@ Counted per ID (rows that group IDs count each one):
 
 ## 4. Public-readiness rubric (0-100)
 
-Each dimension is scored by anchor:
+Defined before scoring. It measures readiness for real public users, not the share of planned fixes done.
+
+### Anchors (every dimension)
 
 | Anchor | Meaning |
 |---|---|
-| 0 | absent or broken |
-| 50 | implemented, with synthetic tests only |
-| 75 | automated tests including real-browser fixtures or replays of real data |
-| 100 | confirmed on the real-site retest and by an independent audit of the run's files |
+| 0 | absent, or known broken |
+| 25 | implemented, untested |
+| 50 | implemented, with synthetic tests |
+| 75 | automated tests on real browsers (fixtures) or on replays of real recorded data |
+| 100 | confirmed on the real-site retest, with an independent audit of each run's files and your by-eye scores |
 
-| # | Dimension | Weight | Evidence that moves it |
+### Dimensions and weights
+
+| # | Dimension | Weight | Evidence it is scored on (and only here) |
 |---|---|---|---|
-| 1 | Result integrity: no false pass, every required result present and current | 20 | golden suite, true-pass fixtures, retest audit of REPORT state counts |
-| 2 | Reference integrity: the reference is complete, correct and the same for every check | 10 | Stage 2 tests (the old code fails them), retest |
-| 3 | Measurement symmetry and calibration | 15 | self-calibration on fixtures and real sites, envelope on unstable frames |
-| 4 | Behaviour fidelity: rules of change, reduced motion, template canvas | 10 | behaviour fixtures, canvas e2e, real sites with GSAP/WebGL |
-| 5 | Loop termination and honest outcomes | 15 | loop tests, zero replay, every retest run reaching 0/2/3 with an unresolved list that matches its loop.json |
-| 6 | Real-site results: terminal states and your by-eye scores at or above RC4 | 20 | the retest (PLAN.md §10 gates 2, 4, 5) |
-| 7 | Skill, CLI and docs consistency; operability (doctor, resume) | 5 | lint test, doctor, policy |
-| 8 | Time cost | 5 | per-phase times in the retest (calibrate, behaviour, review twice the reference) |
+| 1 | Visual and behavioural fidelity on real sites | 25 | Your by-eye scores and the final results of real runs (retest) |
+| 2 | Reference and measurement integrity | 15 | Calibration (reference against itself), the stabilisers, Stage 2 fixes with old-code failure proofs, the metrics |
+| 3 | Truthfulness of completion decisions | 20 | The golden false-pass suite, true-pass fixtures, the app gate, the outcome audit of real runs |
+| 4 | Loop termination and recovery | 15 | Loop tests, the zero replay, resume, Blocked paths; on the retest, every run terminal |
+| 5 | Setup and first-use reliability | 10 | Install from the package, init, doctor in the agent's sandbox, the time each phase adds |
+| 6 | Test coverage and reproducibility | 10 | The breadth, determinism and runtime of the suites themselves (fixtures, e2e, replay data in the repo) |
+| 7 | Documentation and user-facing clarity | 5 | One canonical policy, the skill and CLI in step (lint), REPORT's outcome wording |
 
-**A. Provisional readiness now: 54 / 100**
+**How the dimensions relate without counting evidence twice:**
 
-| # | Score | Why |
+- **Dimension 6 scores the suites as assets.** Breadth, repeatability and whether someone else can run them. What a
+  test proves is credited once, where it belongs: a golden false-pass test to 3, a calibration test to 2.
+- **Dimension 1 takes only real-site outcomes.** Fixture fidelity is not counted there; it supports 2 and 3.
+- **Real-run audits split by question.** They count in 3 (were the claims true) and 4 (did each run end); 1 asks how
+  good the clone is.
+
+### A. Evidence-backed readiness now: 61 / 100 (provisional)
+
+| # | Score | Basis |
 |---|---|---|
-| 1 | 15 / 20 | 75%: every reproduced path is tested, real-browser e2e included; no real-site audit yet |
-| 2 | 7.5 / 10 | 75%: fixes with old-code failure proofs; real sites pending |
-| 3 | 10 / 15 | ~65%: fixtures self-consistent at ≥ 99.5 after fixing the capture's timing asymmetry; no real site calibrated; the clock fallback is not built |
-| 4 | 5.5 / 10 | ~55%: fixtures only; the behaviour matcher has not met real GSAP, Lottie or parallax pages |
-| 5 | 9.5 / 15 | ~65%: synthetic and replay pass; the replay misses the 1.5 h timing target (2.0 h) by design of a 4-attempt window |
-| 6 | 0 / 20 | no rc.5 run on a real site yet |
-| 7 | 4.5 / 5 | lint-tested exit codes, doctor, canonical policy |
-| 8 | 2 / 5 | added cost measured only on fixtures (calibrate 1-2 min, behaviour ~35 s per route per score, review shoots the reference twice) |
+| 1 | 7.5 / 25 | 30%. No rc.5 run on a real site. The fixtures show the checks now see what RC4 missed (a stopped marquee, a fixed shuffle, a reframed scene, clone-only content), which says the scores mean more, not that clones are better |
+| 2 | 10.5 / 15 | 70%. Fixtures self-consistent at ≥ 99.5 after fixing the capture's own timing asymmetry; Stage 2 fixes proven against the old code. No real reference calibrated; no clock-incompatibility fallback |
+| 3 | 16 / 20 | 80%. 23 golden false-pass cases and 5 true-pass cases, with real-browser e2e on both sides of the line. No audit of a real run yet |
+| 4 | 9.75 / 15 | 65%. Synthetic loop tests and the zero replay pass; the replay's timing target is missed (2.0 h vs 1.5 h); resume is untested on a real run |
+| 5 | 5.5 / 10 | 55%. Doctor checks DNS, localhost and the lock; the tarball install path is untested; the time added by calibrate, behaviour and the doubled review reference is unmeasured on real sites |
+| 6 | 8 / 10 | 80%. 85 tests across unit, browser and e2e, deterministic on this machine, fixtures in the repo; only Windows and Chrome |
+| 7 | 4.25 / 5 | 85%. Canonical policy, lint-tested exit codes, superseded documents marked |
 
-**B. Conditional expected readiness after the retest: about 78 / 100,** if and only if:
+### B. Expected readiness after a successful retest: 75-85 (a projection, not a measurement)
 
-- every run ends at 0, 2 or 3, its REPORT's state counts match an audit of its files, and no instrument modification
-  occurs;
+It assumes every condition below holds:
+
+- every run ends at 0, 2 or 3, and `tools/audit-run.mjs` finds nothing;
 - astro reaches exit 0 again;
 - your by-eye scores meet PLAN.md §10 gate 4;
-- calibration finds the five references self-consistent once seeded and held, or its envelope judges the rest;
-- the added time per run stays under about 20%.
+- the five references calibrate self-consistent once seeded and held, or their envelope judges the rest;
+- calibrate, behaviour and the review's second reference load add under ~20% to each run.
 
-Each condition that fails costs its dimension (gates 2-5 ≈ dimensions 1, 3, 5, 6).
+It is invalidated by any one of:
 
-**C. Release blockers (any one blocks a public release)**
+- a false exit 0 found by the audit or by eye;
+- a run that does not end;
+- `holdStill` breaking a site (a timeout, a page error, a different page);
+- behaviour members failing correct clones on GSAP, Lottie or parallax pages;
+- by-eye scores below RC4's.
 
-1. **No rc.5 run on a real site.** PLAN.md §10 gates 2-5 are unmet by definition until the retest.
-2. **`holdStill` on heavy pages is unmeasured.** It runs up to 46 s of page time in one burst, and there is no
+Each of these caps its dimension at the 50 anchor, and a false pass is also a release blocker.
+
+### C. Release blockers (any one blocks a public release, whatever the total)
+
+1. **No rc.5 run on a real site.** PLAN.md §10 gates 2-5 are unmet until the retest.
+2. **`holdStill` on heavy pages is unmeasured.** Up to 46 s of page time runs in one burst, and there is no
    clock-incompatibility detection or fallback (PLAN.md §4 "Feasibility").
-3. **The behaviour check has not been run on a real site.** False "extra motion" or a missed carousel there would
-   block a correct clone or pass a wrong one.
-4. **Loop timing.** The window is evidenced on one historical run with approximate data; the 1.5 h target is not met
-   (2.0 h).
-5. **Deferred defects a user would meet.** ALLBIRDS-5/-7 (auto-scenario gaps, dialog and lazy-image seed traps),
-   VAR-11c/h (Next pre-line whitespace, early pointer), the ALLBIRDS-12 generator type error.
-6. **Untested end to end.** A full `status` loop to exit 0 with the Next.js build was not run in this session.
+3. **The behaviour check has not met a real site.** A false "extra motion" would block a correct clone; a missed
+   carousel would pass a wrong one.
+4. **The loop window rests on one historical run with approximate data.** Its timing target is not met (2.0 h against
+   1.5 h).
+5. **Deferred defects a user would meet.** ALLBIRDS-5 and -7 (auto-scenario gaps, dialog and lazy-image seed traps),
+   VAR-11c and -h (Next pre-line whitespace, early pointer), ALLBIRDS-12's generator type error.
+6. **No full `status` loop to exit 0 with the Next.js build was run.** Every check was run in this session, but not
+   as one uninterrupted loop.
+
+### Moving up a level
+
+- **To about 70.** Retest stage 1 (the five runs in `docs/test-plan-0.5-rc5.md`) passes its sheet, with blockers 2
+  and 3 cleared by those runs.
+- **To about 80.** Your by-eye scores at or above RC4 on all five, and blockers 4-6 resolved.
+- **To release.** Plus the parallel run and one unseen site (PLAN.md §7.2 D-E), with nothing in C left.
 
 ## 5. Known limits (also in docs/policy.md)
 
