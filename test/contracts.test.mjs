@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { writeUnits } from '../scripts/results.mjs';
 import { startIdentity, contentHash } from '../scripts/identity.mjs';
 import { failureLine, errorOwner } from '../scripts/failures.mjs';
@@ -301,7 +302,7 @@ test('RC6-03: status while a step runs says "waiting", and never counts it as a 
 });
 
 // ---- RC6-21: the auditor is read-only, and finds a run that did not end ----
-const audit = (root) => spawnSync(process.execPath, [new URL('../tools/audit-run.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'), root], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } });
+const audit = (root) => spawnSync(process.execPath, [fileURLToPath(new URL('../tools/audit-run.mjs', import.meta.url)), root], { encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' } });
 const snapshot = async (dir) => { const out = []; const walk = async (d) => { for (const e of await fs.readdir(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) await walk(p); else { const st = await fs.stat(p); out.push(`${path.relative(dir, p)}|${st.size}|${st.mtimeMs}`); } } }; await walk(dir); return out.sort().join('\n'); };
 test('RC6-21: the auditor writes nothing; a verified run is clean; a run left at "in progress" is a finding', async () => {
   const p = await tmpProject();
