@@ -63,7 +63,7 @@ if (Test-Path -LiteralPath $d) { Write-Error "$d already exists: nothing was cha
   npm init -y | Out-Null
   npm install --save-dev --save-exact '@trueclone/cli@0.5.0-rc.7'
   npx --no trueclone init --no-install
-  npx --no trueclone --version
+  npx trueclone --version
   npm ls '@trueclone/cli'
 }
 ```
@@ -78,7 +78,7 @@ if (Test-Path -LiteralPath $d) { Write-Error "$d already exists: nothing was cha
   npm init -y | Out-Null
   npm install --save-dev --save-exact '@trueclone/cli@0.5.0-rc.7'
   npx --no trueclone init --no-install
-  npx --no trueclone --version
+  npx trueclone --version
   npm ls '@trueclone/cli'
 }
 ```
@@ -93,7 +93,7 @@ if (Test-Path -LiteralPath $d) { Write-Error "$d already exists: nothing was cha
   npm init -y | Out-Null
   npm install --save-dev --save-exact '@trueclone/cli@0.5.0-rc.7'
   npx --no trueclone init --no-install
-  npx --no trueclone --version
+  npx trueclone --version
   npm ls '@trueclone/cli'
 }
 ```
@@ -108,7 +108,7 @@ if (Test-Path -LiteralPath $d) { Write-Error "$d already exists: nothing was cha
   npm init -y | Out-Null
   npm install --save-dev --save-exact '@trueclone/cli@0.5.0-rc.7'
   npx --no trueclone init --no-install
-  npx --no trueclone --version
+  npx trueclone --version
   npm ls '@trueclone/cli'
 }
 ```
@@ -123,7 +123,7 @@ if (Test-Path -LiteralPath $d) { Write-Error "$d already exists: nothing was cha
   npm init -y | Out-Null
   npm install --save-dev --save-exact '@trueclone/cli@0.5.0-rc.7'
   npx --no trueclone init --no-install
-  npx --no trueclone --version
+  npx trueclone --version
   npm ls '@trueclone/cli'
 }
 ```
@@ -138,7 +138,7 @@ if (Test-Path -LiteralPath $d) { Write-Error "$d already exists: nothing was cha
   npm init -y | Out-Null
   npm install --save-dev --save-exact '@trueclone/cli@0.5.0-rc.7'
   npx --no trueclone init --no-install
-  npx --no trueclone --version
+  npx trueclone --version
   npm ls '@trueclone/cli'
 }
 ```
