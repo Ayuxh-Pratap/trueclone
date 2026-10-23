@@ -1,5 +1,7 @@
 # 0.5.0-rc.5 controlled retest (prepared, not started)
 
+> **Superseded (2026-10-23)** by `docs/test-plan-0.5-rc7.md`. Kept as the record.
+
 The next test of trueclone after the RC5 remediation. It is ready to run and has not been started. What it must show
 is in `docs/rc5-status.md` §4 (the readiness rubric, conditions for score B, and the release blockers); the rules the
 tool applies are in `docs/policy.md`. Predictions are made before the runs: a run that differs is a finding. Do not

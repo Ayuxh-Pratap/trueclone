@@ -1,5 +1,10 @@
 # 0.5.0-rc.6: fixes from the RC5 zero pilot
 
+> **Record (2026-10-23).** These fixes held wherever the RC6 runs reached them (bundle, gate, no status crash). The RC6
+> runs then found the defects rc.7 addresses: `docs/rc7-notes.md`; ledger `docs/rc7-ledger.md`. §6's continuation table
+> (what an upgrade keeps) is superseded by `docs/rc7-status.md` §4: rc.7 changes the shared measurement code, so every
+> earlier result is measured again.
+
 Date: 2026-10-22. Previous: 0.5.0-rc.5. Evidence: `C:\dev\tc-tests\rc5-zero`, preserved as run (its REPORT.md,
 `compare/asset-probe.json`, `compare/empty-assets*.txt`, `compare/status-error*.txt`). Rules: `docs/policy.md`.
 

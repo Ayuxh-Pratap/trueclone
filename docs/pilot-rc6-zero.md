@@ -1,5 +1,9 @@
 # rc.6 pilot: continuing the RC5 zero run
 
+> **Record (2026-10-23).** Run on 2026-10-22; evaluated with the other RC6 runs. Its prompt forbade editing notes.md,
+> where review verdicts must be written: a defect of the prompt, not of the agent that wrote them. The current
+> campaign and its prompt: `docs/test-plan-0.5-rc7.md`.
+
 The first test of 0.5.0-rc.6. It continues the paused RC5 run in `C:\dev\tc-tests\rc5-zero` (why.zero.university,
 exact mode with the owner's permission as recorded in that run), after preserving the RC5 evidence. What changed and
 why: `docs/rc6-notes.md`. Varsity, astro, heybhaskar and allbirds wait for the outcome (section 6).

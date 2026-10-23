@@ -1,5 +1,8 @@
 # 0.5.0-rc.5: what is fixed, what is verified, what needs the next test
 
+> **Superseded (2026-10-23)** by `docs/rc7-status.md`, which keeps this page's readiness rubric (§4) unchanged and
+> re-scores it after the RC6 runs and rc.7. This page is kept as the record of the rc.5 assessment.
+
 Date: 2026-10-22. Baseline: 0.5.0-rc.4 (`17cd6cf`) and its five runs (`docs/eval-rc4/`). Plan: `docs/plan-rc5/PLAN.md`
 (approved with decisions D1-D6 and exit 2). Canonical rules: `docs/policy.md`.
 
