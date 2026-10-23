@@ -17,6 +17,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, openBrowser, newPage, serve, VIEWPORTS, siteDir, routeArg } from './lib.mjs';
 import { planInlineStyles } from './viewport-fit.mjs';
+import { codeHash, toolVersion } from './identity.mjs';
+import { routeDir, routeKey, decodeEach, canonicalPath } from './routes.mjs';
 
 // placeholder vocabulary, wide enough to match most word widths
 const LOREM_TEXT = `lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore
@@ -281,7 +283,10 @@ const clone = path.join(root, 'clone');
 // seeded by the same pipeline at the clone's root (so every relative path holds), then written to clone/<route>/index.html
 // with its relative references re-based for the depth. The captured page's recordings (reveals, widgets, inline values)
 // belong to another document and are not used. The main seed runs one of these per separate page.
-const routePage = typeof flags['route-page'] === 'string' ? (meta.routes || []).find((r) => r.path === routeArg(flags['route-page'])) : null;
+const routePage = typeof flags['route-page'] === 'string' ? (meta.routes || []).find((r) => routeKey(r.path) === routeKey(routeArg(flags['route-page']))) : null;
+// where a route's page is written under clone/: the one rule the bundled server reads with (routes.mjs routeDir:
+// "/Landing%20Page.html" is clone/Landing Page.html/index.html, RC6-07), and its depth for re-basing
+const pageParts = (p) => routeDir(p).split('/').filter(Boolean);
 if (typeof flags['route-page'] === 'string' && !routePage) { console.error(`no separate page ${flags['route-page']} in this capture`); process.exit(1); }
 // the browser pass works on a temporary page, never on clone/index.html: a pass that crashes leaves no index.html that
 // looks seeded (the completion record clone/.seed.json is written only at the very end)
@@ -290,9 +295,9 @@ const t0 = Date.now();
 const step = (msg) => console.log(`seed ${String(Math.round((Date.now() - t0) / 1000)).padStart(4)}s  ${msg}`);
 // The captured page lives at the clone's root and at its own address too (/products/x, /en/getting-started):
 // a link or Back to it, or a reload there, finds the same page, as on the site.
-const startParts = (() => { try { return new URL(meta.finalUrl || meta.url).pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch { return []; } })();
+const startParts = (() => { try { return pageParts(new URL(meta.finalUrl || meta.url).pathname); } catch { return []; } })();
 const writeStartAlias = async (doc) => {
-  if (!startParts.length || startParts.some((p) => /^\.+$|[\\:*?"<>|]/.test(p))) return;
+  if (!startParts.length) return;
   await fs.mkdir(path.join(clone, ...startParts), { recursive: true });
   await fs.writeFile(path.join(clone, ...startParts, 'index.html'), rebaseHtml(doc, startParts.length));
 };
@@ -306,8 +311,8 @@ if (flags.patches) {
   for (const r of (meta.routes || []).filter((x) => x.slug && !x.sameDocument)) {
     const pageBase = await fs.readFile(path.join(clone, `.seed-base-${r.slug}.html`), 'utf8').catch(() => null);
     if (pageBase === null) continue;
-    await fs.mkdir(path.join(clone, ...r.path.split('/').filter(Boolean)), { recursive: true });
-    await fs.writeFile(path.join(clone, ...r.path.split('/').filter(Boolean), 'index.html'), rebaseHtml((await applyPatches(pageBase)).html, r.path.split('/').filter(Boolean).length));
+    await fs.mkdir(path.join(clone, ...pageParts(r.path)), { recursive: true });
+    await fs.writeFile(path.join(clone, ...pageParts(r.path), 'index.html'), rebaseHtml((await applyPatches(pageBase)).html, pageParts(r.path).length));
   }
   console.log(`patches re-applied onto the last seed (no re-seed): ${applied.join(', ') || 'none in clone/patches/'}`);
   process.exit(0);
@@ -323,6 +328,8 @@ if (meta.bundle && !routePage) {
   if (!(await fs.stat(notesFile).then(() => true, () => false))) {
     await fs.writeFile(notesFile, `# ${name}: clone notes\n\nReference: ${meta.url}. Mode: exact (permission: ${meta.permission}), app mode with the site's own bundle. Captured ${meta.capturedAt}.\nKeep every section; the report reads them back. One line per entry, no prose.\n\n## Review\n\n<!-- one line per journey frame of compare/review/journey-<size>/index.md, with its token: "- journey/03-step-2 desktop [token]: same" -->\n\n## Accepted differences\n\n<!-- "- <check> <size> <where>: <why>; evidence: <file>" -->\n\n## Findings\n\n<!-- what the bundle could not carry (a backend answer it stubs, a file never recorded), with evidence -->\n`);
   }
+  // the same completion record as a rebuilt document's (capture, time, the seed's code and the tool's version)
+  await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: r.documents, bundle: true, code: codeHash('seed'), tool: toolVersion() }, null, 2));
   console.log(`seeded ${path.relative(process.cwd(), clone)} from the site's own bundle: ${r.files} files from ${r.hosts} host(s), ${r.documents} document(s), served through clone/tc-sw.js (offline: tracking answered empty, writes never sent, anything not recorded a 404)`);
   console.log(`next: npx trueclone status ${name}`);
   process.exit(0);
@@ -344,7 +351,7 @@ const PLACEHOLDER_BG = 'assets/placeholder-bg.svg'; // transparent: for CSS back
 const copied = new Set();
 const isFont = (rel) => /\.(woff2?|ttf|otf|eot)([?#]|$)/i.test(rel) || /^font\//.test(rel);
 const pull = async (rel) => {
-  const clean = decodeURIComponent(rel.split(/[?#]/)[0]);
+  const clean = decodeEach(rel.split(/[?#]/)[0]); // a malformed escape (a bare %) is kept, never a crash
   if (copied.has(clean)) return;
   copied.add(clean);
   const to = path.join(clone, 'assets', clean);
@@ -401,11 +408,18 @@ for (const v of routePage ? [] : ['desktop', 'tablet', 'mobile']) {
   if (r) recs[v] = r;
 }
 const primary = recs.desktop || recs.tablet || recs.mobile || null;
+// merged across widths by the element's stable id (reveals since rc.7, with its fp), else its position path; an element
+// that is not the same one in every width's record (another fp, or for a positional path another first class) is
+// ambiguous and never marked (RC6-15's rule, applied to reveals)
+const firstCls = (c) => String(c || '').split(/[.\s]+/)[0];
 const byPath = (key) => {
   const m = new Map();
   for (const [v, r] of Object.entries(recs)) for (const x of r[key] || []) {
-    if (!m.has(x.path)) m.set(x.path, { path: x.path, cls: x.cls });
-    m.get(x.path)[v] = x;
+    const k = x.id != null ? `id:${x.id}` : `path:${x.path}`;
+    if (!m.has(k)) m.set(k, { path: x.path, id: x.id, fp: x.fp, cls: x.cls });
+    const e = m.get(k);
+    if (x.id != null ? x.fp !== e.fp : firstCls(x.cls) !== firstCls(e.cls)) e.ambiguous = true;
+    e[v] = x;
   }
   return [...m.values()];
 };
@@ -423,7 +437,8 @@ const widgetRec = exact || routePage ? null : JSON.parse(await fs.readFile(path.
 const widgetGroups = (widgetRec?.groups || []).filter((g) => g.kind === 'portal' || new Set([...(g.states || []), ...(g.kind === 'expand' ? [g.closed] : [])].filter((s) => s != null)).size > 1);
 let marked = 0, classMarked = 0, scrubMarked = 0, widgets = null, runtime = null;
 step('browser pass: reveal marks, widgets, runtime clean-up' + (exact ? '' : ', placeholder text and media'));
-({ html, marked, classMarked, scrubMarked, widgets, runtime } = await browserPass(!exact, recorded, classChanges, widgetGroups, scrubbed));
+let liveFrames = [], find = null;
+({ html, marked, classMarked, scrubMarked, widgets, runtime, liveFrames, find } = await browserPass(!exact, recorded, classChanges, widgetGroups, scrubbed));
 if (!exact) html = html.split(REF_ASSETS).join('__tc_ref__').replace(/__tc_ref__[^"')\s]+/g, PLACEHOLDER);
 // template mode never loads the site's media: what still points at the network (a <template>'s images, a lazy
 // loader's data-* source, a source the capture could not save) becomes the placeholder too
@@ -462,10 +477,11 @@ await fs.writeFile(path.join(clone, routePage ? `.seed-base-${routePage.slug}.ht
 const { html: patchedHtml, applied: patches } = await applyPatches(html);
 html = patchedHtml;
 if (routePage) {
-  const parts = routePage.path.split('/').filter(Boolean);
+  const parts = pageParts(routePage.path);
   await fs.mkdir(path.join(clone, ...parts), { recursive: true });
   await fs.writeFile(path.join(clone, ...parts, 'index.html'), rebaseHtml(html, parts.length));
   await fs.rm(path.join(clone, passFile), { force: true });
+  if (liveFrames.length) console.log(`live frames: ${JSON.stringify(liveFrames)}`); // read by the main seed (.seed.json)
   console.log(`seeded ${routePage.path}: clone/${parts.join('/')}/index.html (a separate page of the site)`);
   process.exit(0);
 }
@@ -517,16 +533,21 @@ if (!(await fs.stat(scriptFile).then(() => true, () => false))) {
   await fs.writeFile(scriptFile, `// ${meta.url} - clone behaviour (your own code). Markup and styles come from the mirror${exact ? '' : ' (placeholder content)'}.\n// Rebuild every interaction and reveal from the reference's parameters; verify with npx trueclone score ${name}.\n`);
 }
 console.log(`seeded ${path.relative(process.cwd(), clone)} from the mirror (${exact ? 'exact: the site\'s own content' : 'template: placeholder text and media'}): index.html, ${(await fs.readdir(path.join(clone, 'css'))).length} stylesheet(s), ${copied.size} asset(s)${exact ? '' : ' (fonts only)'}`);
-if (recorded.length || classChanges.length) console.log(`replayed by trueclone-reveals.js: ${marked}/${recorded.length} one-shot scroll reveals, ${classMarked}/${classChanges.length} scroll class changes (${Object.keys(recs).join(', ') || 'no'} sizes recorded)${marked < recorded.length || classMarked < classChanges.length ? ' (the rest did not resolve to an element in the mirror)' : ''}`);
+// what was not found (no element at that key) or not the element recorded (its fp or class differs): left unmarked
+const findNote = (f) => (f ? [f.missing ? `${f.missing} element(s) not found in the saved page` : '', f.unmatched ? `${f.unmatched} whose key finds another element` : '', f.ambiguous ? `${f.ambiguous} not the same element at every size` : ''].filter(Boolean).join(', ') || 'none found' : 'not found');
+if (recorded.length || classChanges.length) console.log(`replayed by trueclone-reveals.js: ${marked}/${recorded.length} one-shot scroll reveals, ${classMarked}/${classChanges.length} scroll class changes (${Object.keys(recs).join(', ') || 'no'} sizes recorded)${marked < recorded.length || classMarked < classChanges.length ? ` (the rest not marked: ${findNote(find?.reveals)})` : ''}`);
 if (recordedScrubs.length) console.log(`not replayed: ${recordedScrubs.length} scroll-linked curve(s) (parallax, scrubbed fades): evidence in reference/reveals.<size>.json; script.js reproduces the rule behind them`);
 if (runtime) {
   const pins = runtime.pins.map((p) => `${p.el} pinned for ${p.distance}px${p.axis ? ' (sideways: left to script.js)' : ''}`).join(', ');
   console.log(`runtime artefacts cleaned: ${runtime.pins.length} GSAP pin(s) made sticky${pins ? ` (${pins}; data-tc-pin on each)` : ''}, ${runtime.canvases} canvas(es) marked data-tc-runtime="canvas"${runtime.gsap ? `, ${runtime.gsap} GSAP-written transform(s) marked data-tc-gsap (tcOwn() clears them for script.js${runtime.gsapState ? `, except ${runtime.gsapState} closed state(s) marked data-tc-gsap="state", which stay` : ''})` : ''}`);
   if (runtime.viewport) console.log(`viewport values: ${runtime.viewport.fitted} value(s) a script computes from the screen size carried as functions of it (read at ${runtime.viewport.sizes} sizes, site breakpoints ${runtime.viewport.breakpoints.join('/') || 'none'})${runtime.viewport.dropped ? `; ${runtime.viewport.dropped} fit no such function and are left to script.js (data-tc-script-owned, reference/script-owned.json)` : ''}`);
+  // RC6-15: what was not applied because the element could not be told apart (left as captured, never given another's)
+  const vv = runtime.viewport;
+  if (vv && (vv.ambiguous || vv.unmatched || vv.missing)) console.log(`viewport values left as captured: ${vv.ambiguous} element(s) not the same element at every size, ${vv.unmatched} whose key finds another element in the saved page, ${vv.missing} not found in it (keys by ${vv.keys === 'id-path' ? 'id and path' : 'position: a capture before rc.7; capture again for keys that survive late third-party elements'})`);
   if (runtime.hidden) console.log(`boot contract: ${runtime.hidden} element(s) hidden until the clone's scripts have run (data-tc-boot-hide)`);
 }
 const sameState = (widgetRec?.groups || []).length - widgetGroups.length;
-if (widgetGroups.length || sameState) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.filter(Boolean).length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${sameState ? `; ${sameState} left out (one recorded state: nothing to replay)` : ''}${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}`);
+if (widgetGroups.length || sameState) console.log(`replayed by trueclone-widgets.js: ${widgets?.groups.filter(Boolean).length || 0}/${widgetGroups.length} widgets (${widgets?.states || 0} recorded states)${sameState ? `; ${sameState} left out (one recorded state: nothing to replay)` : ''}${widgetRec?.portals?.length ? `; not replayed (portal popovers): ${widgetRec.portals.join(', ')}` : ''}${find?.widgets && (find.widgets.missing || find.widgets.unmatched) ? `; not wired: ${findNote(find.widgets)}` : ''}`);
 if (patches.length) console.log(`patches applied from clone/patches/: ${patches.join(', ')}`);
 // every separate page of the site, by the same pipeline (one child run each)
 const ownPages = (meta.routes || []).filter((r) => r.slug && !r.sameDocument && fsSync.existsSync(path.join(mirror, 'routes', `${r.slug}.html`)));
@@ -535,9 +556,13 @@ for (const r of ownPages) {
   const ok = (child.stdout || '').split('\n').filter((l) => l.startsWith('seeded ')).join('\n');
   console.log(ok || `WARNING ${r.path} not seeded: ${(child.stderr || '').split('\n')[0]}`);
   if (!ok) { console.error(`seed incomplete: the separate page ${r.path} did not seed; run trueclone seed ${name} again`); process.exit(1); }
+  const frames = (child.stdout || '').split('\n').find((l) => l.startsWith('live frames: '));
+  if (frames) { const f = JSON.parse(frames.slice('live frames: '.length)); console.warn(`WARNING ${r.path}: ${f.length} frame(s) still load the live site (not captured): ${f.join(', ')}`); liveFrames.push(...f); }
 }
-// the completion record: every page of the seed is written (status requires it, so a seed that crashed is redone)
-await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: 1 + ownPages.length }, null, 2));
+// the completion record: every page of the seed is written (status requires it, so a seed that crashed is redone).
+// code: the seed's code (identity.mjs codeHash), so a clone seeded by older seed code is seeded again after an upgrade
+// (status); liveFrames: frames that still load the live site (RC6 elise), for the report
+await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: 1 + ownPages.length, code: codeHash('seed'), tool: toolVersion(), ...(liveFrames.length ? { liveFrames: [...new Set(liveFrames)] } : {}) }, null, 2));
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------
@@ -557,19 +582,53 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
   try {
     // the clone's own files are made here: no evaluation control (seed, clock) may run while they are written
     const { page } = await newPage(browser, VIEWPORTS.find((v) => v.name === 'desktop'), { stabilise: false });
+    // no frame of this pass opens a page off the local server: the saved page still points its frames at the site (the
+    // elise shell's three, allbirds' shop.app one), and the pass would load the live site before they are made local
+    // or blank. Their boxes are the frame elements' own, so nothing measured here changes.
+    await page.route('**/*', (r) => (r.request().resourceType() === 'document' && r.request().frame() !== page.mainFrame() && !r.request().url().startsWith(server.url) && !/^(about|data|blob):/.test(r.request().url()) ? r.abort() : r.continue()));
     await page.goto(`${server.url}clone/${passFile}`, { waitUntil: 'load', timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
+    // inline styles a script set (viewport-fit.mjs): every planned key is found and checked on the mirror exactly as
+    // saved, before this pass changes anything (a pin's tail, a removed <source>, a reveal's class, an excluded widget
+    // all move positions), and marked; the plan is applied to the marked elements at the end. A key that finds no
+    // element, or one that is not the element recorded (RC6-15), is left alone and counted.
+    const inlineStyles = routePage ? null : JSON.parse(await fs.readFile(path.join(ref, 'inline-styles.json'), 'utf8').catch(() => 'null'));
+    const fit = inlineStyles ? planInlineStyles(inlineStyles, VIEWPORTS) : null;
+    const planned = fit ? Object.entries(fit.plan) : [];
+    const found = fit ? await page.evaluate(markInlinePlanInPage, [planned.map(([p, e]) => [p, e.check]), fit.keys]) : null;
     // the site's own links point at the clone's routes: an address on the site's host becomes a path (/about), in
     // both modes, so a visitor of the clone stays in the clone (the local server and the Next app answer every route)
-    const localised = await page.evaluate(localLinksInPage, new URL(meta.finalUrl || meta.url).host);
+    const siteHost = new URL(meta.finalUrl || meta.url).host;
+    const localised = await page.evaluate(localLinksInPage, siteHost);
     if (localised) console.log(`links: ${localised} link(s) to the site's own pages now point at the clone's routes`);
-    const counts = reveals.length || classes.length || scrubs.length ? await page.evaluate(markRevealsInPage, [reveals, classes, scrubs]) : [0, 0, 0];
+    // Frames of the site's own pages (exact mode; template mode blanks every frame): a frame whose route was captured
+    // opens the clone's page of it, query kept (elise's shell framed https://www.elise-ux.com/Landing%20Page.html?shell=1
+    // from every clone page, RC6 A6: the clone showed the live site). One whose route was not captured cannot be made
+    // local: it is left as it is, warned here and recorded in clone/.seed.json (liveFrames).
+    let liveFrames = [];
+    if (!template) {
+      const srcs = await page.evaluate(sameHostFramesInPage, siteHost);
+      const captured = new Map((meta.routes?.length ? meta.routes : [{ path: new URL(meta.finalUrl || meta.url).pathname }]).map((r) => [routeKey(r.path), canonicalPath(r.path)]));
+      const to = [];
+      for (const s of srcs) {
+        const u = new URL(s.abs);
+        const local = captured.get(routeKey(u.pathname));
+        if (local) to.push([s.src, `${local}${u.search}${u.hash}`]); else liveFrames.push(s.abs);
+      }
+      const n = to.length ? await page.evaluate(setFrameSrcInPage, to) : 0;
+      if (n) console.log(`frames: ${n} frame(s) of the site's own pages now open the clone's routes (${to.map((t) => t[1]).join(', ')})`);
+      if (liveFrames.length) console.warn(`WARNING ${liveFrames.length} frame(s) still load the live site: their pages were not captured, so the clone has no page for them (capture --routes with them to localise): ${liveFrames.join(', ')}`);
+    }
+    await page.evaluate(installFindInPage);
+    const counts = reveals.length || classes.length || scrubs.length ? await page.evaluate(markRevealsInPage, [reveals, classes, scrubs]) : [0, 0, 0, { missing: 0, unmatched: 0, ambiguous: 0 }];
+    let widgetFind = null;
     // widgets: mark regions and triggers, then give every recorded state the same placeholders as the page by
     // placing it into its region (so it is laid out and measured for real) and reading it back
     let widgets = null;
     if (groups.length) {
       step(`widgets: ${groups.length} recorded, placing each state`);
-      const ok = await page.evaluate(markWidgetsInPage, groups);
+      const { ok, missing, unmatched } = await page.evaluate(markWidgetsInPage, groups);
+      widgetFind = { missing, unmatched };
       await page.evaluate(`window.__tcPlaceholders = ${placeholdersInPage.toString()}`);
       widgets = { groups: [], states: 0 };
       for (const g of groups) {
@@ -592,10 +651,24 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       widgets.groups = Array.from(widgets.groups, (x) => x || null);
     }
     if (template) {
+      // ALLBIRDS-7 (D5): a lazy image out of view never loads in this pass, so the alpha test below saw no pixels and
+      // made a cut-out product shot an opaque grey box (allbirds' floating_img / floating-img). Every image is loaded and
+      // decoded first (loading="lazy" kept on the element: only this pass loads it early), at most 15 s.
+      const lazy = await page.evaluate(loadImagesInPage, 15000).catch(() => 0);
+      if (lazy) step(`${lazy} lazy image(s) loaded for the placeholder test`);
       step('template placeholders: measuring every text run (the longest part on a big page)');
       await page.evaluate(placeholdersInPage, [LOREM, null, scriptedNames]);
       step('placeholders done');
     }
+    // Excluded third-party widgets (meta.ignore, decision D3: "the clone must not contain them") are removed from the
+    // page, with the capture's own exclusion stylesheet (RC6-05: it was saved into rendered.html and copied into every
+    // clone page, and both it and a marked 0x0 Impact iframe tripped the clone lint on allbirds).
+    // by origin only where nothing of that origin was kept (page content, a widget kept with --include; a kept <script>
+    // does not count: the mirror has no scripts)
+    const keptOrigins = new Set((meta.thirdParty || []).filter((t) => !String(t.decision || '').startsWith('excluded') && t.label !== 'script').map((t) => t.origin));
+    const dropOrigins = [...new Set((meta.ignore || []).map((i) => i.origin).filter((o) => o && !keptOrigins.has(o)))];
+    const dropped = await page.evaluate(dropExcludedInPage, [(meta.ignore || []).map((i) => i.sel), dropOrigins]);
+    if (dropped.elements || dropped.styles) console.log(`excluded widgets: ${dropped.elements} element(s) removed (meta.ignore${dropped.byOrigin ? `; ${dropped.byOrigin} by their excluded origin` : ''})${dropped.styles ? `, and the capture's exclusion stylesheet` : ''}`);
     // last, because the recorded paths above were taken on the live page, pin-spacers included
     const runtime = await page.evaluate(cleanRuntimeInPage);
     // regions the clone's script builds at boot, hidden until it has run (see the boot contract below)
@@ -604,12 +677,12 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       : 0;
     // inline styles that differ between widths (script-computed sizes and offsets) become media-query rules
     // inline styles a script set: functions of the viewport where they are, left to script.js where they aren't
-    const inlineStyles = JSON.parse(await fs.readFile(path.join(ref, 'inline-styles.json'), 'utf8').catch(() => 'null'));
-    if (inlineStyles && !routePage) { // read on the captured page: its paths mean nothing in another document
-      const { plan, owned, fitted, sizes, breakpoints } = planInlineStyles(inlineStyles, VIEWPORTS);
-      const applied = await page.evaluate(applyInlineStylePlanInPage, plan);
-      runtime.viewport = { fitted, sizes, breakpoints, elements: applied.elements, dropped: applied.dropped };
-      await fs.writeFile(path.join(ref, 'script-owned.json'), JSON.stringify({ note: 'inline values a script computes that are not a function of the screen size: script.js must compute them, as the site does', owned: owned.filter((o) => applied.droppedPaths.includes(o.path)) }, null, 2));
+    // (read on the captured page only: its keys mean nothing in another document)
+    if (fit) {
+      const { owned, fitted, sizes, breakpoints, ambiguous } = fit;
+      const applied = await page.evaluate(applyInlineStylePlanInPage, planned.map(([, e]) => e));
+      runtime.viewport = { fitted, sizes, breakpoints, elements: applied.elements, dropped: applied.dropped, keys: fit.keys, ambiguous: ambiguous.length, unmatched: found.unmatched.length, missing: found.missing };
+      await fs.writeFile(path.join(ref, 'script-owned.json'), JSON.stringify({ note: 'inline values a script computes that are not a function of the screen size: script.js must compute them, as the site does', owned: owned.filter((o) => applied.droppedKeys.some((i) => planned[i][0] === o.path)).map(({ pos, ...o }) => (pos ? { ...o, key: o.path, path: pos } : o)) }, null, 2)); // path: the position brief.mjs places by; key: the stable key
     }
     // getHTML keeps the declarative shadow roots the capture serialised (outerHTML would drop them); it is the inner
     // HTML, so the <html> tag and its attributes (font classes, dark mode, lang) are written back around it
@@ -619,7 +692,7 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       const attrs = [...el.attributes].map((a) => ` ${a.name}="${a.value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`).join('');
       return `<html${attrs}>${inner}</html>`;
     });
-    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1], scrubMarked: counts[2], widgets, runtime };
+    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1], scrubMarked: counts[2], widgets, runtime, liveFrames, find: { reveals: counts[3], widgets: widgetFind } };
   } finally {
     if (!flags.cdp) await browser.close();
     server.close();
@@ -631,28 +704,25 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
 // scroll class change gets data-tc-class and its starting classes (the page as it is before any scroll).
 // Widget regions and triggers, resolved by the recorded paths in the mirror (which shows each widget's initial
 // state). A region can serve several widgets (every menu of a nav): data-tc-scope holds a space-separated list.
+// Widget scopes and triggers by their recorded identity (installFindInPage): a stable id checked by its fp (widgets.mjs
+// since rc.7), else the position path, a trigger checked by its recorded label. A group any of whose elements is
+// missing or not the one recorded is not wired (counted), never wired to whatever holds that place.
 function markWidgetsInPage(groups) {
-  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
-  const resolve = (p) => {
-    let el = document.body;
-    for (const part of p.split('>')) {
-      const [tag, n] = part.split(':');
-      el = [...el.children].filter((c) => !SKIP.has(c.tagName))[Number(n) - 1];
-      if (!el || el.tagName.toLowerCase() !== tag) return null;
-    }
-    return el;
-  };
   const ok = {};
+  const tally = { missing: 0, unmatched: 0 };
   for (const g of groups) {
+    const find = (rec, sig) => { const r = window.__tcFindRec(rec, sig); if (!r.el) tally[r.why]++; return r.el; };
+    const label = (t) => (t.label !== undefined && t.label !== '' ? { label: t.label } : {});
+    const triggers = g.triggers.map((t) => find({ id: t.id, fp: t.fp, path: t.path }, label(t)));
     // a dialog or listbox (kind "portal") gets an empty host of its own at the end of <body>: the recorded element is
     // shown there when its trigger is clicked
     let scope;
     if (g.kind === 'portal') {
+      if (triggers.some((t) => !t)) continue;
       scope = document.createElement('div');
       scope.setAttribute('data-tc-portal', String(g.i));
       document.body.appendChild(scope);
-    } else scope = g.scopePath ? resolve(g.scopePath) : null;
-    const triggers = g.triggers.map((t) => resolve(t.path));
+    } else scope = g.scopePath || g.scopeId != null ? find({ id: g.scopeId, fp: g.scopeFp, path: g.scopePath }, {}) : null;
     if (!scope || triggers.some((t) => !t)) continue;
     const ids = (scope.getAttribute('data-tc-scope') || '').split(' ').filter(Boolean);
     ids.push(String(g.i));
@@ -660,7 +730,50 @@ function markWidgetsInPage(groups) {
     triggers.forEach((t, j) => t.setAttribute('data-tc-trigger', `${g.i}:${j}`));
     ok[g.i] = true;
   }
-  return ok;
+  return { ok, ...tally };
+}
+
+// window.__tcFindRec(rec, sig) -> { el } or { el: null, why: "missing" | "unmatched" }: the element a reveal, class change
+// or widget record names in the mirror as saved. rec.id (rc.7 records): #id (unique) then tag[n] steps (n-th child of
+// that tag), checked against rec.fp, the tag.first-class chain of the steps. Else rec.path: tag:n among all children
+// from <body> (script-like tags skipped), the rule before rc.7, checked by what the record has: sig.cls (first class
+// tokens it may have) or sig.label (a trigger's text). RC6 allbirds: a late body child moved every position, so 0 of 8
+// reveals and 0 of 3 widgets were found; a position that finds another element is never used.
+function installFindInPage() {
+  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  const first = (n) => String(n.getAttribute('class') || '').trim().split(/\s+/)[0];
+  const labelOf = (n) => (n.getAttribute('aria-label') || n.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+  window.__tcFindRec = (rec, sig = {}) => {
+    let el = null;
+    if (rec.id != null) {
+      const steps = String(rec.id).split('>').filter(Boolean);
+      el = document.body;
+      let i = 0;
+      const fp = [];
+      if (steps[0]?.startsWith('#')) {
+        const all = document.querySelectorAll(`#${CSS.escape(decodeURIComponent(steps[0].slice(1)))}`);
+        el = all.length === 1 ? all[0] : null;
+        i = 1;
+      }
+      for (; el && i < steps.length; i++) {
+        const m = /^(.+)\[(\d+)\]$/.exec(steps[i]);
+        el = m ? [...el.children].filter((c) => c.tagName.toLowerCase() === m[1])[Number(m[2]) - 1] || null : null;
+        if (el) fp.push(`${m[1]}.${first(el)}`);
+      }
+      if (!el || el === document.body) return { el: null, why: 'missing' };
+      if (rec.fp != null && fp.join('>') !== rec.fp) return { el: null, why: 'unmatched' };
+      return { el };
+    }
+    el = document.body;
+    for (const part of String(rec.path || '').split('>')) {
+      const [tag, n] = part.split(':');
+      el = [...el.children].filter((c) => !SKIP.has(c.tagName))[Number(n) - 1];
+      if (!el || el.tagName.toLowerCase() !== tag) return { el: null, why: 'missing' };
+    }
+    if (sig.cls && !sig.cls.includes(first(el))) return { el: null, why: 'unmatched' };
+    if (sig.label !== undefined && labelOf(el) !== sig.label) return { el: null, why: 'unmatched' };
+    return { el };
+  };
 }
 
 // Widget player shipped with the clone (trueclone's own code, serialised into clone/trueclone-widgets.js): a click on
@@ -726,23 +839,26 @@ function widgetPlayer() {
 }
 
 function markRevealsInPage([reveals, classes, scrubs = []]) {
-  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
-  const resolve = (p) => {
-    let el = document.body;
-    for (const part of p.split('>')) {
-      const [tag, n] = part.split(':');
-      const kids = [...el.children].filter((c) => !SKIP.has(c.tagName));
-      el = kids[Number(n) - 1];
-      if (!el || el.tagName.toLowerCase() !== tag) return null;
-    }
-    return el;
+  // every record found (installFindInPage) before any mark or class is written: a class change's starting class would
+  // otherwise change the first class another record is checked by. An ambiguous record (byPath) is never marked.
+  const tally = { missing: 0, unmatched: 0, ambiguous: 0 };
+  const firstOf = (c) => String(c ?? '').trim().split(/[.s]+/)[0];
+  const find = (rec, cls) => {
+    if (rec.ambiguous) { tally.ambiguous++; return null; }
+    const r = window.__tcFindRec({ id: rec.id, fp: rec.fp, path: rec.path }, { cls });
+    if (!r.el) tally[r.why]++;
+    return r.el;
   };
+  const revealEls = reveals.map((r) => find(r, [firstOf(r.cls)]));
+  // a class change: the element's class now may be any of its recorded states
+  const classEls = classes.map((c) => find(c, [c.from, c.to, c.back].map(firstOf)));
+  const scrubEls = scrubs.map((s) => find(s, [firstOf(s.cls)]));
   // each reveal's starting state is a rule on its mark (no flash before the player runs; the player then applies the
   // visitor's width); script.js hands an element over by removing the mark, which releases the state with it
   const rules = [];
   let count = 0;
   reveals.forEach((r, i) => {
-    const el = resolve(r.path);
+    const el = revealEls[i];
     if (!el) return;
     const rec = r.desktop || r.tablet || r.mobile || r;
     el.setAttribute('data-tc-reveal', String(i));
@@ -758,7 +874,7 @@ function markRevealsInPage([reveals, classes, scrubs = []]) {
   }
   let classCount = 0;
   classes.forEach((c, i) => {
-    const el = resolve(c.path);
+    const el = classEls[i];
     if (!el) return;
     el.setAttribute('data-tc-class', String(i));
     if (c.from !== null && c.from !== undefined) el.setAttribute('class', c.from);
@@ -766,12 +882,12 @@ function markRevealsInPage([reveals, classes, scrubs = []]) {
   });
   let scrubCount = 0;
   scrubs.forEach((s, i) => {
-    const el = resolve(s.path);
+    const el = scrubEls[i];
     if (!el) return;
     el.setAttribute('data-tc-scrub', String(i));
     scrubCount++;
   });
-  return [count, classCount, scrubCount];
+  return [count, classCount, scrubCount, tally];
 }
 
 // The plan from viewport-fit.mjs, applied to the page: fitted values replace the captured constants inline; per-range
@@ -779,18 +895,10 @@ function markRevealsInPage([reveals, classes, scrubs = []]) {
 // (without !important, so a value script.js writes inline later still wins); values no function fits are removed and
 // left to script.js. A pin spacer's distance becomes its --tc-pin. Motion properties of elements the reveal player
 // drives, and the pin geometry the seed removed, are left alone.
+// The plan's entries are in the order markInlinePlanInPage marked them (data-tc-wk); the marks go when it is done.
 function applyInlineStylePlanInPage(plan) {
-  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
-  const resolve = (p) => {
-    let el = document.body;
-    for (const part of p.split('>')) {
-      const [tag, n] = part.split(':');
-      const kids = [...el.children].filter((c) => !SKIP.has(c.tagName));
-      el = kids[Number(n) - 1];
-      if (!el || el.tagName.toLowerCase() !== tag) return null;
-    }
-    return el;
-  };
+  const marked = new Map([...document.querySelectorAll('[data-tc-wk]')].map((e) => [Number(e.getAttribute('data-tc-wk')), e]));
+  for (const e of marked.values()) e.removeAttribute('data-tc-wk');
   const MOTION = new Set(['transform', 'translate', 'rotate', 'scale', 'opacity', 'filter']);
   const PIN = new Set(['translate', 'rotate', 'scale', 'inset', 'top', 'left', 'right', 'bottom', 'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left', 'max-width', 'width', 'max-height', 'height', 'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left', 'box-sizing', 'position', 'transform', 'flex-basis']);
   // the bottom (or right) length of a padding shorthand, calc() kept whole
@@ -799,10 +907,10 @@ function applyInlineStylePlanInPage(plan) {
   const rules = [];
   const sel = (i) => `[data-tc-w="${i}"]`.repeat(8); // (0,8,0): above any ordinary author rule, below inline
   let count = 0, dropped = 0;
-  const droppedPaths = [];
-  for (const [p, entry] of Object.entries(plan)) {
-    const el = resolve(p);
-    if (!el) continue;
+  const droppedKeys = [];
+  for (const [p, entry] of plan.entries()) {
+    const el = marked.get(p);
+    if (!el || !el.isConnected) continue;
     const i = count;
     let used = false;
     if (el.hasAttribute('data-tc-pin-spacer')) {
@@ -822,7 +930,7 @@ function applyInlineStylePlanInPage(plan) {
     const mine = entry.rules.filter((r) => !skip(r.prop));
     for (const r of mine) rules.push(`@media ${r.media} { ${sel(i)} { ${r.prop}: ${r.value} } }`);
     const lost = entry.dropped.filter((k) => !skip(k));
-    if (lost.length) { dropped += lost.length; droppedPaths.push(p); el.setAttribute('data-tc-script-owned', lost.join(' ')); }
+    if (lost.length) { dropped += lost.length; droppedKeys.push(p); el.setAttribute('data-tc-script-owned', lost.join(' ')); }
     if (mine.length) { el.setAttribute('data-tc-w', String(i)); count++; }
     if (!el.getAttribute('style')) el.removeAttribute('style');
     if (used || mine.length || lost.length) { /* counted */ }
@@ -840,7 +948,111 @@ function applyInlineStylePlanInPage(plan) {
     s.textContent = "(()=>{const r=document.documentElement,set=()=>r.style.setProperty('--tc-vw',r.clientWidth/100+'px');set();new ResizeObserver(set).observe(r)})();";
     document.head.appendChild(s);
   }
-  return { elements: Object.keys(plan).length, rules: rules.length, dropped, droppedPaths };
+  return { elements: marked.size, rules: rules.length, dropped, droppedKeys };
+}
+
+// Finds each planned key's element on the mirror as saved, checks it is the element the capture recorded (check from
+// viewport-fit.mjs) and marks it data-tc-wk="<index>" for applyInlineStylePlanInPage. keys "id-path": #id, then tag[n]
+// (n-th child of that tag); "position" (captures before rc.7): tag:n among all children, script-like tags skipped.
+// RC6-15: a positional key that found another element (the allbirds pixel container's styles on the geofencing
+// section) is never applied: unmatched. Returns { marked, missing, unmatched: [keys] }.
+function markInlinePlanInPage([items, keys]) {
+  const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  const first = (n) => String(n.getAttribute('class') || '').trim().split(/\s+/)[0];
+  const resolve = (p) => {
+    const steps = p.split('>');
+    if (keys !== 'id-path') {
+      let el = document.body;
+      for (const part of steps) {
+        const [tag, n] = part.split(':');
+        el = [...el.children].filter((c) => !SKIP.has(c.tagName))[Number(n) - 1];
+        if (!el || el.tagName.toLowerCase() !== tag) return null;
+      }
+      return { el, fp: null };
+    }
+    let el = document.body, i = 0;
+    const fp = [];
+    if (steps[0].startsWith('#')) {
+      const id = decodeURIComponent(steps[0].slice(1));
+      const all = document.querySelectorAll(`[id="${CSS.escape(id)}"]`);
+      if (all.length !== 1) return null; // no element, or two: not the one recorded
+      el = all[0];
+      i = 1;
+    }
+    for (; i < steps.length; i++) {
+      const m = /^(.+)\[(\d+)\]$/.exec(steps[i]);
+      if (!m) return null;
+      el = [...el.children].filter((c) => c.tagName.toLowerCase() === m[1])[Number(m[2]) - 1];
+      if (!el) return null;
+      fp.push(`${m[1]}.${first(el)}`);
+    }
+    return { el, fp: fp.join('>') };
+  };
+  let marked = 0, missing = 0;
+  const unmatched = [];
+  items.forEach(([p, check], i) => {
+    const r = resolve(p);
+    if (!r) { missing++; return; }
+    const ok = !check ? true
+      : keys === 'id-path' ? r.fp === check.fp
+        : check.styled ? r.el.hasAttribute('style') && first(r.el) === check.cls : !r.el.hasAttribute('style');
+    if (!ok) { unmatched.push(p); return; }
+    r.el.setAttribute('data-tc-wk', String(i));
+    marked++;
+  });
+  return { marked, missing, unmatched };
+}
+
+// Elements of excluded third-party widgets (meta.ignore) and the capture's own exclusion stylesheet, removed from the
+// page, open shadow roots included. Elements: those its selectors match, and those capture marked as inserted by an
+// excluded origin's script (data-tc-origin; allbirds' Impact iframe had no src, so its selector matched nothing).
+// The stylesheet: marked data-tc-ignore since rc.7; before, recognised by its exact shape (one "<sel>{display:none!
+// important}" line per excluded selector, nothing else). Nothing else is touched.
+function dropExcludedInPage([sels, origins]) {
+  const out = { elements: 0, byOrigin: 0, styles: 0 };
+  const lines = new Set(sels.map((s) => `${s}{display:none!important}`));
+  const roots = [document];
+  for (let k = 0; k < roots.length; k++) for (const el of roots[k].querySelectorAll('*')) if (el.shadowRoot) roots.push(el.shadowRoot);
+  for (const r of roots) {
+    for (const st of r.querySelectorAll('style')) {
+      const rows = st.textContent.split('\n').map((l) => l.trim()).filter(Boolean);
+      const own = st.hasAttribute('data-tc-ignore') || (rows.length > 0 && rows.every((l) => lines.has(l)));
+      if (own) { st.remove(); out.styles++; }
+    }
+    for (const s of sels) { let found = []; try { found = [...r.querySelectorAll(s)]; } catch { /* not a selector here */ } for (const el of found) if (el.isConnected) { el.remove(); out.elements++; } }
+    for (const el of [...r.querySelectorAll('[data-tc-origin]')]) if (el.isConnected && origins.includes(el.getAttribute('data-tc-origin'))) { el.remove(); out.elements++; out.byOrigin++; }
+  }
+  return out;
+}
+
+// Same-host frames (exact mode): their src as written and as an absolute address, once each
+function sameHostFramesInPage(siteHost) {
+  const host = String(siteHost).replace(/^www\./, '');
+  const out = new Map();
+  for (const f of document.querySelectorAll('iframe[src]')) {
+    const src = f.getAttribute('src');
+    let u;
+    try { u = new URL(src, location.href); } catch { continue; }
+    if (!/^https?:$/.test(u.protocol) || u.host.replace(/^www\./, '') !== host || !/^https?:\/\//i.test(src.trim()) && !src.trim().startsWith('//')) continue;
+    out.set(src, { src, abs: u.href });
+  }
+  return [...out.values()];
+}
+function setFrameSrcInPage(pairs) {
+  const to = new Map(pairs);
+  let n = 0;
+  for (const f of document.querySelectorAll('iframe[src]')) if (to.has(f.getAttribute('src'))) { f.setAttribute('src', to.get(f.getAttribute('src'))); n++; }
+  return n;
+}
+
+// Every image loaded and decoded (lazy ones too, the attribute put back), at most `max` ms; the count of lazy ones
+async function loadImagesInPage(max) {
+  const imgs = [...document.images];
+  const lazy = imgs.filter((i) => i.loading === 'lazy');
+  for (const i of lazy) i.loading = 'eager';
+  await Promise.race([Promise.all(imgs.map((i) => (i.complete && i.naturalWidth ? i.decode().catch(() => {}) : new Promise((r) => { i.addEventListener('load', () => i.decode().then(r, r), { once: true }); i.addEventListener('error', r, { once: true }); if (i.complete) r(); })))), new Promise((r) => setTimeout(r, max))]);
+  for (const i of lazy) i.setAttribute('loading', 'lazy');
+  return lazy.length;
 }
 
 
@@ -1142,6 +1354,25 @@ function placeholdersInPage([lorem, rootSel, scripted = []]) {
   // the site's own routes stay links (made local by localLinksInPage); links elsewhere go nowhere
   root.querySelectorAll('a[href]').forEach((a) => { const h = a.getAttribute('href'); if (!h.startsWith('#') && !(h.startsWith('/') && !h.startsWith('//'))) a.setAttribute('href', '#'); });
   root.querySelectorAll('form').forEach((f) => f.setAttribute('action', '#'));
+  // Open shadow roots (the capture's declarative <template shadowrootmode>, parsed into real ones here): the same
+  // rules for frames, media and links, which querySelectorAll above does not reach. RC6-22: allbirds' shop-cart-sync
+  // root kept a live <iframe src="https://shop.app/pay/hop?..."> in a template-mode clone.
+  const shadows = [];
+  for (const el of root.querySelectorAll('*')) if (el.shadowRoot) shadows.push(el.shadowRoot);
+  for (let k = 0; k < shadows.length; k++) {
+    const sr = shadows[k];
+    for (const el of sr.querySelectorAll('*')) if (el.shadowRoot) shadows.push(el.shadowRoot);
+    for (const f of sr.querySelectorAll('iframe, embed, object')) f.setAttribute(f.tagName === 'OBJECT' ? 'data' : 'src', 'about:blank');
+    for (const img of sr.querySelectorAll('img')) {
+      const r = img.getBoundingClientRect();
+      img.setAttribute('src', silhouette(img) || box(img.naturalWidth || r.width, img.naturalHeight || r.height));
+      for (const a of ['srcset', 'sizes', 'data-src', 'data-srcset']) img.removeAttribute(a);
+    }
+    sr.querySelectorAll('picture source, video source, audio source, track').forEach((s) => s.remove());
+    for (const v of sr.querySelectorAll('video')) { v.removeAttribute('src'); v.setAttribute('poster', box(v.videoWidth || 16, v.videoHeight || 16)); v.setAttribute('preload', 'none'); }
+    sr.querySelectorAll('a[href]').forEach((a) => { const h = a.getAttribute('href'); if (!h.startsWith('#') && !(h.startsWith('/') && !h.startsWith('//'))) a.setAttribute('href', '#'); });
+    sr.querySelectorAll('form').forEach((f) => f.setAttribute('action', '#'));
+  }
   if (root !== document.body) return root.innerHTML;
   document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"], meta[name="description"], meta[name="keywords"], meta[name="author"], meta[name="application-name"], meta[name="generator"], meta[name="apple-mobile-web-app-title"], link[rel="author"], link[rel="preconnect"], link[rel="dns-prefetch"], link[rel="preload"][as="image"], link[rel="prefetch"], link[rel~="icon"], link[rel="apple-touch-icon"], link[rel="manifest"], link[rel="canonical"], link[rel="alternate"], script[type="application/ld+json"]').forEach((m) => m.remove());
   document.title = shaper(null)(document.title);

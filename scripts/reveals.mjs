@@ -11,8 +11,12 @@
 // - class changes caused by scrolling (a header that gets its backdrop past 12px, an "is-visible" toggle).
 // `trueclone seed` marks these elements in the clone and adds a small player that replays them.
 //
-// Elements are identified by their path of element children, skipping script/style/meta-like tags, which is
-// the same in the live page and in the script-free mirror the clone is seeded from.
+// Elements are identified twice. path: their position among element children from <body> (script/style/meta-like
+// tags skipped), read by curves, brief and seeds before rc.7. id (keys "id-path", rc.7): the element's id when it is
+// unique on the page, else tag[n] steps (n-th child of that tag) from the nearest ancestor with a unique id, with fp,
+// the tag.first-class chain of those steps, which the seed checks on the element it finds in the mirror. A late
+// third-party child of <body> shifts positions between the live page and the mirror (RC6 allbirds: 0 of 8 reveals
+// resolved); the seed resolves id first, and an old record's path checked by its class.
 //
 // Runs at every width by default (offsets differ per width): one file each, recorded in parallel.
 // usage: node scripts/reveals.mjs <name> [--viewport desktop]   -> sites/<name>/reference/reveals.<vp>.json
@@ -34,10 +38,30 @@ if (vps.some((v) => !v)) {
   process.exit(1);
 }
 
+// The element key (see the top): window.__tcKey(el) -> [key, fp]. The same rule as capture.mjs readInlineStyles and
+// widgets.mjs; seed.mjs resolves it.
+function installKeysInPage() {
+  const unique = new Map();
+  const isAnchor = (n) => { if (!n.id) return false; if (!unique.has(n.id)) unique.set(n.id, document.querySelectorAll(`#${CSS.escape(n.id)}`).length === 1); return unique.get(n.id); };
+  window.__tcKey = (el) => {
+    const steps = [], fp = [];
+    let n = el;
+    for (; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+      if (isAnchor(n)) break;
+      let k = 1;
+      for (let s = n.previousElementSibling; s; s = s.previousElementSibling) if (s.tagName === n.tagName) k++;
+      steps.unshift(`${n.tagName.toLowerCase()}[${k}]`);
+      fp.unshift(`${n.tagName.toLowerCase()}.${String(n.getAttribute('class') || '').trim().split(/\s+/)[0]}`);
+    }
+    return [[...(n && n !== document.body && n !== document.documentElement && isAnchor(n) ? [`#${encodeURIComponent(n.id)}`] : []), ...steps].join('>'), fp.join('>')];
+  };
+}
+
 // Runs in the page before any scroll: picks the reveal candidates, starts the frame sampler, and prepares the
 // per-position sampler for every element.
 function watchInPage() {
   const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
+  // path: the position (read by curves, brief and older seeds); id and fp: the stable identity the seed resolves
   const pathOf = (el) => {
     const parts = [];
     for (let n = el; n && n !== document.body; n = n.parentElement) {
@@ -46,6 +70,7 @@ function watchInPage() {
     }
     return parts.join('>');
   };
+  const idOf = (el) => { const [id, fp] = window.__tcKey(el); return { id, fp }; };
   const clsOf = (el) => String(el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.');
   const read = (el) => {
     const s = getComputedStyle(el);
@@ -69,7 +94,7 @@ function watchInPage() {
     if (endless(el) || (el.parentElement && endless(el.parentElement))) continue;
     // keep the outermost element of a revealing group (a hidden card hides its children too)
     if (candidates.some((c) => c.el.contains(el))) continue;
-    candidates.push({ el, path: pathOf(el), from: st, frames: null, start: null, topAtStart: null, last: JSON.stringify(st), still: 0, done: false, doneAtY: null, movedStill: 0, lastY: Math.round(scrollY) });
+    candidates.push({ el, path: pathOf(el), ...idOf(el), from: st, frames: null, start: null, topAtStart: null, last: JSON.stringify(st), still: 0, done: false, doneAtY: null, movedStill: 0, lastY: Math.round(scrollY) });
   }
   window.__tcReveals = candidates;
   // one sample per element per settled scroll position, kept only when the state changed
@@ -117,7 +142,7 @@ function watchInPage() {
         const first = slopes.findIndex(isPin);
         let lastI = slopes.length - 1;
         while (lastI > first && !isPin(slopes[lastI])) lastI--;
-        pins.push({ path: p, cls: clsOf(t.el), start: samples[first].y, end: samples[lastI + 1].y });
+        pins.push({ path: p, ...idOf(t.el), cls: clsOf(t.el), start: samples[first].y, end: samples[lastI + 1].y });
         continue;
       }
       const step = Math.max(1, Math.ceil(samples.length / 40));
@@ -126,7 +151,7 @@ function watchInPage() {
       // line inside a pinned stage: its box stays put while the page scrolls)
       const a = samples[0], b = samples[samples.length - 1];
       const key = b.y !== a.y && a.v !== undefined && Math.abs((b.v - a.v) / (b.y - a.y) + 1) < 0.15 ? 'v' : 'y';
-      scrubs.push({ path: p, cls: clsOf(t.el), key, samples: samples.filter((s, i) => i % step === 0 || i === samples.length - 1) });
+      scrubs.push({ path: p, ...idOf(t.el), cls: clsOf(t.el), key, samples: samples.filter((s, i) => i % step === 0 || i === samples.length - 1) });
     }
     return { scrubs, pins };
   };
@@ -175,6 +200,7 @@ function watchClassesInPage() {
     }
     return parts.join('>');
   };
+  const idOf = (el) => { const [id, fp] = window.__tcKey(el); return { id, fp }; };
   const pinned = (el) => { for (let n = el; n && n !== document.body; n = n.parentElement) { const p = getComputedStyle(n).position; if (p === 'fixed' || p === 'sticky') return true; } return false; };
   window.__tcClasses = [];
   window.__tcClassIdle = true;
@@ -193,7 +219,7 @@ function watchClassesInPage() {
       let boxEl = el;
       if (!boxEl.getBoundingClientRect().height) boxEl = [...el.querySelectorAll('*')].find((d) => d.getBoundingClientRect().height) || el;
       const rect = boxEl.getBoundingClientRect();
-      window.__tcClasses.push({ el, path: pathOf(el), from: r.oldValue, to: now, scrollY: Math.round(scrollY), ratio: +(rect.top / innerHeight).toFixed(3), sticky: pinned(el) });
+      window.__tcClasses.push({ el, path: pathOf(el), ...idOf(el), from: r.oldValue, to: now, scrollY: Math.round(scrollY), ratio: +(rect.top / innerHeight).toFixed(3), sticky: pinned(el) });
     }
   }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
 }
@@ -211,6 +237,7 @@ async function record(vp) {
     // so a card that opens on hover is not recorded as opened by the scroll. (Wheel input still reaches the page.)
     await page.addStyleTag({ content: '*, *::before, *::after { pointer-events: none !important; }' });
     await page.mouse.move(vp.width - 2, Math.round(vp.height / 2));
+    await page.evaluate(installKeysInPage);
     const count = await page.evaluate(watchInPage);
     // Class changes caused by scrolling (a header that gets its backdrop, an "is-visible" toggle): watched with a
     // MutationObserver. Anything that changes while the page sits idle (timers, carousels) is ignored.
@@ -259,7 +286,7 @@ async function record(vp) {
       }
       await page.evaluate(([k, y]) => { window.__tcClasses.filter((c) => c.sticky && c.reverts)[k].threshold = y; }, [i, hi]);
     }
-    const classes = await page.evaluate(() => window.__tcClasses.map((c) => ({ path: c.path, from: c.from, to: c.to, back: c.back, sticky: c.sticky, reverts: c.reverts, ...(c.sticky ? { threshold: c.threshold ?? c.scrollY } : { trigger: c.ratio }) })));
+    const classes = await page.evaluate(() => window.__tcClasses.map((c) => ({ path: c.path, id: c.id, fp: c.fp, from: c.from, to: c.to, back: c.back, sticky: c.sticky, reverts: c.reverts, ...(c.sticky ? { threshold: c.threshold ?? c.scrollY } : { trigger: c.ratio }) })));
     // a reveal settles; anything still moving at the 6s cap is continuous motion driven some other way
     // a reveal settles, and moves while the page stands still; anything still moving at the 6s cap is continuous
     // motion driven some other way, and a change seen only during scroll steps is scroll-linked (a curve, below)
@@ -268,7 +295,7 @@ async function record(vp) {
       // keep at most ~60 keyframes: enough for any easing, small enough for the clone
       const step = Math.max(1, Math.ceil(c.frames.length / 60));
       const frames = c.frames.filter((f, i) => i % step === 0 || i === c.frames.length - 1);
-      return { path: c.path, cls: String(c.el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.'), from: c.from, to: { o: last.o, tx: last.tx, ty: last.ty, s: last.s, blur: last.blur, clip: last.clip }, trigger: c.topAtStart, duration: last.t, frames };
+      return { path: c.path, id: c.id, fp: c.fp, cls: String(c.el.getAttribute('class') || '').split(/\s+/).slice(0, 2).join('.'), from: c.from, to: { o: last.o, tx: last.tx, ty: last.ty, s: last.s, blur: last.blur, clip: last.clip }, trigger: c.topAtStart, duration: last.t, frames };
     }));
     ({ scrubs, pins } = await page.evaluate((cp) => window.__tcClassify(cp), classes.map((c) => c.path)));
     console.log(`${vp.name}: ${count} candidates below the fold, ${result.length} revealed while scrolling; ${scrubs.length} scroll-linked curve(s), ${pins.length} pin(s)${pins.length ? ` (${pins.map((p) => `${p.cls || p.path.split('>').pop()} ${p.start}-${p.end}px`).join(', ')})` : ''}`);
@@ -278,7 +305,7 @@ async function record(vp) {
     if (!flags.cdp) await browser.close();
   }
   const out = path.join(root, 'reference', `reveals.${vp.name}.json`);
-  await fs.writeFile(out, JSON.stringify({ url: meta.url, viewport: vp, at: new Date().toISOString(), reveals: result, scrubs, pins, classes: result.classes }, null, 2));
+  await fs.writeFile(out, JSON.stringify({ url: meta.url, viewport: vp, at: new Date().toISOString(), keys: 'id-path', reveals: result, scrubs, pins, classes: result.classes }, null, 2));
   const groups = new Map();
   for (const r of result) {
     const k = `${JSON.stringify(r.from)} -> ${Math.round(r.duration / 50) * 50}ms`;

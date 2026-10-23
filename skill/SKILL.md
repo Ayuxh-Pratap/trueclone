@@ -35,9 +35,9 @@ objective at a time (each with the command to look closer), the review at every 
 | Exit | Outcome | What you do |
 |---|---|---|
 | 0 | **Verified**: every required result passes on the clone and the app as they are now | hand over REPORT.md |
-| 1 | **Work left**: it named the next step | do it, run `status` again |
-| 2 | **Blocked**: something outside the clone stops it (the live site does not load, the instrument is modified) | report what it says; resume with `status` after the cause is fixed |
-| 3 | **Incomplete**: the loop concluded with differences left (no progress after its attempts and a change of strategy) | hand over REPORT.md and say it is incomplete, naming what is unresolved |
+| 1 | **Work left**: it named the next step (or "waiting": a trueclone step is still running) | do it, run `status` again |
+| 2 | **Blocked**: something the clone cannot change stops it (the environment, trueclone, or a step that cannot be done); it names the owner, the cause, the affected results and the log | report what it says, with the log; resume with `status` after the cause is fixed |
+| 3 | **Incomplete**: every required result is accounted for; differences the loop concluded, or results the tool cannot verify here, remain, each listed | hand over REPORT.md and say it is incomplete, naming each item listed |
 
 **Never end your turn, ask "should I continue?", or hand over a progress summary while `status` exits 1.** The user
 asked for the finished clone. A long loop is not a reason to stop; a hard check is not either. "Large work" (a
@@ -46,6 +46,22 @@ declare a blocker or conclude an objective. When an objective makes no progress,
 line under `## Attempts` in notes.md: what the evidence shows, what the next attempt does differently, `evidence:
 <file>` you made now); only after that does it conclude. Re-scoring an unchanged clone is not an attempt, and scripting
 re-scores to reach a conclusion is gaming the loop: never.
+
+**When a step cannot be done within your edits.** You change only `clone/script.js`, `clone/patches/` and `notes.md`
+(and run trueclone commands). Status never names anything else as clone work; what trueclone generated wrongly, or
+what the environment prevents, it ends Blocked by itself. If a step it names still cannot be done within those, never
+work around it (no edits to generated pages, no forced states): when status says it has named the step several times
+with nothing changing, write one line under `## Findings`: `- cannot: <the step or objective, as status names it>:
+<why>` (say "tool" when trueclone's own output is at fault, with evidence), and run `status`. It concludes that
+objective (listed in REPORT) or ends the run Blocked, named. A trueclone command it names is never declared: run it.
+
+**Running steps.** Capture, reads, calibrate, scores and `next --verify` take minutes; calibrate on a large exact-mode
+site can take two hours or more (status says how long to expect). Never give a trueclone command a time limit shorter
+than that, and never stop one because it is quiet: if your tool cannot wait, run the step in the background and run
+`status`, which says "waiting" while a step is still running (that is never counted against you). Every step's whole
+output is kept in `sites/<name>/logs/` (and `logs/commands.jsonl` says which ran and how they ended): quote the log when
+you report a failure. A step needs network access and a browser: run trueclone commands with network (Codex: Full
+access, or approve them to run outside the sandbox), and `npx trueclone doctor` the same way.
 
 A canvas app (one full-window canvas, a page that never scrolls) takes the app path: see Apps below; `status` switches
 by itself.
@@ -86,7 +102,9 @@ result.
    `node_modules`, no hand edits to `motion-map.json`, `journey.json` or `interactions.json` unless `status` asks for
    them. Status detects a modified instrument and stops (exit 2); results measured that way never count. A suspected
    tool defect goes under `## Findings` with evidence, and the work goes on: status routes what the tool cannot measure
-   itself (it lists it in REPORT as "not verifiable by the tool"), never to you.
+   itself (it lists it in REPORT as "not verifiable by the tool") or what it cannot fix (Blocked, owner tool), never to
+   you as clone work. A step that fails is measured once more by status; the same failure again ends Blocked with its
+   log, never a loop.
 9. **Change follows the site's rules.** Every check opens both sides with the same seeded `Math.random`, the same
    clock start and the same motion setting, and takes stills at the same page age: so a shuffled gallery, a carousel
    and a marquee are compared at equal states. The behaviour check then watches the live pages: the same loop speed
@@ -114,13 +132,18 @@ result.
   (`same: the reference's photo arrives later`). "tool" closes a frame only where the table shows the reference
   differing from itself there, or with `evidence: <file>` named after that frame; a frame marked "clone only" is a
   difference whatever you write. Never write verdicts from pixel match or with a script: look at every sheet.
+- **Review: app**: the Next.js app's frames (`compare-next/review/<size>/index.md`) get their own verdicts, under their
+  own heading `## Review: app`, in the same line format with the app frame's own token. The two reviews share frame
+  names and sizes but not pictures: a line under `## Review` never answers for the app, and one under `## Review: app`
+  never for the clone.
 - **Attempts**: when `status` asks for a change of strategy, one line naming the objective (its label or key), what
   the evidence shows, what the next attempt does differently, and `evidence: <file>` made for it.
 - **Accepted differences**: `- <check> <size> <where>: <why>; evidence: compare/explain/wide-5200.png`, only for the
   last points of a check already ≥ 95.
 - **Findings**: tool defects, with evidence; what you learned about an objective `status` concluded; and each of the site's
   scripts or scroll curves you do not port, by name, with why (an app, a polyfill, analytics). The report's Coverage
-  check fails while one of the site's busiest scripts, or a recorded curve, is in neither Behaviours nor Findings.
+  check fails while one of the site's busiest scripts, or a recorded curve, is in neither Behaviours nor Findings. A
+  step that cannot be done within your edits, when status asks: `- cannot: <step or objective>: <why>` (above).
 
 ## Reference
 
@@ -138,9 +161,11 @@ too (`clone/<path>/index.html`, so links, Back and a reload there find it).
 `</head>`, `*.css` after the site's stylesheets, `body-*.html` and `*.js` (deferred) before `script.js`, in name order.
 `npx trueclone vendor <name>` puts the site's libraries there at the site's versions.
 
-**Routes**: a site is all its pages. Capture follows the page's links and sitemap.xml (`--routes N`, or
-`--routes "/,/about"`), captures every route at every size, and tells a single-page app (one document, a script shows
-the view for the address: your `script.js` routes like the site's, `pushState`/`popstate`) from separate pages. Layout
+**Routes**: a site is all its pages. Capture follows the links of every page it captures and sitemap.xml (`--routes N`,
+or `--routes "/,/about"`), captures every route at every size, and tells a single-page app (one document, a script shows
+the view for the address: your `script.js` routes like the site's, `pushState`/`popstate`) from separate pages. Pages
+it left out at the cap are listed (REPORT, `meta.routesNotCaptured`); status asks once whether to capture them. A route
+is named by its encoded address (`/Landing%20Page.html`); in `script.js`, build local addresses the same way. Layout
 and scroll states are scored per route; navigation is scored (each link: the right view at the right address, then
 Back); `brief --route /about` and `review --route /about` work on one route. An app shell (a fixed sidebar and a pane
 that scrolls on its own) is measured with the pane unrolled, the same way on both sides.
@@ -187,7 +212,9 @@ delivered, with every check and its own review frames.
 **Next.js**: generated from the HTML clone (one component per section, the clone's scripts run at hydration, the
 site's stylesheets loaded as the browser loads them, `<template>`s and every file of the clone carried; a single-page
 app is served at every address, a site of separate pages gets one route per page); done when `REPORT.next.md` matches
-`REPORT.md` within a point. A difference only the app has is a tool defect: write it in Findings.
+`REPORT.md` within a point. A difference only the app has is a tool defect: write it in Findings. A known limit, not a
+defect: the clone's scripts start after React hydration in the app, so a pointer move made before hydration ends is not
+seen until the next move (the checks move the pointer only after the page settles; nothing to record).
 
 ## Apps (canvas experiences)
 
@@ -231,7 +258,8 @@ passed; one that does not pass is a journey error in REPORT (the page's words qu
   checkpoints, then the next; `status` concludes an objective that stops progressing.
 
 **Review**: `compare/review/journey-desktop/` and `journey-mobile/`, one frame per checkpoint; verdict lines as for any
-frame: `- journey/02-step-1 desktop [0608cbcb01110180]: same`.
+frame, with the frame's 5-character token (it must match exactly): `- journey/02-step-1 desktop [7djqh]: same` under
+`## Review`, and the app's (`compare-next/review/journey-<size>/`) with its own tokens under `## Review: app`.
 
 ## Honest limits
 

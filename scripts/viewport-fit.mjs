@@ -130,17 +130,54 @@ function fitValue(values) {
   return tmpl.replace(/§/g, () => out[k++]);
 }
 
-// data: inline-styles.json ({ breakpoints, sizes, styles: { "WxH": { w, h, styles: { path: [style, class] } } } }), or
-// the 0.3 shape ({ desktop: { path: style }, ... }). Returns, per element path: the declarations to set inline, the
-// per-range rules, and the properties left to the clone's script.
+// data: inline-styles.json ({ breakpoints, keys, sizes, styles: { "WxH": { w, h, styles: { key: [style, class, fp] } } } }),
+// or the 0.3 shape ({ desktop: { path: style }, ... }). Returns, per element key: the declarations to set inline, the
+// per-range rules, the properties left to the clone's script, and what the seed checks before it touches the element.
+//
+// Which element a key names (RC6-15). Since rc.7 a key is the element's id, else a path of tag[n-of-type] steps from
+// its nearest ancestor with a unique id (data.keys "id-path"), and fp is the tag.first-class chain of those steps. Before,
+// a key was a position among all element children from <body> ("div:10>a:2"): a late third-party child moved every
+// position after it between sizes (allbirds: Shopify's pixel container was div:10 at most sizes, div:11 or div:9 at four),
+// so a constant style looked width-dependent and was stripped, and the rules landed on another section (+750 px).
+// A key whose element is not the same one at every size (fp, or for old captures the first class, differs) is
+// ambiguous: it is left out of the plan entirely (the page keeps what was captured) and listed, never applied to
+// whichever element holds that place. The seed then checks each planned key against the element it finds (checkOf).
 export function planInlineStyles(data, viewports) {
   let breakpoints = [], sizes = [];
+  const stable = data?.keys === 'id-path';
+  const ident = new Map(); // key -> Set of identities seen at the sizes it is recorded at
+  const posAt = new Map(); // key -> its position path (tag:n from <body>) at the first size recorded, for brief.mjs
+  let mirrorSize = null; // the size the mirror (rendered.html) was saved at: the desktop shot
   if (data?.styles) {
     breakpoints = data.breakpoints || [];
-    sizes = Object.values(data.styles).map((s) => ({ w: s.w, h: s.h, styles: Object.fromEntries(Object.entries(s.styles).map(([p, v]) => [p, Array.isArray(v) ? v[0] : v])) }));
+    const desk = (viewports || []).find((v) => v.name === 'desktop');
+    for (const [name, s] of Object.entries(data.styles)) {
+      const styles = {};
+      for (const [p, v] of Object.entries(s.styles)) {
+        styles[p] = Array.isArray(v) ? v[0] : v;
+        if (!Array.isArray(v)) continue;
+        if (stable && v[3] && !posAt.has(p)) posAt.set(p, v[3]);
+        if (!ident.has(p)) ident.set(p, new Set());
+        ident.get(p).add(stable ? String(v[2] ?? '') : String(v[1] || '').trim().split(/\s+/)[0]);
+      }
+      const size = { w: s.w, h: s.h, styles, raw: s.styles };
+      if (desk && name === `${desk.width}x${desk.height}`) mirrorSize = size;
+      sizes.push(size);
+    }
   } else if (data) {
     sizes = Object.entries(data).map(([name, styles]) => { const vp = viewports.find((v) => v.name === name); return vp ? { w: vp.width, h: vp.height, styles } : null; }).filter(Boolean);
   }
+  const ambiguous = [...ident].filter(([, s]) => s.size > 1).map(([p, s]) => ({ path: p, seen: [...s].slice(0, 4) }));
+  const skip = new Set(ambiguous.map((a) => a.path));
+  // what the seed verifies on the element a key finds in the mirror: the same fp (rc.7 keys); for a positional key, the
+  // record at the mirror's own size: a style there or not, and the same first class (a positional key that found
+  // another element, the allbirds geofencing section for the pixel container, fails this)
+  const checkOf = (p) => {
+    if (stable) return { fp: [...(ident.get(p) || [''])][0] };
+    if (!mirrorSize) return null;
+    const v = mirrorSize.raw[p];
+    return { styled: v !== undefined, cls: v === undefined ? null : String((Array.isArray(v) ? v[1] : '') || '').trim().split(/\s+/)[0] };
+  };
   const edges = [0, ...breakpoints, 100000];
   const ranges = edges.slice(0, -1).map((lo, i) => ({ lo: i === 0 ? 0 : lo + 1, hi: edges[i + 1] }));
   const mediaOf = (r) => (r.lo === 0 ? `(max-width: ${r.hi}px)` : r.hi >= 100000 ? `(min-width: ${r.lo}px)` : `(min-width: ${r.lo}px) and (max-width: ${r.hi}px)`);
@@ -149,6 +186,7 @@ export function planInlineStyles(data, viewports) {
   let fitted = 0, constant = 0;
   const paths = new Set(sizes.flatMap((s) => Object.keys(s.styles)));
   for (const p of paths) {
+    if (skip.has(p)) continue;
     const per = sizes.map((s) => ({ w: s.w, h: s.h, d: parseDecls(s.styles[p]) }));
     const props = new Set(per.flatMap((x) => [...x.d.keys()]));
     const entry = { inline: {}, rules: [], dropped: [] };
@@ -207,9 +245,9 @@ export function planInlineStyles(data, viewports) {
       if (anyRule) entry.rules.push(...rules);
       entry.inline[k] = null; // the captured constant no longer applies
       if (anyRule) fitted++;
-      if (anyDrop || !anyRule) { entry.dropped.push(k); owned.push({ path: p, prop: k, samples: [...vals.filter((x) => x.v !== undefined).slice(0, 4), ...vals.filter((x) => x.v === undefined).slice(0, 2)].map((x) => `${x.w}x${x.h}: ${x.v ?? '(unset)'}`) }); }
+      if (anyDrop || !anyRule) { entry.dropped.push(k); owned.push({ path: p, ...(posAt.has(p) ? { pos: posAt.get(p) } : {}), prop: k, samples: [...vals.filter((x) => x.v !== undefined).slice(0, 4), ...vals.filter((x) => x.v === undefined).slice(0, 2)].map((x) => `${x.w}x${x.h}: ${x.v ?? '(unset)'}`) }); }
     }
-    if (Object.keys(entry.inline).length || entry.rules.length || entry.dropped.length) plan[p] = entry;
+    if (Object.keys(entry.inline).length || entry.rules.length || entry.dropped.length) plan[p] = { ...entry, check: checkOf(p) };
   }
-  return { plan, owned, fitted, constant, breakpoints, sizes: sizes.length };
+  return { plan, owned, fitted, constant, breakpoints, sizes: sizes.length, keys: stable ? 'id-path' : 'position', ambiguous };
 }

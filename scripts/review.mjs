@@ -15,6 +15,9 @@ import path from 'node:path';
 import { SCORED, parseArgs, openBrowser, newPage, serve, matchPct, PNG, COMPARE, siteDir, unroll } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { dHash, hamming } from './measure.mjs';
+import { routeUrl, samePath } from './routes.mjs';
+import { inViewInPage, seedTextOf, cloneOnlyText } from './inview.mjs';
+import { REVIEW_HEADING } from './verdict.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -29,13 +32,16 @@ const vp = SCORED.find((v) => v.name === (flags.size || 'wide'));
 if (!vp) { console.error(`unknown size ${flags.size}: ${SCORED.map((v) => v.name).join(', ')}`); process.exit(1); }
 // --route "/about": another route of the site (meta.routes), opened at its own address on both sides; its frames go to
 // compare/review/routes/<slug>/<size>/ and their ids carry the route ("about/03-section-2"), so verdicts never collide
-const route = typeof flags.route === 'string' ? (meta.routes || []).find((r) => r.path === flags.route.replace(/\/+$/, '') || (flags.route === '/' && !r.slug)) : null;
+const route = typeof flags.route === 'string' ? (meta.routes || []).find((r) => (flags.route === '/' ? !r.slug : samePath(r.path, flags.route))) : null;
 if (typeof flags.route === 'string' && !route) { console.error(`no route ${flags.route} in this capture: ${(meta.routes || []).map((r) => r.path).join(', ') || 'one page only'}`); process.exit(1); }
 const prefix = route?.slug ? `${route.slug}/` : '';
 const refDir = route ? path.join(root, route.dir) : ref;
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
 const cloneBase = server ? server.url : flags.url;
-const cloneUrl = route?.slug ? new URL(route.path.replace(/^\//, ''), cloneBase).href : server ? `${server.url}index.html` : flags.url;
+const cloneUrl = route?.slug ? routeUrl(route.path, cloneBase) : server ? `${server.url}index.html` : flags.url;
+const side = COMPARE === 'compare-next' ? 'app' : 'clone';
+// template mode: the placeholder text the seed wrote is the tool's own, not "clone-only" (inview.mjs)
+const seedText = await seedTextOf(root, meta);
 const refUrl = route?.slug ? new URL(route.path, meta.finalUrl || meta.url).href : meta.url;
 const outDir = route?.slug ? path.join(root, COMPARE, 'review', 'routes', route.slug, vp.name) : path.join(root, COMPARE, 'review', vp.name);
 // A review of the clone as it is now is not shot again (its verdicts stand): only when the clone's content or the
@@ -89,24 +95,9 @@ function hoverPoint() {
   return best;
 }
 
-// What a visitor sees at a frame that is not part of the page's flow: fixed and sticky boxes, frames and shadow hosts
-// (a widget launcher, a banner, an overlay), and the text in view. The clone's are compared with every reference draw
-// (cloneOnly below): something only the clone shows is a difference, whatever the verdict says.
-function inViewInPage() {
-  const fixed = [], texts = new Set();
-  for (const el of document.querySelectorAll('body *')) {
-    const s = getComputedStyle(el);
-    if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity < 0.05) continue;
-    const r = el.getBoundingClientRect();
-    if (r.width < 8 || r.height < 8 || r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue;
-    if (s.position === 'fixed' || s.position === 'sticky' || el.tagName === 'IFRAME' || el.shadowRoot) {
-      const label = `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${el.shadowRoot ? ' (shadow root)' : ''}`;
-      fixed.push({ box: [r.left, r.top, r.width, r.height].map(Math.round), label });
-    }
-    for (const n of el.childNodes) if (n.nodeType === 3) { const t = n.textContent.replace(/\s+/g, ' ').trim().toLowerCase(); if (t.length >= 12) texts.add(t); }
-  }
-  return { fixed, texts: [...texts] };
-}
+// What a visitor sees at a frame that is not part of the page's flow, and the text in view (inview.mjs inViewInPage).
+// The clone's are compared with every reference draw (cloneOnly below): something only the clone shows is a
+// difference, whatever the verdict says.
 // every text of the page, shown or not (a closed disclosure's text is the page's own too)
 const allText = () => document.body.textContent.replace(/\s+/g, ' ').toLowerCase();
 
@@ -199,7 +190,7 @@ function cloneOnlyAt(label) {
   const refFixed = [...(r1.fixed || []), ...(r2?.fixed || [])];
   const box = c.fixed.find((f) => !refFixed.some((g) => near(f, g)));
   if (box) return `${box.label} at ${box.box[0]},${box.box[1]} (${box.box[2]}x${box.box[3]})`;
-  const text = c.texts.find((t) => !(pageText.ref || '').includes(t) && !(pageText.ref2 || '').includes(t));
+  const text = cloneOnlyText(c.texts, [pageText.ref, pageText.ref2], seedText);
   return text ? `the text "${text.slice(0, 60)}"` : null;
 }
 
@@ -252,7 +243,7 @@ for (let s = 0; s * 3 < lines.length; s++) {
 for (const l of lines) delete l.img;
 await fs.writeFile(path.join(outDir, 'index.md'), `# Review${route?.slug ? ` of ${route.path}` : ''} at ${vp.name} (${vp.width}x${vp.height}): reference left, clone right
 
-Look at every frame (the sheets hold three frames each, in order). In notes.md under "## Review", one line per frame,
+Look at every frame (the sheets hold three frames each, in order). In notes.md under "## ${REVIEW_HEADING[side]}"${side === 'app' ? ' (the Next.js app\'s own verdicts: the same frame names as the HTML clone\'s review, other pictures)' : ''}, one line per frame,
 with the frame's token from the table below (a verdict holds for that picture only: a frame shot again that looks
 different needs a new look): \`- <frame> ${vp.name} [<token>]: same\`, \`- <frame> ${vp.name} [<token>]: differs: <what you
 see>\`, or, only when you proved the difference is the instrument's and not the clone's, \`- <frame> ${vp.name} [<token>]:
@@ -263,7 +254,7 @@ Never write verdicts from pixel match alone.
 "tool" closes a frame only where the reference differs from itself there (the "reference vs itself" column, two loads,
 below 95%) and the clone is as close as the reference is to itself; otherwise only with \`evidence: <file>\` named after
 this frame. A frame marked "clone only" shows something no reference load shows: it is a difference, whatever the
-verdict.
+verdict.${meta.mode === 'exact' ? '' : ' (Template mode: the placeholder text the seed wrote is not "clone only"; any other text is.)'}
 
 Sheets: ${sheets.map((s) => `[${s.file}](${s.file}) (${s.frames.join(', ')})`).join(' · ')}
 
@@ -274,6 +265,8 @@ ${lines.map((l) => `| [${l.id}](${l.file}.png) | ${l.token} | ${l.pct}% | ${l.re
 // make sure notes.md has the section the verdicts go in
 const notesFile = path.join(root, 'notes.md');
 const notes = await fs.readFile(notesFile, 'utf8').catch(() => '');
-if (!/^## Review/m.test(notes)) await fs.appendFile(notesFile, `\n## Review\n\n<!-- one line per frame of compare/review/<size>/index.md: "- <frame> <size>: same" or "- <frame> <size>: differs: <what>". REPORT.md counts them. -->\n`);
+// the clone's verdicts under "## Review", the app's under "## Review: app" (verdict.mjs reviewVerdicts)
+const heading = `## ${REVIEW_HEADING[side]}`;
+if (!new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm').test(notes)) await fs.appendFile(notesFile, `\n${heading}\n\n<!-- one line per frame of ${COMPARE}/review/<size>/index.md: "- <frame> <size> [<token>]: same" or "- <frame> <size> [<token>]: differs: <what>". REPORT${side === 'app' ? '.next' : ''}.md counts them. -->\n`);
 await fs.writeFile(path.join(outDir, 'frames.json'), JSON.stringify({ size: vp.name, at: ident.startedAt, subjectHash: ident.subjectHash, refId: ident.refId, frames: lines, sheets }, null, 2));
 console.log(`review (${vp.name} ${vp.width}x${vp.height}): ${lines.length} frames -> ${path.relative(process.cwd(), path.join(outDir, 'index.md'))}; lowest pixel match: ${[...lines].sort((x, y) => x.pct - y.pct).slice(0, 4).map((l) => `${l.id} ${l.pct}%`).join(', ')}`);

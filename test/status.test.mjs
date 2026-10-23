@@ -129,7 +129,11 @@ test('incomplete: when the loop concludes with differences left, status exits 3 
       assert.match(out.resume, /status/);
       const rep = await fs.readFile(path.join(site.root, 'REPORT.md'), 'utf8');
       assert.match(rep, /Incomplete/);
-      assert.match(rep, /Unresolved after the loop concluded/);
+      // every item not verified, by what happened to it (accounting.mjs), and how the loop got there
+      assert.match(rep, /### Not verified \(1 of \d+ required\)[\s\S]*Scroll states mobile \| clone \| fail \| difference left/);
+      assert.match(rep, /How the loop got there/);
+      assert.equal(out.accounting.counts.unresolved, 1);
+      assert.equal(out.accounting.counts.pending, 0);
       return;
     }
     if (/next: record a change of strategy/.test(r.out)) continue; // the strategy step, never recorded here
@@ -145,7 +149,7 @@ const WIDGET = [{ sel: '#ads-agent-host', why: 'third-party widget from http://l
 const lintCases = [
   ['the clone keeps an excluded third-party widget', { ignore: WIDGET, cloneHtml: '<!doctype html><title>x</title><body><h1>clone</h1><script src="http://localhost:5602/widget.js" async></script><script src="script.js" defer></script></body>\n' }, /keeps #ads-agent-host/],
   ['the clone fixes its own randomness', { cloneScript: 'Math.random = () => 0.5;\nconst a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\nconsole.log(a + b + c + d);\n' }, /replaces Math\.random/],
-  ['the clone stops an animation the reference runs', { cloneHtml: '<!doctype html><title>x</title><style>.track{animation: none}</style><body><h1>clone</h1><script src="script.js" defer></script></body>\n' }, /stops 1 more animation/],
+  ['the clone stops an animation the reference runs', { cloneHtml: '<!doctype html><title>x</title><style>.track{animation: none}</style><body><h1>clone</h1><script src="script.js" defer></script></body>\n' }, /stops 1 animation\(s\) the reference's own CSS does not/],
 ];
 for (const [label, opts, want] of lintCases) {
   test(`golden false-pass (lint): ${label} never exits 0`, async () => {
@@ -242,6 +246,6 @@ test('an own bundle with files that are not whole is recorded again once, then B
   await fs.writeFile(path.join(site.root, 'reference', 'bundle', 'manifest.json'), JSON.stringify({ entries: { 'https://x.test/frost.webp': { type: 'image/webp', kind: 'fetch', failed: 'lost body (0 of 145028 bytes), recovery answered HTTP 403', attempts: 2 } } }));
   r = status(p, 'zb');
   assert.equal(r.code, 2, r.out);
-  assert.match(r.out, /Blocked: 1 of the site's own files could not be recorded/);
+  assert.match(r.out, /Blocked \(owner: tool\): 1 of the site's own files could not be recorded/);
   assert.equal((await readJson(site, 'compare/outcome.json')).outcome, 'blocked');
 });

@@ -9,6 +9,7 @@
 // units. A measurement that fails is recorded too (state "error", with the reason): a missing number is never a pass.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { writeAtomic } from './identity.mjs';
 
 export const unitKey = (route, viewport, state = '') => `${route || ''}|${viewport || ''}|${state || ''}`;
 export const parseKey = (k) => { const [route, viewport, state] = k.split('|'); return { route, viewport, state }; };
@@ -57,9 +58,7 @@ export async function writeUnits(root, compare, check, units, identity, { replac
       const { route = '', viewport = '', state = '', ...rest } = u;
       cur.units[unitKey(route, viewport, state)] = { route, viewport, state, ...rest, identity: { ...identity, endedAt } };
     }
-    const tmp = `${file}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(cur, null, 1));
-    await fs.rename(tmp, file);
+    await writeAtomic(file, JSON.stringify(cur, null, 1));
   });
   // a check that recorded a failed measurement exits non-zero, whichever check it is (score and its callers see the
   // failure from the exit code; RC4 load.mjs exited 0 after a reference that never loaded)
@@ -89,13 +88,17 @@ export async function mergeAggregate(file, report) {
     report.routes = [...byPath.values()];
   }
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(report, null, 2));
-  await fs.rename(tmp, file);
+  await writeAtomic(file, JSON.stringify(report, null, 2));
   return report;
 }
 
-// A measurement that could not be made: recorded per unit, so the evaluator reports "error: <reason>", never a pass
-export async function writeErrors(root, compare, check, keys, identity, reason) {
-  await writeUnits(root, compare, check, keys.map((k) => ({ ...k, error: String(reason).slice(0, 300), value: null })), identity);
+// A measurement that could not be made: recorded per unit, so the evaluator reports "error: <reason>", never a pass.
+// `extra`: how it failed (errorKind: timeout | crash | load, from the step that ran it) and where its whole output is
+// (errorLog), so status can classify it and a person can read it.
+export async function writeErrors(root, compare, check, keys, identity, reason, extra = {}) {
+  await writeUnits(root, compare, check, keys.map((k) => ({ ...k, error: String(reason).slice(0, 500), value: null, ...extra })), identity);
 }
+
+// Is a recorded unit a measurement of exactly this (the same subject, reference, configuration and code)? A check that
+// resumes after an interruption skips such units instead of measuring them again (behaviour, calibrate).
+export const isCurrent = (rec, identity) => Boolean(rec && !rec.error && rec.identity && rec.identity.subjectHash === identity.subjectHash && rec.identity.refId === identity.refId && rec.identity.configHash === identity.configHash && rec.identity.codeHash === identity.codeHash);

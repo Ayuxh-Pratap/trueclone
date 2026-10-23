@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dialogs and disclosures</title>
+<!-- The auto-interaction detector's dialogs and disclosures (RC4 ALLBIRDS-5), and a link to a page with an intro
+     (RC4 VAR-11d): test/browser/dialogs-arrival.test.mjs. Each control closes what it opens in its own way: -->
+<!--   Size guide (header, data-open names a <dialog>)  Escape closes it (native modal dialog)                   -->
+<!--   Quick add x3 (aria-haspopup="dialog", no id)      Escape closes it; one scenario for the three            -->
+<!--   Refund policy (aria-controls a role="dialog")     Escape does nothing here; its close button does         -->
+<!--   Notice (aria-controls a role="dialog")            nothing closes it: dropped, with the reason             -->
+<!--   Details / Care (aria-expanded, no aria-controls)  a second click closes; Reviews only opens: dropped      -->
+<style>
+body{margin:0;font:16px/1.4 sans-serif;color:#222;background:#fff}
+header{display:flex;gap:16px;align-items:center;padding:12px 20px;background:#f4f1ea}
+header .mark{margin-right:auto}
+.menu-list{position:absolute;top:56px;right:20px;margin:0;padding:12px 20px;background:#f4f1ea;list-style:none}
+main{padding:20px 20px 400px}
+.product,.details{margin:24px 0}
+.panel{padding:8px 0}
+.modal{position:fixed;inset:0;background:rgba(20,20,20,.9);color:#fff;display:none;align-items:center;justify-content:center}
+.modal.open{display:flex}
+dialog{border:0;padding:40px;background:#123;color:#fff}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+footer{padding:20px;background:#222;color:#ddd}
+footer a{color:#ddd;margin-right:16px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+<a class="mark" href="./">Shop</a>
+<button class="sizes" type="button" data-open="sizes">Size guide</button>
+<button class="menu-btn" type="button" aria-expanded="false" aria-label="Menu">Menu</button>
+<ul class="menu-list" hidden><li>Men</li><li>Women</li></ul>
+</header>
+<main>
+<h1>Runner</h1>
+<p><a class="story" href="intro.html">Our story</a></p>
+<div class="product">
+<button class="quick" type="button" aria-haspopup="dialog">Quick add</button>
+<button class="quick" type="button" aria-haspopup="dialog">Quick add</button>
+<button class="quick" type="button" aria-haspopup="dialog">Quick add</button>
+</div>
+<div class="details">
+<button class="acc" type="button" aria-expanded="true">Details</button>
+<div class="panel">Wool upper, sugarcane sole.</div>
+<button class="acc" type="button" aria-expanded="false">Care</button>
+<div class="panel" hidden>Machine wash cold.</div>
+<button class="once" type="button" aria-expanded="false">Reviews</button>
+<div class="panel" hidden>Five stars.</div>
+</div>
+</main>
+<footer>
+<a role="button" aria-controls="modal-refund" class="policy">Refund policy</a>
+<a role="button" aria-controls="modal-stuck" class="notice">Notice</a>
+</footer>
+<div id="modal-refund" class="modal" role="dialog" aria-modal="true" aria-hidden="true"><div><p>Refunds within 30 days.</p><button class="modal-close" type="button" aria-label="Close">&times;</button></div></div>
+<div id="modal-stuck" class="modal" role="dialog" aria-modal="true" aria-hidden="true"><div><p>This notice stays.</p></div></div>
+<dialog id="qa"><p>Pick a size</p></dialog>
+<dialog id="sizes"><p>Sizes 8 to 14</p><form method="dialog"><button>OK</button></form></dialog>
+<script>
+const $ = (s) => document.querySelector(s);
+$('.menu-btn').addEventListener('click', (e) => { const b = e.currentTarget, o = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(o)); $('.menu-list').hidden = !o; });
+document.querySelectorAll('.quick').forEach((b) => b.addEventListener('click', () => $('#qa').showModal()));
+document.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => document.getElementById(b.dataset.open).showModal()));
+document.querySelectorAll('[aria-controls^="modal-"]').forEach((a) => a.addEventListener('click', () => { const m = document.getElementById(a.getAttribute('aria-controls')); m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }));
+$('#modal-refund .modal-close').addEventListener('click', () => { const m = $('#modal-refund'); m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); });
+document.querySelectorAll('.acc').forEach((b) => b.addEventListener('click', () => { const o = b.getAttribute('aria-expanded') !== 'true'; b.setAttribute('aria-expanded', String(o)); b.nextElementSibling.hidden = !o; }));
+$('.once').addEventListener('click', (e) => { e.currentTarget.setAttribute('aria-expanded', 'true'); e.currentTarget.nextElementSibling.hidden = false; });
+</script>
+</body>
+</html>

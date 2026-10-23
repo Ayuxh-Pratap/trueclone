@@ -24,7 +24,9 @@ import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, canvasSimi
 import { startIdentity } from './identity.mjs';
 import { writeUnits } from './results.mjs';
 import { regionScore, region } from './measure.mjs';
-import { TEMPLATE_ALLOWANCE } from './verdict.mjs';
+import { TEMPLATE_ALLOWANCE, loadNoise, barFor, FLOORS, REVIEW_HEADING } from './verdict.mjs';
+import { envelope } from './measure.mjs';
+import { refIdOf } from './identity.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -497,6 +499,14 @@ if (!refRun) { console.error(`no reference journey: trueclone journey ${name} fi
 const exact = meta.mode === 'exact';
 const report = { name, at: new Date().toISOString(), mode: exact ? 'exact' : 'template', viewports: [] };
 const reviewLines = {};
+// The reference's own draws (calibrate.mjs, reference/calib/<k>/journey/): a checkpoint the reference varies on beyond
+// its floor is judged by its envelope, never by a bar it cannot meet itself (rc.7; RC6 zero: the journey could only be
+// "not verifiable" because nothing measured it). Not while calibrating: that run is a draw.
+const noise = process.env.TC_CALIBRATE ? null : await loadNoise(root, refIdOf(meta));
+// the draws' own runs (their interface text at each checkpoint: a counter or a toast differs between loads too)
+const drawRuns = noise ? await Promise.all((noise.drawDirs || []).map((d) => fs.readFile(path.join(root, d, 'journey', 'journey.json'), 'utf8').then(JSON.parse, () => null))) : [];
+const words = (t) => new Set(String(t || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1));
+const textScore = (r, c) => { const wr = words(r), wc = words(c); return wr.size || wc.size ? +((100 * [...wr].filter((w) => wc.has(w)).length) / Math.max(1, new Set([...wr, ...wc]).size)).toFixed(2) : null; };
 for (const v of result.viewports) {
   const rv = refRun.viewports.find((x) => x.viewport === v.viewport);
   if (!rv) continue;
@@ -515,13 +525,30 @@ for (const v of result.viewports) {
     const sc = sb ? regionScore(region(a, sb), region(b, sb), { template: !exact }) : null;
     const hist = sb ? canvasSimilarity(region(a, sb), region(b, sb)) : null;
     const scene = sc ? (exact ? sc.value : Math.min(100, sc.value + TEMPLATE_ALLOWANCE)) : null;
-    const words = (t) => new Set(String(t || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1));
-    const wr = words(c.ui), wc = words(mine.ui);
-    const text = wr.size || wc.size ? +((100 * [...wr].filter((w) => wc.has(w)).length) / Math.max(1, new Set([...wr, ...wc]).size)).toFixed(2) : null;
+    const text = textScore(c.ui, mine.ui);
     // exact mode: the real pixels too, as before; template mode: the UI layer stands for the screen's layout
     const parts = [exact ? pixels : ui ?? pixels, scene, text].filter((x) => typeof x === 'number');
     const match = +Math.min(...parts).toFixed(2);
-    cps.push({ i: c.i, name: c.name, match, pixels, ui, scene, sComp: sc?.sComp ?? null, aGrid: sc?.aGrid ?? null, hist, text, uiRef: c.ui, uiClone: mine.ui });
+    // E: the same picture measures as the checkpoint's own (text apart), against the capture's frame and each draw's
+    let env;
+    if (noise && barFor(noise, 'journey', '', v.viewport, c.name).unstable) {
+      const shot = async (dir, f) => { const full = await fs.readFile(path.join(dir, f)).then((x) => PNG.sync.read(x), () => null); return full ? { full, mask: await readMask(path.join(dir, f)) } : null; };
+      const sim = (x, y) => Math.min(...[exact || !x.mask || !y.mask ? matchPct(x.full, y.full).pct : matchPct(x.mask, y.mask).pct, ...(sb ? [exact ? regionScore(region(x.full, sb), region(y.full, sb)).value : Math.min(100, regionScore(region(x.full, sb), region(y.full, sb), { template: true }).value + TEMPLATE_ALLOWANCE)] : [])]);
+      const draws = [{ full: a, mask: am }, ...(await Promise.all((noise.drawDirs || []).map((d) => shot(path.join(root, d, 'journey', v.viewport), c.file)))).filter(Boolean)];
+      env = envelope({ full: b, mask: bm }, draws, sim) || undefined;
+      // The interface's words, by the same rule: the clone's against its nearest reference draw, at least what the
+      // draws achieve against each other (less 1), and never held above the journey floor (RC6 zero, step-1 mobile:
+      // the reference's own XP counter read 56, 54 and 61 on its three loads). A clone whose words match no draw fails.
+      const uis = [c.ui, ...drawRuns.map((run) => run?.viewports?.find((x) => x.viewport === v.viewport)?.checkpoints?.find((x) => x.i === c.i || x.name === c.name)?.ui).filter((t) => typeof t === 'string')];
+      if (env && uis.length >= 2 && (words(mine.ui).size || uis.some((t) => words(t).size))) {
+        const near = Math.max(...uis.map((t) => textScore(t, mine.ui) ?? 100));
+        const self = Math.min(...uis.map((t, k) => Math.max(...uis.filter((_, j) => j !== k).map((o) => textScore(t, o) ?? 100))));
+        const bar = Math.min(FLOORS.journey ?? 80, self - 1);
+        if (near < bar) env = { ...env, pass: false, reason: `the interface text matches no reference load (${near}% of the words at best; the reference against itself: ${self}%): ${env.reason}` };
+        env = { ...env, text: { near, self, bar: +bar.toFixed(2) } };
+      }
+    }
+    cps.push({ i: c.i, name: c.name, match, pixels, ui, scene, sComp: sc?.sComp ?? null, aGrid: sc?.aGrid ?? null, hist, text, uiRef: c.ui, uiClone: mine.ui, ...(env ? { envelope: env } : {}) });
     (reviewLines[v.viewport] ||= []).push({ c, mine, pixels });
   }
   const mean = cps.length ? +(cps.reduce((s, x) => s + x.match, 0) / cps.length).toFixed(2) : null;
@@ -531,7 +558,7 @@ for (const v of result.viewports) {
 }
 await fs.writeFile(path.join(outRoot, 'report.json'), JSON.stringify(report, null, 2));
 // one unit per viewport, every checkpoint a member: the loop sees which checkpoint moved, not only the mean
-await writeUnits(root, COMPARE, 'journey', report.viewports.map((v) => ({ viewport: v.viewport, value: v.match, template: !exact, errors: v.errors, members: v.checkpoints.map((c) => ({ id: c.name, i: c.i, value: c.match, pixels: c.pixels, ui: c.ui, scene: c.scene, sComp: c.sComp, aGrid: c.aGrid, hist: c.hist, text: c.text, note: c.note })) })), ident);
+await writeUnits(root, COMPARE, 'journey', report.viewports.map((v) => ({ viewport: v.viewport, value: v.match, template: !exact, errors: v.errors, members: v.checkpoints.map((c) => ({ id: c.name, i: c.i, value: c.match, pixels: c.pixels, ui: c.ui, scene: c.scene, sComp: c.sComp, aGrid: c.aGrid, hist: c.hist, text: c.text, note: c.note, ...(c.envelope ? { envelope: c.envelope } : {}) })) })), ident);
 
 // the checkpoints side by side for the review, in review's format (tokens, frames.json, index.md): verdicts in notes.md
 // as for any frame ("- journey/03-step-2 desktop [token]: same")
@@ -559,6 +586,8 @@ for (const [vpName, lines] of Object.entries(reviewLines)) {
     frames.push({ id: `journey/${file}`, file, pct: pixels, token: hsh.toString(36).slice(0, 5) });
   }
   await fs.writeFile(path.join(dir, 'frames.json'), JSON.stringify({ size: vpName, at: new Date().toISOString(), subjectHash: ident.subjectHash, frames }, null, 2));
-  await fs.writeFile(path.join(dir, 'index.md'), `# Journey review at ${vpName}: reference left, clone right, at each checkpoint\n\nIn notes.md under "## Review", one line per frame with its token: \`- <frame> ${vpName} [<token>]: same\` (below 85% pixel match, say why), \`differs: <what>\`, or \`tool: <why>; evidence: <file>\`.\n\n| frame | token | pixel match |\n|---|---|---|\n${frames.map((f) => `| [${f.id}](${f.file}.png) | ${f.token} | ${f.pct}% |`).join('\n')}\n`);
+  // the app's frames have their own verdicts, under their own heading (verdict.mjs reviewVerdicts; RC6 zero)
+  const appSide = COMPARE === 'compare-next';
+  await fs.writeFile(path.join(dir, 'index.md'), `# Journey review at ${vpName}: reference left, ${appSide ? 'the Next.js app' : 'clone'} right, at each checkpoint\n\nIn notes.md under "## ${REVIEW_HEADING[appSide ? 'app' : 'clone']}"${appSide ? ' (the app\'s own verdicts: the same frame names as the HTML clone\'s review, other pictures and tokens)' : ''}, one line per frame with its token (5 characters, exact): \`- <frame> ${vpName} [<token>]: same\` (below 85% pixel match, say why), \`differs: <what>\`, or \`tool: <why>; evidence: <file>\`.\n\n| frame | token | pixel match |\n|---|---|---|\n${frames.map((f) => `| [${f.id}](${f.file}.png) | ${f.token} | ${f.pct}% |`).join('\n')}\n`);
 }
 console.log(`-> ${path.relative(process.cwd(), path.join(outRoot, 'report.json'))}; review frames in ${COMPARE}/review/journey-<size>/`);

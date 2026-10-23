@@ -26,6 +26,34 @@ const root = siteDir(name);
 const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
 const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop'));
 
+// Each scope and trigger is recorded by its position path (tag:n among all children from <body>, the rule before
+// rc.7) and by a stable id (keys "id-path"): its id when unique on the page, else tag[n] steps (n-th child of that tag)
+// from the nearest ancestor with a unique id, with fp, the tag.first-class chain of those steps. The seed resolves the
+// id and checks the fp, so a late third-party child of <body> (RC6 allbirds: 0 of 3 widgets wired) moves nothing.
+// window.__tcKey(el) -> [id, fp]; window.__tcById(id) -> the element or null. The same rule as reveals.mjs and capture.
+function installKeysInPage() {
+  const unique = (id) => document.querySelectorAll(`#${CSS.escape(id)}`).length === 1;
+  window.__tcKey = (el) => {
+    const steps = [], fp = [];
+    let n = el;
+    for (; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+      if (n.id && unique(n.id)) break;
+      let k = 1;
+      for (let s = n.previousElementSibling; s; s = s.previousElementSibling) if (s.tagName === n.tagName) k++;
+      steps.unshift(`${n.tagName.toLowerCase()}[${k}]`);
+      fp.unshift(`${n.tagName.toLowerCase()}.${String(n.getAttribute('class') || '').trim().split(/s+/)[0]}`);
+    }
+    return [[...(n && n !== document.body && n !== document.documentElement && n.id && unique(n.id) ? [`#${encodeURIComponent(n.id)}`] : []), ...steps].join('>'), fp.join('>')];
+  };
+  window.__tcById = (id) => {
+    const steps = String(id || '').split('>').filter(Boolean);
+    let el = document.body, i = 0;
+    if (steps[0]?.startsWith('#')) { const all = document.querySelectorAll(`#${CSS.escape(decodeURIComponent(steps[0].slice(1)))}`); el = all.length === 1 ? all[0] : null; i = 1; }
+    for (; el && i < steps.length; i++) { const m = /^(.+)[(d+)]$/.exec(steps[i]); el = m ? [...el.children].filter((c) => c.tagName.toLowerCase() === m[1])[Number(m[2]) - 1] || null : null; }
+    return el === document.body ? null : el;
+  };
+}
+
 // Marks every control and its region; returns the groups (a tablist, or a single expandable button).
 function markInPage() {
   const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
@@ -75,7 +103,7 @@ function markInPage() {
   });
   window.__tcGroups = groups;
   return {
-    groups: groups.map((g, i) => ({ i, kind: g.kind, scopePath: g.scope ? pathOf(g.scope) : null, triggers: g.triggers.map((t) => ({ path: pathOf(t), label: (t.getAttribute('aria-label') || t.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) })), initial: g.initial })),
+    groups: groups.map((g, i) => ({ i, kind: g.kind, scopePath: g.scope ? pathOf(g.scope) : null, ...(g.scope ? { scopeId: window.__tcKey(g.scope)[0], scopeFp: window.__tcKey(g.scope)[1] } : {}), triggers: g.triggers.map((t) => ({ path: pathOf(t), id: window.__tcKey(t)[0], fp: window.__tcKey(t)[1], label: (t.getAttribute('aria-label') || t.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) })), initial: g.initial })),
   };
 }
 
@@ -93,9 +121,9 @@ function remarkInPage(groups) {
     return el;
   };
   for (const g of groups) {
-    const scope = g.scopePath ? resolve(g.scopePath) : null;
+    const scope = g.scopeId != null ? window.__tcById(g.scopeId) : g.scopePath ? resolve(g.scopePath) : null;
     if (scope) { const cur = (scope.getAttribute('data-tc-scope') || '').split(' ').filter(Boolean); if (!cur.includes(String(g.i))) cur.push(String(g.i)); scope.setAttribute('data-tc-scope', cur.join(' ')); }
-    g.triggers.forEach((t, j) => resolve(t.path)?.setAttribute('data-tc-trigger', `${g.i}:${j}`));
+    g.triggers.forEach((t, j) => (t.id != null ? window.__tcById(t.id) : resolve(t.path))?.setAttribute('data-tc-trigger', `${g.i}:${j}`));
   }
 }
 
@@ -124,7 +152,7 @@ function widenScopeInPage([i, sel]) {
   const cur = (scope.getAttribute('data-tc-scope') || '').split(' ').filter(Boolean);
   cur.push(String(i));
   scope.setAttribute('data-tc-scope', cur.join(' '));
-  return pathOf(scope);
+  return [pathOf(scope), ...window.__tcKey(scope)];
 }
 
 const browser = await openBrowser(flags.cdp);
@@ -133,6 +161,7 @@ try {
   const { page } = await newPage(browser, vp, { reducedMotion: 'reduce' });
   await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
   await waitStill(page, { timeout: 15000, interval: 200 });
+  await page.evaluate(installKeysInPage);
   const found = await page.evaluate(markInPage);
   console.log(`${found.groups.length} widget group(s): ${found.groups.filter((g) => g.kind === 'tabs').length} tab sets, ${found.groups.filter((g) => g.kind === 'expand').length} expandable, ${found.groups.filter((g) => g.kind === 'portal').length} dialog/listbox trigger(s)`);
   for (const g of found.groups) {
@@ -171,7 +200,7 @@ try {
       await waitStill(page, { timeout: 2500 });
       if (g.kind === 'expand') {
         const wider = await page.evaluate(widenScopeInPage, [g.i, `[data-tc-trigger="${g.i}:${j}"]`]);
-        if (wider) g.scopePath = wider;
+        if (wider) [g.scopePath, g.scopeId, g.scopeFp] = wider;
       }
       g.states.push(await snapshot());
       if (g.kind === 'expand') { // the closed state, so the clone can close it again
@@ -195,5 +224,5 @@ try {
   if (!flags.cdp) await browser.close();
 }
 const out = path.join(root, 'reference', `widgets.${vp.name}.json`);
-await fs.writeFile(out, JSON.stringify({ url: meta.url, viewport: vp, at: new Date().toISOString(), ...result }, null, 2));
+await fs.writeFile(out, JSON.stringify({ url: meta.url, viewport: vp, at: new Date().toISOString(), keys: 'id-path', ...result }, null, 2));
 console.log(`-> ${path.relative(process.cwd(), out)}`);

@@ -3,7 +3,7 @@
 // Without --url it serves sites/<name>/clone/ itself on a free local port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, crop, match, PNG, COMPARE, siteDir, holdStill } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, isPad, crop, match, PNG, COMPARE, siteDir, holdStill } from './lib.mjs';
 import { startIdentity, refIdOf } from './identity.mjs';
 import { writeUnits, mergeAggregate } from './results.mjs';
 
@@ -78,7 +78,7 @@ async function scoreRoute(r) {
   const ref = path.join(root, r.dir);
   const out = r.slug ? path.join(root, COMPARE, 'routes', r.slug) : path.join(root, COMPARE);
   await fs.mkdir(out, { recursive: true });
-  const pageUrl = r.slug ? new URL(calibrating ? r.path : r.path.replace(/^\//, ''), target).href : target;
+  const pageUrl = r.slug ? (await import('./routes.mjs')).routeUrl(r.path, target, calibrating) : target;
   const viewports = [];
   const routeKey = r.slug ? r.path : '';
   for (const vp of vpsWanted) {
@@ -108,13 +108,13 @@ async function scoreViewport(r, ref, out, pageUrl, vp, routeKey) {
     const b0 = PNG.sync.read(await fs.readFile(clonePath));
     const w = Math.max(a0.width, b0.width), h = Math.max(a0.height, b0.height);
     const a = pad(a0, w, h), b = pad(b0, w, h);
+    // (never over padding: rows only one side has stay a difference, RC6-16, whatever box the clone reports there)
     for (const [x, y, rw, rh] of excluded) {
-      for (const img of [a, b]) {
-        for (let yy = Math.max(0, y); yy < Math.min(h, y + rh); yy++) {
-          for (let xx = Math.max(0, x); xx < Math.min(w, x + rw); xx++) {
-            const i = (yy * w + xx) * 4;
-            img.data[i] = 64; img.data[i + 1] = 64; img.data[i + 2] = 64; img.data[i + 3] = 255;
-          }
+      for (let yy = Math.max(0, y); yy < Math.min(h, y + rh); yy++) {
+        for (let xx = Math.max(0, x); xx < Math.min(w, x + rw); xx++) {
+          const i = (yy * w + xx) * 4;
+          if (isPad(a, i) || isPad(b, i)) continue;
+          for (const img of [a, b]) { img.data[i] = 64; img.data[i + 1] = 64; img.data[i + 2] = 64; img.data[i + 3] = 255; }
         }
       }
     }

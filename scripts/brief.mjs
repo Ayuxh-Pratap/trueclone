@@ -8,6 +8,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, COMPARE, siteDir, unroll } from './lib.mjs';
+import { routeUrl, samePath } from './routes.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name, nArg] = pos;
@@ -21,7 +22,8 @@ const vp = VIEWPORTS.find((v) => v.name === (flags.viewport || 'desktop')) || VI
 const read = (p, fallback = null) => fs.readFile(path.join(root, p), 'utf8').then(JSON.parse).catch(() => fallback);
 // --route "/about": another route of the site (meta.routes): its own sections, the clone opened at its address
 const meta = await read('reference/meta.json', {});
-const route = typeof flags.route === 'string' ? (meta.routes || []).find((x) => x.path === flags.route.replace(/\/+$/, '') || (flags.route === '/' && !x.slug)) : null;
+// a route is named however it is spelled (/Landing Page.html or /Landing%20Page.html: routes.mjs samePath)
+const route = typeof flags.route === 'string' ? (meta.routes || []).find((x) => samePath(x.path, flags.route) || (flags.route === '/' && !x.slug)) : null;
 if (typeof flags.route === 'string' && !route) { console.error(`no route ${flags.route} in this capture: ${(meta.routes || []).map((x) => x.path).join(', ') || 'one page only'}`); process.exit(1); }
 const sections = await read(`${route?.dir || 'reference'}/${vp.name}.sections.json`, []);
 if (!sections.length) { console.error(`no ${route?.dir || 'reference'}/${vp.name}.sections.json: run capture first`); process.exit(1); }
@@ -44,7 +46,9 @@ const browser = await openBrowser();
 let placed;
 try {
   const { page } = await newPage(browser, vp, {});
-  await page.goto(route?.slug ? new URL(route.path.replace(/^\//, ''), server.url).href : server.url, { waitUntil: 'load', timeout: 60000 });
+  // the route's address on the clone's server: its identity (the encoded path) relative to the server, so a segment
+  // with a colon is never read as a scheme (routes.mjs routeUrl)
+  await page.goto(route?.slug ? routeUrl(route.path, server.url) : server.url, { waitUntil: 'load', timeout: 60000 });
   await page.waitForTimeout(800);
   await unroll(page); // positions as the capture measured them (an app shell's pane unrolled, lib.mjs)
   placed = await page.evaluate(([curves, ownedList, scenarios, triggers, handlerLabels]) => {

@@ -32,7 +32,8 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { ORDER, unitName, conditionsOf } from './verdict.mjs';
+import { ORDER, unitName, conditionsOf, TARGETS } from './verdict.mjs';
+import { writeAtomic } from './identity.mjs';
 
 // concludeAfter 4: the RC4 zero replay (test/replay.test.mjs, docs/policy.md) stops at 80 on mobile with 3, and at >= 97% of the
 // run's eventual gain with 4, half an hour after it levelled off
@@ -51,17 +52,22 @@ export async function loadLoop(root, refId) {
 export async function saveLoop(root, loop) {
   const file = path.join(root, 'compare', 'loop.json');
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(loop, null, 1));
-  await fs.rename(tmp, file);
+  await writeAtomic(file, JSON.stringify(loop, null, 1));
 }
 
 const unitId = (side, u) => `${side}:${u.check}:${u.route || ''}:${u.viewport || ''}:${u.state || ''}`;
 
-// The failing results of an evaluation as objectives (current shortfall and member values), keyed stably
+// The failing results of an evaluation as objectives (current shortfall and member values), keyed stably. A page of the
+// clone that does not load (an error status has retried once and classified as the clone's: failures.mjs) is clone
+// work too: its shortfall is the whole bar until it can be measured.
 export function objectivesOf(ev) {
   const out = [];
   for (const u of ev.units) {
+    if (u.cloneError && !u.plan) {
+      const bar = TARGETS[u.check] ?? 100;
+      out.push({ key: objectiveKey(ev.side, u), side: ev.side, kind: 'unit', check: u.check, route: u.route, viewport: u.viewport, scenario: u.scenario, label: `${ev.side === 'app' ? 'Next.js app: ' : ''}${unitName(u)}`, shortfall: bar, conditions: { mean: bar, floors: 0, below: 0 }, value: null, bar, members: [], below: [{ id: 'page', name: `the page does not load: ${String(u.reason || '').slice(0, 120)}`, value: 0, bar }], eps: DEFAULTS.eps });
+      continue;
+    }
     if (u.plan || u.status !== 'fail') continue;
     out.push({ key: objectiveKey(ev.side, u), side: ev.side, kind: 'unit', check: u.check, route: u.route, viewport: u.viewport, scenario: u.scenario, label: `${ev.side === 'app' ? 'Next.js app: ' : ''}${unitName(u)}`, shortfall: u.shortfall, conditions: conditionsOf(u), value: u.value, bar: u.bar, members: (u.record?.members || []).map((m) => ({ id: m.id, value: m.value })), below: (u.membersBelow || []).length ? u.membersBelow : lowestOf(u.record?.members), eps: Math.max(DEFAULTS.eps, u.calibration?.spread || 0) });
   }
@@ -82,7 +88,8 @@ function measuredAgain(ev, pending) {
     return Boolean(f && f.state !== 'stale');
   }
   const us = ev.units.filter((u) => !u.plan && objectiveKey(ev.side, u) === pending.key);
-  return us.length > 0 && us.every((u) => ['pass', 'fail', 'accepted', 'na', 'tool'].includes(u.status));
+  // an error on the new content is a measurement of it too (the page still does not load): an attempt
+  return us.length > 0 && us.every((u) => ['pass', 'fail', 'accepted', 'na', 'tool', 'error'].includes(u.status));
 }
 
 // Update the loop with a new evaluation (one side). Returns what happened, for the step text.
@@ -133,7 +140,7 @@ export function observe(loop, ev, notesText, root, now = new Date()) {
   // every current failing result is an objective (new ones open; ones that were passing and came back reopen)
   for (const [k, cur] of current) {
     const o = loop.objectives[k] || seed(cur);
-    if (o.state === 'passed') { o.state = 'open'; o.noProgress = 0; events.push(`${o.label}: fails again`); }
+    if (o.state === 'passed' || o.state === 'retired') { o.state = 'open'; o.noProgress = 0; delete o.retiredWhy; events.push(`${o.label}: fails again`); }
     Object.assign(o, { label: cur.label, check: cur.check, route: cur.route, viewport: cur.viewport, scenario: cur.scenario, frame: cur.frame, dir: cur.dir, kind: cur.kind, side: cur.side, eps: cur.eps });
     if (o.bestShortfall === null || o.bestShortfall === undefined) { o.bestShortfall = cur.shortfall; o.bestValue = cur.value; o.bestAt = ev.subjectHash; }
     if (!o.best) o.best = { ...cur.conditions };
@@ -146,6 +153,9 @@ export function observe(loop, ev, notesText, root, now = new Date()) {
   for (const o of Object.values(loop.objectives)) {
     if (o.side !== ev.side || !['open', 'concluded'].includes(o.state) || current.has(o.key)) continue;
     const still = ev.units.some((u) => !u.plan && objectiveKey(ev.side, u) === o.key && ['missing', 'stale', 'invalid', 'error'].includes(u.status));
+    // one whose result the tool can no longer verify is retired as such, never counted as passed (RC6 zero: the RC5
+    // journey objectives read "passed, best 1.11" once their units became "not verifiable")
+    if (!still && o.kind !== 'review' && ev.units.some((u) => !u.plan && objectiveKey(ev.side, u) === o.key && u.status === 'tool')) { o.state = 'retired'; o.retiredWhy = 'not verifiable by the tool here'; continue; }
     // a review frame passes only when it is looked at again and closed: one whose picture went stale, or whose folder is
     // not shot yet, is not passed (RC5 zero: 55 "differs" frames before a re-seed)
     const frame = o.kind === 'review' && (ev.review?.frames || []).find((f) => `${ev.side}:review:${f.dir}:${f.id}` === o.key);

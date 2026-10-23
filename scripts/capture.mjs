@@ -6,9 +6,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill, bundleIntegrity } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill, bundleIntegrity, MASK_VERSION } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 import { detectInPage, operable } from './interactions-auto.mjs';
+import { canonicalPath, routeKey, routeDir, dirKey, uniqueSlugs, routeUrl } from './routes.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [url, nameArg] = pos;
@@ -41,10 +42,19 @@ setReferenceProfile({ url, hide, cookies, unroll: 'y', ignore: ignore.map((i) =>
 // authorised to copy, so it refuses to run without --permission "<who authorised it>". Output stays in
 // sites/ (gitignored), the mirror is noindex with every script removed, and nothing here deploys it.
 const mode = flags.mode === 'exact' ? 'exact' : 'template';
-const permission = typeof flags.permission === 'string' ? flags.permission : null;
+const permission = typeof flags.permission === 'string' ? flags.permission.trim() : null;
 if (mode === 'exact' && !permission) {
   console.error('exact mode copies the site\'s own text and media. Pass --permission "<owner / who authorised this copy>".');
   process.exit(1);
+}
+// RC6-20: a launcher's quoting cut varsity's permission to `"site` and the capture recorded that as who authorised the
+// copy. A permission is the full name of who authorised it: not empty, no stray quote at either end, quotes balanced.
+{
+  const why = permissionProblem(permission);
+  if (flags.permission !== undefined && why) {
+    console.error(`--permission ${JSON.stringify(flags.permission)} ${why}: pass the full name of who authorised this copy, quoted once (--permission "Jane Doe, owner of example.com")`);
+    process.exit(1);
+  }
 }
 const root = siteDir(name);
 const ref = path.join(root, 'reference');
@@ -147,6 +157,17 @@ const recordAsset = async (res) => {
   } catch { /* redirects, data: urls, aborted */ }
 };
 const summary = [];
+// Errors the site's own scripts threw while it was captured, per route ('' is the captured page): meta.pageErrors
+// { route, count, first: up to 5 distinct messages }, for the report and the auditor. RC6 allbirds logged ~70 "Cannot
+// read properties of undefined (reading 'call')" that were kept nowhere but the transcript. They never fail a capture.
+const pageErrors = new Map();
+const watchErrors = (page, route) => page.on('pageerror', (e) => {
+  const r = pageErrors.get(route) || { count: 0, first: [] };
+  const m = String(e?.message ?? e).split('\n')[0].slice(0, 300);
+  r.count++;
+  if (r.first.length < 5 && !r.first.includes(m)) r.first.push(m);
+  pageErrors.set(route, r);
+});
 const rootFontSize = {};
 const inlineStyles = {};
 const scriptQueries = new Set(); // media queries the page's scripts asked (matchMedia), at any size
@@ -167,6 +188,7 @@ try {
     const desktop = vp.name === 'desktop';
     const { context, page } = await newPage(browser, vp, { ...asked, ...(desktop ? { recordHar: { path: path.join(ref, 'desktop.har'), content: 'omit' } } : {}) });
     await page.addInitScript(recordMediaQueries);
+    watchErrors(page, '');
     if (desktop) await page.addInitScript(trackOriginsInPage);
     // at every size: a phone gets its own sources (<picture>, srcset, a mobile-only photo)
     page.on('response', recordAsset);
@@ -243,7 +265,7 @@ try {
       // third-party widgets, found after the same wait (they arrive late too): excluded on both sides unless included
       thirdParty = await page.evaluate(thirdPartyInPage, new URL(page.url()).hostname).catch(() => []);
       for (const t of thirdParty) {
-        t.decision = t.core ? 'kept: page content' : !t.sel ? 'kept: no stable selector (capture --ignore "<selector>" to exclude it)' : include.includes(t.sel) ? 'kept: capture --include' : 'excluded on both sides';
+        t.decision = t.core ? 'kept: page content' : !t.sel ? `kept: no stable selector${t.noSel ? `, ${t.noSel}` : ''} (capture --ignore "<selector>" to exclude it)` : include.includes(t.sel) ? 'kept: capture --include' : 'excluded on both sides';
         if (t.decision.startsWith('excluded') && !ignore.some((i) => i.sel === t.sel)) ignore.push({ sel: t.sel, why: `third-party widget from ${t.origin}`, origin: t.origin, auto: true });
         console.log(`third-party: ${t.sel || t.label} from ${t.origin}: ${t.decision}`);
       }
@@ -256,7 +278,10 @@ try {
       }).catch(() => null);
       if (ignore.length) {
         setReferenceProfile({ url, hide, cookies, unroll: 'y', ignore: ignore.map((i) => i.sel) });
-        await page.addStyleTag({ content: ignore.map((i) => `${i.sel}{display:none!important}`).join('\n') }).catch(() => {});
+        // the tool's own stylesheet, marked: serializeInPage leaves it out of rendered.html (RC6-05: saved there, it was
+        // copied into every clone page by the seed, and the clone lint flagged the origin in its selector)
+        const tag = await page.addStyleTag({ content: ignore.map((i) => `${i.sel}{display:none!important}`).join('\n') }).catch(() => null);
+        await tag?.evaluate((el) => el.setAttribute('data-tc-ignore', '')).catch(() => {});
       }
     }
     // A canvas app (why.zero.university): a canvas fills the window, the document does not scroll, and the site's own
@@ -336,44 +361,77 @@ try {
 await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
 
 // ---------- Routes: a website is more than one page ----------
-// The site's routes: same-host links on the page (every view's) and sitemap.xml, the captured page first, capped
-// (--routes N, or --routes "/,/about" for an exact list, --routes 1 for this page only). Each route's raw HTML is
-// compared with the captured page's: one document for every address is a single-page app (a script shows the view
-// for the address), different documents are separate pages. Every other route gets a reference of its own at all five
-// sizes in reference/routes/<slug>/ (shots, sections, masks), shot exactly like the captured page.
+// The site's routes: same-host links on the page (every view's) and sitemap.xml, the captured page first, then the
+// links found on every route captured (breadth first: RC6-17, a portfolio whose start page links one case study that
+// links the other five), capped (--routes N, or --routes "/,/about" for an exact list, --routes 1 for this page only).
+// Every page found is recorded (meta.routesFound, with where it was found), and every one left out with why
+// (meta.routesNotCaptured, printed at the end). A route is its canonical encoded path (routes.mjs): /Landing%20Page.html.
+// Each route's raw HTML is compared with the captured page's: one document for every address is a single-page app (a
+// script shows the view for the address), different documents are separate pages. Every other route gets a reference
+// of its own at all five sizes in reference/routes/<slug>/ (shots, sections, masks), shot exactly like the captured page.
 const home = new URL(finalUrl || url);
 const hostOf = (h) => h.replace(/^www\./, '');
-const routePath = (p) => p.replace(/\/+$/, '') || '/';
+const routePath = canonicalPath;
+const homePath = routePath(home.pathname);
 const skipRoute = (p) => /\.(pdf|png|jpe?g|gif|svg|webp|avif|xml|txt|json|zip|mp4|webm|mp3|ico|css|js)$/i.test(p) || p.startsWith('/cdn-cgi/');
-let routes;
-if (typeof flags.routes === 'string' && !/^\d+$/.test(flags.routes)) routes = [...new Set(flags.routes.split(',').map((s) => routePath(s.trim())))];
-else {
-  const cap = flags.routes !== undefined && flags.routes !== true ? Math.max(1, Number(flags.routes) || 1) : 12;
-  const found = [routePath(home.pathname)];
-  const add = (u) => { try { const x = new URL(u, home); if (/^https?:$/.test(x.protocol) && hostOf(x.host) === hostOf(home.host) && !skipRoute(x.pathname) && !found.includes(routePath(x.pathname))) found.push(routePath(x.pathname)); } catch { /* not a URL */ } };
-  for (const h of linkHrefs) add(h);
-  const sitemap = await fetch(new URL('/sitemap.xml', home), { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' }, signal: AbortSignal.timeout(15000) }).then((r) => (r.ok ? r.text() : ''), () => '');
-  for (const m of sitemap.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)) add(m[1]);
-  if (found.length > cap) console.log(`routes: ${found.length} found, the first ${cap} captured (--routes <n> for more): not captured ${found.slice(cap).join(', ')}`);
-  routes = found.slice(0, cap);
-}
-const slugOf = (p) => (p === routePath(home.pathname) ? '' : p.replace(/^\//, '').replace(/\//g, '__').replace(/[^a-z0-9_-]/gi, '_') || 'index');
+const explicit = typeof flags.routes === 'string' && !/^\d+$/.test(flags.routes) ? [...new Map(flags.routes.split(',').map((s) => routePath(s.trim())).map((p) => [routeKey(p), p])).values()] : null;
+const cap = explicit ? explicit.length : flags.routes !== undefined && flags.routes !== true ? Math.max(1, Number(flags.routes) || 1) : 12;
+// every same-host page found, deduplicated by canonical path, in the order found: { path, from } (from: "start", the
+// path of the page that links it, "sitemap.xml", or "--routes")
+const routesFound = [];
+const foundKeys = new Set();
+const addFound = (u, from) => {
+  try {
+    const x = new URL(u, home);
+    if (!/^https?:$/.test(x.protocol) || hostOf(x.host) !== hostOf(home.host) || skipRoute(x.pathname)) return;
+    const p = routePath(x.pathname);
+    if (!foundKeys.has(routeKey(p))) { foundKeys.add(routeKey(p)); routesFound.push({ path: p, from }); }
+  } catch { /* not a URL */ }
+};
+addFound(home.href, 'start');
+for (const p of explicit || []) addFound(new URL(p, home).href, '--routes');
+for (const h of linkHrefs) addFound(h, homePath);
+const sitemap = await fetch(new URL('/sitemap.xml', home), { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' }, signal: AbortSignal.timeout(15000) }).then((r) => (r.ok ? r.text() : ''), () => '');
+for (const m of sitemap.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)) addFound(m[1], 'sitemap.xml');
+// the next routes to capture, up to the cap: the exact list, or the pages found in order. Two routes whose clone
+// folders would be one (/a%2Fb.html and /a_b.html, /About and /about on Windows) cannot both be cloned: the first keeps it.
+const chosen = [];
+const clashes = new Map(); // routeKey -> why
+const choose = () => {
+  const fresh = [];
+  for (const p of explicit || routesFound.map((f) => f.path)) {
+    if (chosen.length >= cap) break;
+    if (chosen.some((c) => routeKey(c) === routeKey(p)) || clashes.has(routeKey(p))) continue;
+    const clash = chosen.find((c) => dirKey(c) === dirKey(p));
+    if (clash) { clashes.set(routeKey(p), `its clone folder would be clone/${routeDir(clash) || '.'}/, which is ${clash}'s`); continue; }
+    chosen.push(p);
+    fresh.push(p);
+  }
+  return fresh;
+};
 // one document for every address, or separate documents: the raw HTML of each route (nonces aside)
 const rawOf = (p) => fetch(new URL(p, home), { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36', 'accept-language': asked.extraHTTPHeaders['accept-language'] }, signal: AbortSignal.timeout(20000) })
   .then((r) => r.text(), () => null).then((t) => (t === null ? null : crypto.createHash('sha1').update(t.replace(/nonce="[^"]*"/g, '')).digest('hex')));
-const homeDoc = await rawOf(routePath(home.pathname));
+const homeDoc = await rawOf(homePath);
 const routeInfo = [];
-for (const p of routes) {
-  const doc = p === routePath(home.pathname) ? homeDoc : await rawOf(p);
-  routeInfo.push({ path: p, slug: slugOf(p), dir: slugOf(p) ? `reference/routes/${slugOf(p)}` : 'reference', sameDocument: Boolean(doc && doc === homeDoc) });
-}
-const appKind = routeInfo.length < 2 ? 'single page' : routeInfo.every((r) => r.sameDocument) ? 'single-page app' : 'pages';
-const others = routeInfo.filter((r) => r.slug);
 const routeScenarios = []; // what a visitor operates on each other route
-if (others.length) {
-  const jobs = others.flatMap((r) => SCORED.map((vp) => ({ r, vp })));
-  const browser3 = await openBrowser(flags.cdp);
-  try {
+// in waves: the routes chosen so far are captured, the links found on them join routesFound, the next wave is chosen
+// from those (an exact --routes list is one wave; its routes' links are still recorded)
+let browser3 = null; // opened for the first route that has pages to shoot
+try {
+for (let wave = choose(); wave.length; wave = explicit ? [] : choose()) {
+  const slugs = uniqueSlugs(chosen, homePath); // a later route never takes an earlier one's slug (routes.mjs)
+  const added = [];
+  for (const p of wave) {
+    const doc = routeKey(p) === routeKey(homePath) ? homeDoc : await rawOf(p);
+    const slug = slugs.get(p);
+    added.push({ path: p, slug, dir: slug ? `reference/routes/${slug}` : 'reference', sameDocument: Boolean(doc && doc === homeDoc) });
+  }
+  routeInfo.push(...added);
+  const jobs = added.filter((r) => r.slug).flatMap((r) => SCORED.map((vp) => ({ r, vp })));
+  const linksOf = new Map(); // route -> the links on it, read at desktop
+  if (jobs.length) {
+    browser3 ||= await openBrowser(flags.cdp);
     await Promise.all(Array.from({ length: 3 }, async () => {
       for (let job = jobs.shift(); job; job = jobs.shift()) {
         const { r, vp } = job;
@@ -384,13 +442,17 @@ if (others.length) {
         // screenshots); a separate page (its own document) also has its rendered HTML saved, at desktop, for its mirror
         const ownPage = !r.sameDocument && vp.name === 'desktop';
         page.on('response', recordAsset);
+        watchErrors(page, r.path);
         // a separate page runs scripts of its own (a table of contents, a progress tracker): their evidence too, merged
         // into reference/scripts/ below, so briefs and the coverage check see them
-        const finishPageEvidence = ownPage ? await startScriptEvidence(page, new URL(r.path, home).href).catch(() => null) : null;
+        const finishPageEvidence = ownPage ? await startScriptEvidence(page, routeUrl(r.path, home, true)).catch(() => null) : null;
         try {
-          await page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
+          await page.goto(routeUrl(r.path, home, true), { waitUntil: 'load', timeout: 60000 });
           await settle(page, hide);
           if (finishPageEvidence) await finishPageEvidence(path.join(dir, 'scripts')).catch((e) => console.warn(`WARNING scripts of ${r.path} not saved: ${e.message}`));
+          // the links on this route, for the next wave (RC6-17): read from the live DOM (settled, at desktop), as the
+          // captured page's own links are, so a page whose links a script writes is followed too
+          if (vp.name === 'desktop') linksOf.set(r.path, await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => []));
           // at the top, settled there, then shot; the page is saved right after the shot, so both show one moment
           await page.evaluate(() => { scrollTo(0, 0); dispatchEvent(new Event('scroll')); });
           await page.waitForTimeout(600);
@@ -428,8 +490,9 @@ if (others.length) {
             const selfs = [];
             for (let k = 0; k < 2; k++) {
               const again = await newPage(browser3, vp, asked);
+              watchErrors(again.page, r.path);
               try {
-                await again.page.goto(new URL(r.path, home).href, { waitUntil: 'load', timeout: 60000 });
+                await again.page.goto(routeUrl(r.path, home, true), { waitUntil: 'load', timeout: 60000 });
                 await settle(again.page, hide);
                 await mask(again.page);
                 selfs.push(matchPct(PNG.sync.read(maskShot), PNG.sync.read(await again.page.screenshot({ fullPage: true }))).pct);
@@ -442,16 +505,25 @@ if (others.length) {
         finally { await context.close(); }
       }
     }));
-  } finally {
-    if (!flags.cdp) await browser3.close();
   }
+  // the links found on this wave's routes, in route order, for the next wave
+  for (const r of added) for (const h of linksOf.get(r.path) || []) addFound(h, r.path);
 }
+} finally {
+  if (browser3 && !flags.cdp) await browser3.close();
+}
+const appKind = routeInfo.length < 2 ? 'single page' : routeInfo.every((r) => r.sameDocument) ? 'single-page app' : 'pages';
+const others = routeInfo.filter((r) => r.slug);
+// every page found and not captured, with why (meta.routesNotCaptured; printed at the end)
+const routesNotCaptured = routesFound.filter((f) => !chosen.some((c) => routeKey(c) === routeKey(f.path)))
+  .map((f) => ({ path: f.path, from: f.from, why: clashes.get(routeKey(f.path)) || (explicit ? 'not in the --routes list' : `beyond the cap of ${cap} route${cap === 1 ? '' : 's'} (--routes <n> for more)`) }));
 // a route's scenarios join the captured page's, except links the captured page already goes to at that size (the
 // same sidebar on every route would otherwise draft the same navigation once per route)
 // Navigation is drafted only to routes this capture has: a link to an uncaptured page would be scored against
 // nothing the clone could have (the agent retired such scenarios by hand)
-const captured = new Set(routeInfo.map((r) => r.path));
-const navTarget = (s) => s.name.replace(/^(?:.*: )?go to (\S+).*/, '$1');
+// (compared by canonical path: a link spelled /caf%c3%a9 goes to the route /caf%C3%A9)
+const captured = new Set(routeInfo.map((r) => routeKey(r.path)));
+const navTarget = (s) => routeKey(s.name.replace(/^(?:.*: )?go to (\S+).*/, '$1'));
 for (let i = autoScenarios.length - 1; i >= 0; i--) if (autoScenarios[i].navigation && !captured.has(navTarget(autoScenarios[i]))) autoScenarios.splice(i, 1);
 // then at most 8 links per size, in the page's order (the cap counts captured routes only)
 const navCount = {};
@@ -504,6 +576,7 @@ if (fitSizes.length) {
     await Promise.all(Array.from({ length: 3 }, async () => {
       for (let s = queue.shift(); s; s = queue.shift()) {
         const { context, page } = await newPage(browser2, { name: `fit${s.width}`, width: s.width, height: s.height }, asked);
+        watchErrors(page, '');
         try {
           await page.goto(url, { waitUntil: 'load', timeout: 60000 });
           await settle(page, hide);
@@ -520,7 +593,7 @@ await fs.writeFile(path.join(ref, 'interactions.auto.json'), JSON.stringify(auto
 await fs.writeFile(path.join(ref, 'interactions.dropped.json'), JSON.stringify(droppedScenarios, null, 2));
 if (droppedScenarios.length) console.log(`interactions: ${droppedScenarios.length} found but not operable on the reference, left out (reference/interactions.dropped.json): ${droppedScenarios.slice(0, 3).map((d) => d.name).join('; ')}${droppedScenarios.length > 3 ? '…' : ''}`);
 console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
-await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], sizes: Object.keys(inlineStyles), styles: inlineStyles }));
+await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], keys: 'id-path', sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
 // The own-bundle recording is kept for a canvas app in exact mode (or --bundle): the clone runs the site's own code
 // on its own files (the owner's permission covers their code). Any other capture drops it: a document is rebuilt.
@@ -530,7 +603,7 @@ else {
   const integrity = await bundleIntegrity(ref);
   console.log(`own bundle: ${integrity.entries} files the app loaded, kept in reference/bundle/ (exact mode: the clone runs the site's own code)${integrity.problems.length ? `; ${integrity.problems.length} could not be recorded (status reports them): ${integrity.problems.slice(0, 5).map((p) => `${p.url} (${p.why})`).join('; ')}` : ''}`);
 }
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', stabilise: STABILISERS, ...(ignore.length ? { ignore } : {}), ...(thirdParty.length ? { thirdParty } : {}), ...(scriptOrigins ? { scriptOrigins } : {}), ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), capturedAt: new Date().toISOString(), complete: false, rootFontSize, viewports: summary }, null, 2));
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, routesFound, routesNotCaptured, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', stabilise: STABILISERS, maskVersion: MASK_VERSION, ...(ignore.length ? { ignore } : {}), ...(thirdParty.length ? { thirdParty } : {}), ...(scriptOrigins ? { scriptOrigins } : {}), ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), ...(pageErrors.size ? { pageErrors: [...pageErrors].map(([route, v]) => ({ route: route || homePath, ...v })) } : {}), capturedAt: new Date().toISOString(), complete: false, rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
 // with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.
@@ -538,7 +611,7 @@ const ownPages = routeInfo.filter((r) => r.slug && !r.sameDocument);
 for (const r of ownPages) {
   const rendered = path.join(root, r.dir, 'rendered.html');
   if (!(await fs.stat(rendered).catch(() => null))) { console.warn(`WARNING ${r.path}: no rendered page captured, not mirrored`); continue; }
-  const pageUrl = new URL(r.path, home).href;
+  const pageUrl = routeUrl(r.path, home, true);
   const note = mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.";
   const mirrorDir = path.join(ref, 'mirror');
   let out = await renderMirror(manifest, pageUrl, note, mirrorDir, rendered);
@@ -560,6 +633,8 @@ console.table(summary);
   await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ ...done, complete: true }, null, 2));
 }
 console.log(`${manifest.length} assets saved. Reference: ${path.relative(process.cwd(), ref)}, mirror in reference/mirror${mode === 'exact' ? ` (exact mode, authorised by: ${permission})` : ''}`);
+// last, so it is not lost above: the site's pages this reference does not have (RC6-17)
+if (routesNotCaptured.length) console.log(`routes not captured: ${routesNotCaptured.length} of the ${routesFound.length} pages found (meta.routesNotCaptured): ${routesNotCaptured.slice(0, 10).map((r) => `${r.path} (${r.why})`).join('; ')}${routesNotCaptured.length > 10 ? '; …' : ''}`);
 
 // ---------- Static local mirror of the rendered page ----------
 // Same DOM as rendered.html, asset URLs rewritten to the saved copies, every script and inline handler
@@ -722,22 +797,52 @@ async function fetchMissing(urls, manifest, pageUrl) {
   return added;
 }
 
-// Inline styles and classes of every styled element, by element path, with the size actually laid out (clientWidth
+// Why a --permission value is not a usable name (RC6-20), or null: empty, a stray quote at either end, unbalanced quotes
+function permissionProblem(p) {
+  if (p === true || p === null || p === undefined) return null; // no value: the exact-mode check above says so
+  const s = String(p).trim();
+  if (!s) return 'is empty';
+  if (/^["'`‘’“”]|["'`‘’“”]$/.test(s)) return `starts or ends with a stray quote (${JSON.stringify(s)}: a launcher's quoting cut it)`;
+  for (const q of ['"', '`']) if (s.split(q).length % 2 === 0) return `has an unbalanced ${q} quote`;
+  if ((s.match(/[“]/g) || []).length !== (s.match(/[”]/g) || []).length) return 'has unbalanced quotes';
+  return null;
+}
+
+// Inline styles and classes of every styled element, by a stable key, with the size actually laid out (clientWidth
 // excludes a classic scrollbar; scripts measure that, not the window).
+// The key (inline-styles.json keys "id-path", read by viewport-fit.mjs and the seed): the element's id when it is unique
+// on the page, else tag[n] steps (n-th child of that tag) from the nearest ancestor with a unique id, else from <body>.
+// RC6-15: keyed by position among all of <body>'s children, a third-party child arriving late shifted every key after it
+// between sizes (allbirds: the pixel container's height:0 was stripped, +750 px). With each record, fp: the tag.first-class
+// chain of the steps, so a key that names another element at some size is seen as ambiguous and left alone.
 function readInlineStyles() {
   const SKIP = new Set(['SCRIPT', 'NOSCRIPT', 'TEMPLATE', 'STYLE', 'LINK', 'META']);
-  const pathOf = (el) => {
-    const parts = [];
-    for (let n = el; n && n !== document.body; n = n.parentElement) {
-      const sibs = [...n.parentElement.children].filter((c) => !SKIP.has(c.tagName));
-      parts.unshift(`${n.tagName.toLowerCase()}:${sibs.indexOf(n) + 1}`);
+  const ids = new Map();
+  for (const e of document.querySelectorAll('[id]')) ids.set(e.id, (ids.get(e.id) || 0) + 1);
+  const keyOf = (el) => {
+    const steps = [], fp = [];
+    let n = el;
+    for (; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+      if (n.id && ids.get(n.id) === 1) break;
+      let k = 1;
+      for (let s = n.previousElementSibling; s; s = s.previousElementSibling) if (s.tagName === n.tagName) k++;
+      steps.unshift(`${n.tagName.toLowerCase()}[${k}]`);
+      fp.unshift(`${n.tagName.toLowerCase()}.${String(n.getAttribute('class') || '').trim().split(/\s+/)[0]}`);
     }
+    const anchor = n && n.id && ids.get(n.id) === 1 ? [`#${encodeURIComponent(n.id)}`] : [];
+    return [[...anchor, ...steps].join('>'), fp.join('>')];
+  };
+  // and the old position (tag:n among all children from <body>), which brief.mjs still places script-owned values by
+  const posOf = (el) => {
+    const parts = [];
+    for (let n = el; n && n !== document.body; n = n.parentElement) parts.unshift(`${n.tagName.toLowerCase()}:${[...n.parentElement.children].filter((c) => !SKIP.has(c.tagName)).indexOf(n) + 1}`);
     return parts.join('>');
   };
   const styles = {};
   for (const el of document.body.querySelectorAll('[style]')) {
     if (SKIP.has(el.tagName) || (el.closest('svg') && el.tagName !== 'svg')) continue;
-    styles[pathOf(el)] = [el.getAttribute('style'), String(el.getAttribute('class') || '')];
+    const [key, fp] = keyOf(el);
+    styles[key] = [el.getAttribute('style'), String(el.getAttribute('class') || ''), fp, posOf(el)];
   }
   return { w: document.documentElement.clientWidth, h: innerHeight, styles };
 }
@@ -780,8 +885,11 @@ function thirdPartyInPage(pageHost) {
     if (out.some((o) => o.el.contains(el))) continue;
     let origin = el.getAttribute('data-tc-origin');
     if (!origin && el.tagName === 'IFRAME') { try { origin = new URL(el.src).origin; } catch { continue; } }
-    if (!origin) continue;
-    if (site(new URL(origin).hostname) === site(pageHost)) continue;
+    // an about:blank or data: frame has the origin "null": no other site's (new URL("null") threw here, and the catch
+    // around this function then dropped every widget of the page, the excluded ones too)
+    let host;
+    try { host = new URL(origin).hostname; } catch { continue; }
+    if (!host || site(host) === site(pageHost)) continue;
     const r = el.getBoundingClientRect();
     // a frame in the page's flow (a video, a map in an article) is content; a fixed one (a launcher) is a widget
     let fixed = false;
@@ -789,8 +897,22 @@ function thirdPartyInPage(pageHost) {
     const embed = el.tagName === 'IFRAME' && !fixed && r.width >= 40 && r.height >= 40;
     const core = embed || Boolean(el.querySelector('main, h1, nav, [role="main"]')) || el.matches('main, nav') || r.width * r.height > innerWidth * innerHeight * 0.3;
     const cls = [...el.classList].filter((c) => !/^tc-|^data-tc/.test(c)).slice(0, 2);
-    const sel = el.id ? `#${CSS.escape(el.id)}` : el.tagName === 'IFRAME' ? `iframe[src^="${origin}"]` : cls.length ? `${el.tagName.toLowerCase()}${cls.map((c) => `.${CSS.escape(c)}`).join('')}` : null;
-    out.push({ el, sel, origin, label: `${el.tagName.toLowerCase()}${el.shadowRoot ? ' (shadow root)' : ''}`, kind: el.tagName === 'IFRAME' ? 'frame' : el.shadowRoot ? 'shadow host' : 'element', core });
+    const tag = el.tagName.toLowerCase();
+    // A frame by its address only when it has one from that origin: RC6-22, allbirds' Impact iframe (found by its
+    // data-tc-origin mark, no src) got iframe[src^="https://utt.impactcdn.com"], which matched nothing on either side.
+    // Otherwise a frame is named by its class, name or title; and any selector but an id must match only this widget's
+    // own elements (those of its origin), or none is given, with why.
+    const src = el.tagName === 'IFRAME' && el.getAttribute('src') ? (() => { try { return new URL(el.src).origin; } catch { return null; } })() : null;
+    const attr = (a) => (el.getAttribute(a) ? `${tag}[${a}="${CSS.escape(el.getAttribute(a))}"]` : null);
+    let sel = el.id ? `#${CSS.escape(el.id)}` : src === origin ? `iframe[src^="${origin}"]` : cls.length ? `${tag}${cls.map((c) => `.${CSS.escape(c)}`).join('')}` : el.tagName === 'IFRAME' ? attr('name') || attr('title') : null;
+    let noSel = sel ? null : el.tagName === 'IFRAME' ? `a frame with no ${el.getAttribute('src') ? 'address on its origin' : 'address'}, id, class, name or title: no selector names it on another load` : 'no id or class: no selector names it on another load';
+    if (sel && !el.id) {
+      let all = [];
+      try { all = [...document.querySelectorAll(sel)]; } catch { /* an invalid selector */ }
+      const own = (m) => m === el || m.getAttribute('data-tc-origin') === origin || (m.tagName === 'IFRAME' && (() => { try { return new URL(m.src).origin === origin; } catch { return false; } })());
+      if (!all.includes(el) || !all.every(own)) { noSel = `${sel} also matches the page's own elements (or not this one)`; sel = null; }
+    }
+    out.push({ el, sel, origin, label: `${tag}${el.shadowRoot ? ' (shadow root)' : ''}`, kind: el.tagName === 'IFRAME' ? 'frame' : el.shadowRoot ? 'shadow host' : 'element', core, ...(noSel ? { noSel } : {}) });
   }
   return out.map(({ el, ...t }) => t);
 }
@@ -901,6 +1023,8 @@ function serializeInPage() {
     el.setAttribute('data-tc-viewmount', '');
   }
   doc.querySelector('style[data-lab-freeze]')?.remove();
+  // the exclusion stylesheet capture adds (meta.ignore): the tool's, never the page's (RC6-05)
+  for (const s of doc.querySelectorAll('style[data-tc-ignore]')) s.remove();
   // the measuring aids never reach the saved page: the app-shell unroll (lib.mjs unrollInPage)
   doc.querySelector('#tc-unroll')?.remove();
   // the root itself too (<html data-tc-unroll>): querySelectorAll searches only below it

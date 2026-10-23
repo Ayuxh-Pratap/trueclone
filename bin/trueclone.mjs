@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const PKG = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPTS = path.join(PKG, 'scripts');
@@ -64,6 +64,32 @@ const run = (file, args) => new Promise((resolve) => {
   child.on('close', (code) => resolve(code ?? 1));
 });
 
+// Every step on a site is journaled and its whole output kept (sites/<name>/logs/): a failure's cause is never lost
+// with a terminal or a launcher (RC6: varsity's calibrate error and heybhaskar's states stack existed only in pipes that
+// were gone). The step itself writes its log and its end record (lib.mjs, TC_LOG / TC_JOURNAL), so a launcher killed
+// on a timeout takes nothing with it. logs/commands.jsonl: a "start" line written here, an "end" line written by the
+// step as it exits (none if it was killed). status reads it to tell a step that ran without effect from one that was
+// never run, and a step still running from one that died.
+const siteOf = (step, args) => { const pos = args.filter((a) => !a.startsWith('--')); return step === 'capture' ? pos[1] : pos[0]; };
+const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+async function runLogged(step, file, args) {
+  const site = siteOf(step, args);
+  const siteRoot = site && /^[\w.-]+$/.test(site) ? path.join(process.cwd(), 'sites', site) : null;
+  if (!siteRoot || (step !== 'capture' && !(await exists(siteRoot)))) return run(file, args);
+  const dir = path.join(siteRoot, 'logs');
+  await fs.mkdir(dir, { recursive: true });
+  // status runs often and says little: one rolling file; every other step its own
+  const logRel = step === 'status' ? 'status.log' : `${stamp()}-${step}.log`;
+  const startedAt = new Date().toISOString();
+  await fs.appendFile(path.join(dir, logRel), `\n# ${startedAt} trueclone ${step} ${args.join(' ')} (trueclone ${version})\n`);
+  return new Promise((resolve) => {
+    const env = { ...process.env, TC_LOG: path.join(dir, logRel), TC_JOURNAL: path.join(dir, 'commands.jsonl'), TC_STEP: step, TC_STEP_STARTED: startedAt, TC_LAUNCHER_PID: String(process.pid) };
+    const child = spawn(process.execPath, [file, ...args], { stdio: 'inherit', env });
+    fs.appendFile(env.TC_JOURNAL, `${JSON.stringify({ event: 'start', step, args, pid: child.pid, startedAt, log: `logs/${logRel}`, tool: version })}\n`).catch(() => {});
+    child.on('close', (code) => resolve(code ?? 1));
+  });
+}
+
 function help() {
   console.log(`trueclone ${version}: the exact same website, at every screen size
 
@@ -90,7 +116,7 @@ async function init() {
   await fs.copyFile(path.join(PKG, 'skill', 'SKILL.md'), path.join(skillDir, 'SKILL.md'));
   // 2. AGENTS.md block for Codex, Cursor and other agents
   const agentsFile = path.join(cwd, 'AGENTS.md');
-  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first. Then capture, and loop: run \`npx trueclone status <name>\`, do exactly the step it names, run it again. \`status\` ends the run itself, by its exit code: 0 Verified (every required result passes on the clone and the app as they are now), 1 work left (do the step it names, then run it again: never end your turn or ask whether to continue on 1), 2 Blocked (something outside the clone stops it: report it, resume with \`status\` once the cause is fixed), 3 Incomplete (the loop concluded with differences left: hand over and say so). Exit 2 and 3 are status's decisions, never yours. Never change the instrument (no NODE_OPTIONS preloads, no edits under node_modules). \`sites/<name>/REPORT.md\` is the deliverable.\n\nRunning it: the steps open Chrome (Playwright) and load the live site, so they need network access and permission to start a browser (in Codex: full access, network on). Capture, reads, calibrate, scores and \`next --verify\` take minutes each: give commands a timeout of at least 15 minutes, and never stop one because it is quiet. Several clones may run at once: timing checks (load, behaviour, reveals, the journey) wait for each other by themselves.\n<!-- trueclone:end -->\n`;
+  const block = `<!-- trueclone:start -->\n## Cloning websites with trueclone\n\nTo clone or rebuild a website, read \`.claude/skills/trueclone/SKILL.md\` first. Then capture, and loop: run \`npx trueclone status <name>\`, do exactly the step it names, run it again. \`status\` ends the run itself, by its exit code: 0 Verified (every required result passes on the clone and the app as they are now), 1 work left (do the step it names, then run it again: never end your turn or ask whether to continue on 1), 2 Blocked (the tool, the environment or a step that cannot be done stops it; it names the owner, the cause and its log: report it, resume with \`status\` once the cause is fixed), 3 Incomplete (every required result is accounted for; it lists each difference left and each result the tool cannot verify: hand over and say so). Exit 2 and 3 are status's decisions, never yours. If a step cannot be done within clone/script.js, clone/patches/ or notes.md, never work around it: write \`- cannot: <step>: <why>\` under ## Findings in notes.md and run status; it decides. Never change the instrument (no NODE_OPTIONS preloads, no edits under node_modules). \`sites/<name>/REPORT.md\` is the deliverable.\n\nRunning it: the steps open Chrome (Playwright) and load the live site, so they need network access and permission to start a browser: in Codex, Full access, or approve each trueclone command to run outside the sandbox with network; \`npx trueclone doctor\` must say ok on every line in the same setup the steps run in. Steps can be long (status prints how long it expects calibrate to take: up to 2-3 hours for a large exact-mode site): never give a trueclone command a time limit shorter than that, and never stop one because it is quiet. If your tool cannot wait that long, run the step in the background and run \`status\`: it says "waiting" while a step is still running and never counts that against you. Every step's whole output is kept in sites/<name>/logs/. Several clones may run at once: timing checks (load, behaviour, reveals, the journey) wait for each other by themselves.\n<!-- trueclone:end -->\n`;
   let agents = (await exists(agentsFile)) ? await fs.readFile(agentsFile, 'utf8') : '';
   agents = agents.includes('<!-- trueclone:start -->') ? agents.replace(/<!-- trueclone:start -->[\s\S]*?<!-- trueclone:end -->\n?/, block) : `${agents}${agents && !agents.endsWith('\n\n') ? '\n' : ''}${block}`;
   await fs.writeFile(agentsFile, agents);
@@ -142,8 +168,9 @@ async function doctor() {
   // what a run needs from this machine, checked before an agent spends hours finding out (RC4: a sandbox without DNS,
   // a timing lock left behind)
   const dns = await import('node:dns/promises');
+  let sandboxed = false;
   try { await dns.lookup('example.com'); console.log('ok   DNS (the live site can be reached by name)'); }
-  catch (e) { ok = false; console.log(`FAIL DNS: ${e.code || e.message} (no network in this environment: captures and every live check will fail; in Codex turn network access on)`); }
+  catch (e) { ok = false; sandboxed = true; console.log(`FAIL DNS: ${e.code || e.message} (no network here: captures and every live check would fail)`); }
   try {
     const http = await import('node:http');
     const server = http.createServer((q, r) => r.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>tc</title><p id=ok>ok</p>'));
@@ -155,15 +182,21 @@ async function doctor() {
       if ((await p.textContent('#ok')) !== 'ok') throw new Error('the page did not render');
     } finally { await b.close(); server.close(); }
     console.log('ok   a local page opens in the browser (the clone is served on localhost)');
-  } catch (e) { ok = false; console.log(`FAIL a local page in the browser: ${String(e.message).split('\n')[0]} (the browser cannot reach localhost here: no clone can be measured)`); }
-  const os = await import('node:os');
-  const lock = path.join(os.tmpdir(), 'trueclone-timing.lock');
-  const held = await fs.readFile(lock, 'utf8').catch(() => null);
-  if (!held) console.log('ok   timing lock free');
+  } catch (e) { ok = false; sandboxed = true; console.log(`FAIL a local page in the browser: ${String(e.message).split('\n')[0]} (the browser cannot reach localhost here: no clone can be measured)`); }
+  // the timing lock: its holder's process id says whether a measurement is really running (a step killed on its time
+  // limit leaves its lock behind: RC6, reported as "running" for 20 minutes)
+  const { timingLockHolder, timingLockFile } = await import(pathToFileURL(path.join(SCRIPTS, 'lib.mjs')).href);
+  const h = await timingLockHolder();
+  if (!h) console.log('ok   timing lock free');
   else {
-    const min = Math.round((Date.now() - (Number(held.split(':').pop()) || 0)) / 60000);
-    console.log(`${min > 20 ? 'warn' : 'ok  '} timing lock held by "${held.split(':')[1] || '?'}" for ${min} min${min > 20 ? ` (older than any measurement: a crashed run; the next one takes it over, or delete ${lock})` : ' (another trueclone measurement is running)'}`);
+    const min = Math.round((Date.now() - h.since) / 60000);
+    console.log(h.alive && min <= 20 ? `ok   timing lock held by "${h.label}" (pid ${h.pid}, ${min} min): another trueclone measurement is running; timing checks wait for it` : `ok   timing lock left by a stopped run ("${h.label}", pid ${h.pid}, ${min} min ago): the next measurement takes it over at once (or delete ${timingLockFile()})`);
   }
+  // A sandbox without network (a coding agent's default): what trueclone needs, and how to get it. Every capture, read,
+  // calibration and score opens the live site and a local page in Chrome.
+  if (sandboxed) console.log(`\nThis environment has no network access (or the browser cannot open localhost). trueclone's steps need both: run them
+with network access. In Codex: approve running trueclone commands outside the sandbox (escalated, with network) or use
+Full access; in Claude Code: allow the command. Then run \`npx trueclone doctor\` again the same way: every line ok.`);
   process.exitCode = ok ? 0 : 1;
 }
 
@@ -185,7 +218,7 @@ else if (/^https?:\/\//.test(cmd)) {
   const head = (await fs.readFile(path.join(SCRIPTS, STEPS[cmd][0]), 'utf8')).split('\n');
   const usage = head.filter((l, i) => l.startsWith('//') && head.slice(0, i + 1).every((x) => x.startsWith('//') || !x.trim())).map((l) => l.replace(/^\/\/ ?/, ''));
   console.log(`trueclone ${cmd}: ${STEPS[cmd][1]}\n\n${usage.join('\n').replace(/node scripts\/[\w-]+\.mjs|npm run \w+ --/g, `trueclone ${cmd}`)}`);
-} else if (STEPS[cmd]) process.exitCode = await run(path.join(SCRIPTS, STEPS[cmd][0]), rest);
+} else if (STEPS[cmd]) process.exitCode = await runLogged(cmd, path.join(SCRIPTS, STEPS[cmd][0]), rest);
 else {
   console.error(`unknown command: ${cmd}\n`);
   help();

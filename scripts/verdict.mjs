@@ -44,7 +44,25 @@ const readJson = (p, d = null) => fs.readFile(p, 'utf8').then(JSON.parse, () => 
 // notes.md sections (bullets only)
 export function notesSection(notes, title) {
   const m = new RegExp(`^## ${title}[^\\n]*\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, 'm').exec(notes);
-  return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').split('\n').map((l) => l.trim()).filter((l) => /^[-*]\s+\S/.test(l)).map((l) => l.replace(/^[-*]\s+/, '')) : [];
+  return m ? bullets(m[1]) : [];
+}
+const bullets = (text) => text.replace(/<!--[\s\S]*?-->/g, '').split('\n').map((l) => l.trim()).filter((l) => /^[-*]\s+\S/.test(l)).map((l) => l.replace(/^[-*]\s+/, ''));
+
+// Review verdicts, by side: the HTML clone's under "## Review", the Next.js app's under "## Review: app". The two sides
+// share frame ids and sizes, and a verdict is given to one picture; with one shared list the first line for a frame
+// answered for both, so the second side's frames reopened whenever the first side's were closed (RC6 zero: 52 frames,
+// back and forth). Each heading is matched exactly; a section may appear more than once.
+export const REVIEW_HEADING = { clone: 'Review', app: 'Review: app' };
+export function reviewVerdicts(notes, side = 'clone') {
+  const out = [];
+  for (const m of String(notes || '').matchAll(/^## ([^\n]*)\n([\s\S]*?)(?=^## |(?![\s\S]))/gm)) {
+    const h = m[1].trim().replace(/\s+/g, ' ');
+    // "## Review: app" (also "Review (Next.js app)"); any other "## Review…" heading is the clone's, as before rc.7
+    const isApp = /^review\b.*\b(app|next(\.js)?)\b/i.test(h);
+    const isClone = /^review\b/i.test(h) && !isApp;
+    if ((side === 'app' && isApp) || (side !== 'app' && isClone)) out.push(...bullets(m[2]));
+  }
+  return out;
 }
 
 // Calibrated bars (docs/plan-rc5 R6): reference/noise.json holds how far the reference is from itself, per route,
@@ -125,12 +143,13 @@ export function shortfallOf(u) {
   return +s.toFixed(2);
 }
 
-export async function evaluate(root, { side = 'clone' } = {}) {
+// readOnly: nothing is written while evaluating (the auditor; the hash cache is a speed-up only)
+export async function evaluate(root, { side = 'clone', readOnly = false } = {}) {
   const compare = side === 'app' ? 'compare-next' : 'compare';
   const meta = await readJson(path.join(root, 'reference', 'meta.json'), null);
   if (!meta) return { side, missingCapture: true, units: [], checks: [], verified: false };
   const refId = refIdOf(meta);
-  const subject = await subjectHash(root, side);
+  const subject = await subjectHash(root, side, { readOnly });
   const results = await readAll(root, compare);
   const noise = await loadNoise(root, refId);
   const notes = await fs.readFile(path.join(root, 'notes.md'), 'utf8').catch(() => '');
@@ -204,11 +223,27 @@ export async function evaluate(root, { side = 'clone' } = {}) {
 //     than the reference's own CSS stops: a clone that freezes what the site animates
 const LINT_EXT = /\.(html?|m?js|jsx|tsx?|css)$/i;
 const LINT_SKIP = new Set(['node_modules', '.next', '.git', 'patches-cache', 'assets', 'bundle', 'vendor']);
+// what a visitor gets: the seed's own working files (.seed-base*.html, .seed-pass.html) are never served
 async function filesOf(dir, out = [], depth = 0) {
   for (const e of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
-    if (e.isDirectory()) { if (!LINT_SKIP.has(e.name) && depth < 6) await filesOf(path.join(dir, e.name), out, depth + 1); } else if (LINT_EXT.test(e.name)) out.push(path.join(dir, e.name));
+    if (e.isDirectory()) { if (!LINT_SKIP.has(e.name) && depth < 6) await filesOf(path.join(dir, e.name), out, depth + 1); } else if (LINT_EXT.test(e.name) && !e.name.startsWith('.')) out.push(path.join(dir, e.name));
   }
   return out;
+}
+// Does a file load or link something from an excluded widget's origin? Only where the origin would be fetched or opened:
+// an attribute that loads or links (src, href, srcset, data, action, poster), a string in a script, url() or @import in
+// a stylesheet. The text of a selector or of a marker attribute is not a load (RC6 allbirds: the exclusion's own rule
+// `iframe[src^="https://utt.impactcdn.com"]{display:none}` and the capture's `data-tc-origin` mark were "kept widgets").
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function loadsOrigin(text, file, origin) {
+  const o = esc(origin);
+  const css = new RegExp(`(url\\(|@import)\\s*["']?${o}`, 'i');
+  const js = new RegExp(`["'\`]${o}`);
+  if (/\.css$/i.test(file)) return css.test(text);
+  if (/\.(m?js|jsx|tsx?)$/i.test(file)) return js.test(text);
+  if (new RegExp(`(?<![\\w-])(src|href|srcset|data|action|poster|formaction|xlink:href)\\s*=\\s*["']?[^"'>\\s]*${o}`, 'i').test(text)) return true;
+  if ([...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].some((m) => js.test(m[1]))) return true;
+  return [...text.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].some((m) => css.test(m[1])) || new RegExp(`style\\s*=\\s*["'][^"']*url\\(\\s*["']?${o}`, 'i').test(text);
 }
 // a stylesheet's text without its @media (prefers-reduced-motion …) blocks (balanced braces)
 export function withoutReducedMotion(css) {
@@ -225,28 +260,76 @@ export function withoutReducedMotion(css) {
 }
 const STOPS = /animation(?:-name)?\s*:\s*none\b|animation-play-state\s*:\s*paused\b/gi;
 export const countStops = (text) => (withoutReducedMotion(text).match(STOPS) || []).length;
+// The animation stops a text holds, each named by its rule (selector and declaration), so a stop is compared with the
+// reference's own rule set, not counted: every page of a multi-page clone carries the same inline styles again, and a
+// count would grow with the number of pages
+// text is a stylesheet, or an HTML page (its <style> blocks and style attributes); a script's stops are counted apart
+export function stopRules(text, file = 'x.css') {
+  const keys = new Set();
+  const sheets = /\.css$/i.test(file) ? [text] : [...String(text).matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]);
+  for (const sheet of sheets) for (const m of withoutReducedMotion(sheet).matchAll(/([^{}]*)\{([^{}]*)\}/g)) for (const d of m[2].match(STOPS) || []) keys.add(`${m[1].trim().replace(/\s+/g, ' ').slice(-200)}|${d.replace(/\s+/g, '').toLowerCase()}`);
+  if (!/\.css$/i.test(file)) for (const m of String(text).matchAll(/(?<![\w-])style\s*=\s*["']([^"']*)["']/gi)) for (const d of m[1].match(STOPS) || []) keys.add(`[style]|${d.replace(/\s+/g, '').toLowerCase()}`);
+  return keys;
+}
 const OVERRIDE = /\b(Math\.random|Date\.now|performance\.now|(?:window\.)?requestAnimationFrame)\s*=(?!=)/;
-export async function lintSubject(root, meta, side = 'clone') {
+// Every finding names its owner. The agent may edit clone/script.js and clone/patches/ only; a finding in a page
+// trueclone generated is the seed's when the seed's own output (.seed-base*.html) holds it (a tool defect: status ends
+// Blocked, never asks for an edit it forbids, RC6 allbirds), and the patch's when a patch inserted it (that patch is
+// named). In the app (next/), what the clone also has is the clone's; the rest is the generator's.
+export async function lintSubject(root, meta, side = 'clone', { _cloneFindings } = {}) {
   const dir = path.join(root, side === 'app' ? 'next' : 'clone');
   const findings = [];
   const files = await filesOf(dir);
-  let stops = 0;
+  const read = (f) => fs.readFile(f, 'utf8').catch(() => '');
+  const seedBase = side === 'clone' ? await Promise.all((await fs.readdir(dir).catch(() => [])).filter((f) => /^\.seed-base.*\.html$/.test(f)).map((f) => read(path.join(dir, f)))) : [];
+  const patchFiles = side === 'clone' ? (await filesOf(path.join(dir, 'patches'))) : [];
+  const patches = await Promise.all(patchFiles.map(async (f) => ({ rel: path.relative(root, f).split(path.sep).join('/'), text: await read(f) })));
+  const editable = (rel) => /^clone\/(script\.js$|patches\/)/.test(rel);
+  // whose is a finding found in `rel` by `test(text, file)`?
+  const ownerOf = (rel, test) => {
+    if (side === 'app') return null; // decided below, against the clone
+    if (editable(rel)) return { owner: 'clone', fix: rel };
+    // no seed record (a clone not made by seed): what it holds is its author's
+    if (!seedBase.length) return { owner: 'clone', fix: rel };
+    if (seedBase.some((t) => test(t, 'x.html'))) return { owner: 'tool', fix: null };
+    const p = patches.find((x) => test(x.text, x.rel));
+    return p ? { owner: 'clone', fix: p.rel } : { owner: 'tool', fix: null };
+  };
+  const add = (rel, what, test) => findings.push({ file: rel, what, ...(ownerOf(rel.replace(/:\d+$/, ''), test) || {}) });
+  const stops = new Set();
+  let jsStops = 0;
   for (const f of files) {
-    const text = await fs.readFile(f, 'utf8').catch(() => '');
+    const text = await read(f);
     const rel = path.relative(root, f).split(path.sep).join('/');
     for (const i of meta.ignore || []) {
       const id = /^#([\w-]+)$/.exec(i.sel)?.[1];
-      if ((i.origin && text.includes(i.origin)) || (id && new RegExp(`id=["']${id}["']|getElementById\\(["']${id}["']\\)`).test(text))) findings.push({ file: rel, what: `keeps ${i.sel} (${i.why || 'excluded'}), which is excluded on both sides: remove it from the ${side === 'app' ? 'app' : 'clone'}, or capture again with --include "${i.sel}" to clone it` });
+      const idRe = id && new RegExp(`(?<![\\w-])id\\s*=\\s*["']${esc(id)}["']|getElementById\\(\\s*["']${esc(id)}["']\\s*\\)`);
+      const test = (t, file) => Boolean((i.origin && loadsOrigin(t, file, i.origin)) || (idRe && idRe.test(t)));
+      if (test(text, f)) add(rel, `keeps ${i.sel} (${i.why || 'excluded'}), which is excluded on both sides: remove it from the ${side === 'app' ? 'app' : 'clone'}, or capture again with --include "${i.sel}" to clone it`, test);
     }
     const line = text.split('\n').findIndex((l) => OVERRIDE.test(l));
-    if (line >= 0 && /\.(m?js|jsx|tsx?|html?)$/i.test(f)) findings.push({ file: `${rel}:${line + 1}`, what: `replaces ${OVERRIDE.exec(text.split('\n')[line])[1]}: the measurement's controls must not be built into the clone (its randomness and time are the site's rule, ported)` });
-    stops += countStops(text);
+    if (line >= 0 && /\.(m?js|jsx|tsx?|html?)$/i.test(f)) { const what = OVERRIDE.exec(text.split('\n')[line])[1]; add(`${rel}:${line + 1}`, `replaces ${what}: the measurement's controls must not be built into the clone (its randomness and time are the site's rule, ported)`, (t) => OVERRIDE.test(t)); }
+    if (/\.(m?js|jsx|tsx?)$/i.test(f)) jsStops += countStops(text);
+    else for (const k of stopRules(text, f)) stops.add(k);
   }
-  // the reference's own stops: its rendered page and its stylesheets
-  let refStops = countStops(await fs.readFile(path.join(root, 'reference', 'rendered.html'), 'utf8').catch(() => ''));
-  for (const f of await fs.readdir(path.join(root, 'reference', 'assets', 'stylesheet')).catch(() => [])) refStops += countStops(await fs.readFile(path.join(root, 'reference', 'assets', 'stylesheet', f), 'utf8').catch(() => ''));
-  if (stops > refStops) findings.push({ file: side === 'app' ? 'next/' : 'clone/', what: `stops ${stops - refStops} more animation(s) (animation: none, animation-play-state: paused) than the reference's own CSS, outside a prefers-reduced-motion rule: what the site animates must run` });
-  return { pass: !findings.length, findings, stops, refStops };
+  // the reference's own stops: its rendered page, its stylesheets, and (for scripts) its scripts
+  const refStops = stopRules(await read(path.join(root, 'reference', 'rendered.html')), 'rendered.html');
+  for (const f of await fs.readdir(path.join(root, 'reference', 'assets', 'stylesheet')).catch(() => [])) for (const k of stopRules(await read(path.join(root, 'reference', 'assets', 'stylesheet', f)), f)) refStops.add(k);
+  let refJsStops = 0;
+  for (const f of (await fs.readdir(path.join(root, 'reference', 'scripts')).catch(() => [])).filter((x) => /\.js$/.test(x) && !/\.pretty\.js$/.test(x))) refJsStops += countStops(await read(path.join(root, 'reference', 'scripts', f)));
+  if (jsStops > refJsStops) findings.push({ file: side === 'app' ? 'next/' : 'clone/script.js', what: `its scripts stop ${jsStops - refJsStops} more animation(s) (animation: none, animation-play-state: paused) than the site's own scripts: what the site animates must run`, ...(side === 'clone' ? { owner: 'clone', fix: 'clone/script.js' } : {}) });
+  const extra = [...stops].filter((k) => !refStops.has(k));
+  if (extra.length) {
+    const seedStops = new Set(seedBase.flatMap((t) => [...stopRules(t, 'x.html')]));
+    const fromSeed = seedBase.length > 0 && extra.every((k) => seedStops.has(k));
+    findings.push({ file: side === 'app' ? 'next/' : 'clone/', what: `stops ${extra.length} animation(s) the reference's own CSS does not (${extra.slice(0, 3).map((k) => k.replace('|', ' { ')).join('; ')} }), outside a prefers-reduced-motion rule: what the site animates must run`, ...(side === 'clone' ? { owner: fromSeed ? 'tool' : 'clone', fix: fromSeed ? null : (patches.find((p) => [...stopRules(p.text, p.rel)].some((k) => extra.includes(k)))?.rel || 'clone/patches/') } : {}) });
+  }
+  if (side === 'app') {
+    // the app is generated from the clone: what the clone has too is the clone's (fixed in clone/, then regenerated)
+    const cloneLint = _cloneFindings || (await lintSubject(root, meta, 'clone')).findings;
+    for (const f of findings) { const same = cloneLint.find((c) => c.what === f.what); Object.assign(f, same ? { owner: same.owner, fix: same.fix } : { owner: 'tool', fix: null }); }
+  }
+  return { pass: !findings.length, findings, stops: stops.size + jsStops, refStops: refStops.size + refJsStops };
 }
 
 // pass/fail of a measured unit against its (calibrated) bar, with its frames or checkpoints against their floors
@@ -260,16 +343,41 @@ function judge(u, rec, noise) {
     return;
   }
   const b = barFor(noise, check, u.route, u.viewport);
+  const allowance = rec.template && check === 'canvas' ? TEMPLATE_ALLOWANCE : 0;
   if (b.unstable) {
-    // the reference does not match itself here: pixels cannot judge it; the envelope (measure.mjs) or a behaviour check
-    // must, and the record carries that verdict when it was made
+    // The reference does not match itself here: its mean cannot be held to a bar. The unit is judged frame by frame
+    // (rc.7): every frame the reference varies on by its envelope (the clone's nearest reference draw within the draws'
+    // own range, measure.mjs), every other frame at its bar, as always. A frame the reference varies on with no
+    // envelope measured leaves the unit "not verifiable", never passed. (rc.6 judged a states unit by its varying frames
+    // alone, and a journey unit could only ever be "not verifiable": RC6 zero.)
     u.bar = null;
     u.calibration = b;
+    const floor = FLOORS[check] != null ? FLOORS[check] - allowance : null;
+    const members = (rec.members || []).filter((m) => typeof m.value === 'number');
+    if (members.length) {
+      const below = [];
+      let unjudged = 0, enveloped = 0;
+      for (const m of members) {
+        const fb = barFor(noise, check, u.route, u.viewport, String(m.id));
+        if (fb.unstable) {
+          if (!m.envelope) { unjudged++; continue; }
+          enveloped++;
+          if (!m.envelope.pass) below.push({ id: m.id, y: m.y, name: m.name, value: m.envelope.value, bar: m.envelope.bar, envelope: m.envelope, reason: m.envelope.reason });
+        } else {
+          const mbar = fb.calibrated ? +(fb.bar - allowance).toFixed(2) : floor;
+          if (typeof mbar === 'number' && m.value < mbar) below.push({ id: m.id, y: m.y, name: m.name, value: m.value, bar: mbar });
+        }
+      }
+      if (unjudged) { u.status = 'tool'; u.reason = `the reference differs from itself here (${b.self}% over ${b.draws} loads), and ${unjudged} of its frames it varies on have no envelope measured: not verifiable`; return; }
+      u.membersBelow = below;
+      u.status = below.length ? 'fail' : 'pass';
+      u.reason = below.length ? `judged frame by frame (the reference differs from itself here, ${b.self}%): ${below.length} below` : `judged frame by frame (the reference differs from itself here, ${b.self}%): ${enveloped} frame(s) it varies on, each within its own draws; the other ${members.length - enveloped} at their bars`;
+      return;
+    }
     if (rec.envelope) { u.status = rec.envelope.pass ? 'pass' : 'fail'; u.reason = rec.envelope.reason; }
     else { u.status = 'tool'; u.reason = `the reference differs from itself here (${b.self}% over ${b.draws} loads): judged by its envelope and behaviour, which were not measured`; }
     return;
   }
-  const allowance = rec.template && check === 'canvas' ? TEMPLATE_ALLOWANCE : 0;
   u.bar = +(b.bar - allowance).toFixed(2);
   if (allowance) u.allowance = allowance;
   u.calibration = b.calibrated ? b : undefined;
@@ -293,7 +401,7 @@ function judge(u, rec, noise) {
 }
 
 async function evaluateReview(root, meta, side, subject, notes) {
-  const verdicts = notesSection(notes, 'Review');
+  const verdicts = reviewVerdicts(notes, side);
   const frames = [];
   const missingDirs = [];
   for (const d of reviewDirs(meta, side)) {

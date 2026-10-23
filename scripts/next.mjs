@@ -18,6 +18,7 @@ import net from 'node:net';
 import { parse, serialize } from 'parse5';
 import { fileURLToPath as toPath } from 'node:url';
 import { parseArgs, siteDir } from './lib.mjs';
+import { routeDir, appDir, decodeSegments, safeSegment } from './routes.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -39,7 +40,10 @@ const PKG = {
   name: `${name}-next`, private: true, version: '0.1.0',
   scripts: { dev: 'next dev', build: 'next build', start: `next start -p ${port}` },
   dependencies: {
-    next: '16.4.0', react: '19.3.0', 'react-dom': '19.3.0',
+    // 16.4.2, not 16.4.0: npm's advisory feed lists next >=16.0.0 <=16.4.0 under two critical remote code execution
+    // advisories and a denial of service (rc.7); 16.4.1 and 16.4.2 clear all three. The app a user deploys must not
+    // start on a version with a known critical advisory
+    next: '16.4.2', react: '19.3.0', 'react-dom': '19.3.0',
     ...(seeded ? {} : { gsap: '3.13.0', lenis: '1.1.18', swiper: '11.2.6', three: '0.128.0' }),
     clsx: '2.1.1', 'tailwind-merge': '3.7.0',
   },
@@ -48,6 +52,16 @@ const PKG = {
     typescript: '5.9.3', '@types/react': '19.3.0', '@types/node': '22.18.0',
   },
 };
+// Next 16.4 turns on "agent upgrade reminders" by default (experimental.agentUpgrade 'security'): when `next build` runs
+// under a coding agent (an env var such as CLAUDECODE) and npm's advisory feed lists the installed version, the first
+// build exits 1 with an upgrade message and leaves a receipt in .next/cache/next-agentic-upgrade-retries/ that lets the
+// next build within 5 minutes pass, after which the receipt is gone: builds alternate fail/pass, depending on who runs
+// them, the network and the clock (rc.7 probe). `--build`/`--verify` build once, so the delivered app's verification
+// failed on a reminder, not on the app. Next documents `false` as the switch that turns the reminders off
+// (docs/app/api-reference/config/next-config-js/agentUpgrade); the advisory itself is reported, never acted on here. The
+// pinned version above is chosen against npm's advisory feed instead (docs/rc7-notes.md); a user who deploys the app
+// keeps it up to date like any Next.js app.
+const NO_UPGRADE_NUDGE_WHY = "Next's upgrade reminders off (agentUpgrade: false): a build that passes or fails by who runs it is no verification; see scripts/next.mjs.";
 
 // ---------------- HTML -> JSX ----------------
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
@@ -76,6 +90,12 @@ const styleObject = (css) => {
   }
   return o;
 };
+// The style object as TypeScript. A value with its priority ("fixed !important", which the server renders as written:
+// position:fixed !important) is no member of React's typed values ("fixed" | "static" | ...), so the object as a whole
+// failed `as CSSProperties` (TS2352, RC4 ALLBIRDS-12). Such a value is written as a plain string: it is then comparable
+// to the property's type like any other value, and the priority stays in the markup.
+const IMPORTANT = /!\s*important\s*$/i;
+const styleJsx = (o) => `{${Object.entries(o).map(([k, v]) => `${JSON.stringify(k)}:${JSON.stringify(v)}${IMPORTANT.test(v) ? ' as string' : ''}`).join(',')}}`;
 // A relative reference resolves against the page's folder (or its <base href>) in the HTML clone; the app serves the
 // same files from public/ at every route, so it is written root-relative: assets/x.png on /work/x stays /assets/x.png.
 // Absolute, protocol-relative, data:, in-page (#x) and query-only references are left as they are.
@@ -111,7 +131,7 @@ function jsxAttrs(node, inSvg) {
     if (node.tagName === 'input' && a.name === 'checked') { parts.push('defaultChecked'); continue; }
     if (LEGACY.has(a.name) && !inSvg) { parts.push(`{...{ ${JSON.stringify(a.name)}: ${JSON.stringify(a.value)} }}`); continue; }
     // url(assets/…) in an inline style resolves against the page in the clone; the app serves assets at /assets
-    if (a.name === 'style') { usesStyle = true; parts.push(`style={${JSON.stringify(styleObject(cssUrls(a.value)))} as CSSProperties}`); continue; }
+    if (a.name === 'style') { usesStyle = true; parts.push(`style={${styleJsx(styleObject(cssUrls(a.value)))} as CSSProperties}`); continue; }
     // SVG elements have no typed boolean props (hidden), so they go through the spread too
     // in HTML a boolean attribute is on whatever its value (disabled="true", even disabled="false"); hidden="until-found"
     // is the one with a meaning of its own
@@ -145,31 +165,42 @@ function jsxAttrs(node, inSvg) {
 }
 
 // JSX trims and collapses whitespace that HTML renders, so text is written to keep exactly what the browser showed:
-// verbatim where white-space is preserved (code samples), elsewhere with its edge spaces as {" "}
+// verbatim where white-space is preserved (code samples), elsewhere with its edge spaces as {" "} and its line breaks
 const SPACE = '{" "}';
 const TABLE_PARTS = new Set(['table', 'thead', 'tbody', 'tfoot', 'tr', 'colgroup', 'select', 'optgroup', 'html', 'head', 'frameset']);
 const keepsWhitespace = (node) => ['pre', 'textarea', 'listing', 'xmp'].includes(node.tagName)
   || (node.attrs || []).some((a) => (a.name === 'class' && /(^|\s)whitespace-(pre|break-spaces)/.test(a.value)) || (a.name === 'style' && /white-space:\s*(pre|break-spaces)/.test(a.value)));
-const textJsx = (s) => (/[{}<>&"']/.test(s) ? `{${JSON.stringify(s)}}` : s);
+// as a JSON string when JSX would read it otherwise: markup characters, a line break (JSX drops it), white space at an
+// edge (JSX trims a line's edges, U+00A0 included)
+const textJsx = (s) => (/[{}<>&"'\n]/.test(s) || /^\s|\s$/.test(s) ? `{${JSON.stringify(s)}}` : s);
+// A run of HTML white space (space, tab, line break: not U+00A0, which JS's \s also matches, and which is text: "10 km"
+// with a no-break space must not wrap) as the browser can render it: its line breaks when it has any, otherwise one
+// space. Under the default white-space both are one collapsible space; under pre-line, set by a stylesheet rule the
+// generator cannot see, each line break is a line (RC4 VAR-11c: /legal lost its line breaks, a clone patch put them
+// back). Spaces and tabs around a line break collapse under both, so the run's line breaks are all it needs.
+const collapse = (s) => s.replace(/[ \t\n\r\f]+/g, (r) => '\n'.repeat((r.match(/\n/g) || []).length) || ' ');
+const edgeJsx = (r) => (!r ? '' : r === ' ' ? SPACE : `{${JSON.stringify(r)}}`);
 
 function toJsx(node, depth, inSvg = false, inPre = false) {
   const pad = '  '.repeat(depth);
   if (node.nodeName === '#comment') return '';
   if (node.nodeName === '#text') {
     if (inPre) return `{${JSON.stringify(node.value)}}`;
-    if (!node.value.trim()) {
-      // Whitespace between two siblings is kept as one space wherever the HTML had it: whether it renders depends on
-      // the CSS (between two divs it shows if they are inline-block, as split words are), and where it does not
-      // render, the browser drops it the same way. Only table structure and edges never get one (React rejects text
-      // inside <tr>/<tbody>, and a space at a block's edge never renders).
+    const text = collapse(node.value);
+    if (/^[ \n]*$/.test(text)) {
+      // Whitespace between two siblings is kept (one space, or its line breaks) wherever the HTML had it: whether it
+      // renders depends on the CSS (between two divs it shows if they are inline-block, as split words are), and where
+      // it does not render, the browser drops it the same way. Only table structure and edges never get one (React
+      // rejects text inside <tr>/<tbody>, and a space at a block's edge never renders; white space alone at an element's
+      // edge, as in <p>\n<span>, which pre-line shows as an empty line, is the one loss left).
       const sibs = node.parentNode?.childNodes || [];
       const i = sibs.indexOf(node);
       const prev = sibs[i - 1], next = sibs[i + 1];
       if (TABLE_PARTS.has(node.parentNode?.tagName)) return '';
-      return prev && next && prev.nodeName !== '#comment' && next.nodeName !== '#comment' ? SPACE : '';
+      return prev && next && prev.nodeName !== '#comment' && next.nodeName !== '#comment' ? edgeJsx(text) : '';
     }
-    const text = node.value.replace(/\s+/g, ' ');
-    return `${/^\s/.test(text) ? SPACE : ''}${textJsx(text.trim())}${/\s$/.test(text) ? SPACE : ''}`;
+    const [, lead, core, trail] = /^([ \n]*)([^]*?)([ \n]*)$/.exec(text);
+    return `${edgeJsx(lead)}${textJsx(core)}${edgeJsx(trail)}`;
   }
   if (['script', 'noscript', 'style'].includes(node.nodeName)) return '';
   // a seeded clone's stylesheets are written into <head> in their document order (seededApp)
@@ -218,8 +249,9 @@ import { fileURLToPath } from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
 // Generated by scripts/next.mjs (app mode, own bundle): the site's own code is served from public/ as recorded; its
 // addresses answer with the first-visit bootstrap, which registers the service worker that serves the rest offline.
+// ${NO_UPGRADE_NUDGE_WHY}
 export default {
-  reactStrictMode: true, turbopack: { root }, outputFileTracingRoot: root,
+  reactStrictMode: true, turbopack: { root }, outputFileTracingRoot: root, experimental: { agentUpgrade: false },
   async rewrites() { return { beforeFiles: ${JSON.stringify(rewrites)} }; },
   async headers() { return [{ source: '/tc-sw.js', headers: [{ key: 'Service-Worker-Allowed', value: '/' }, { key: 'Cache-Control', value: 'no-cache' }] }]; },
 };
@@ -451,7 +483,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 // Pin the project root: the lab folder above has its own lockfile.
-export default { reactStrictMode: true, turbopack: { root }, outputFileTracingRoot: root };
+// ${NO_UPGRADE_NUDGE_WHY}
+export default { reactStrictMode: true, turbopack: { root }, outputFileTracingRoot: root, experimental: { agentUpgrade: false } };
 `);
 await fs.writeFile(path.join(out, 'tsconfig.json'), JSON.stringify({
   compilerOptions: {
@@ -499,15 +532,19 @@ async function seededApp() {
   // the documents: the captured page, and every separate page of the site (clone/<route>/index.html)
   const pages = [{ path: '/', slug: '', parts: [], head, body, htmlEl, title }];
   for (const r of separate) {
-    const parts = r.path.split('/').filter(Boolean);
-    // a folder named (x), [x], @x or _x is route syntax to Next, not an address
-    if (!parts.length || parts.some((p) => /^[([@_]/.test(p))) { console.warn(`WARNING ${r.path}: not a Next.js route folder name, left out`); continue; }
-    const text = await fs.readFile(path.join(cloneDir, ...parts, 'index.html'), 'utf8').catch(() => null);
-    if (text === null) { console.warn(`WARNING ${r.path}: no clone/${parts.join('/')}/index.html (seed the site again)`); continue; }
+    // the page as the seed wrote it (clone/Landing Page.html/index.html), and its app folder: the encoded segments
+    // (app/(<slug>)/Landing%20Page.html/), the only form Next serves at the route's address (routes.mjs appDir)
+    const cloneParts = routeDir(r.path).split('/').filter(Boolean);
+    const app = appDir(r.path);
+    // a folder named (x), [x], @x or _x is route syntax to Next, not an address; ":" or "|" is no folder name on Windows
+    if (!app) { console.warn(`WARNING ${r.path}: not a Next.js route folder name, left out`); continue; }
+    const parts = app.split('/');
+    const text = await fs.readFile(path.join(cloneDir, ...cloneParts, 'index.html'), 'utf8').catch(() => null);
+    if (text === null) { console.warn(`WARNING ${r.path}: no clone/${cloneParts.join('/')}/index.html (seed the site again)`); continue; }
     const d = parse(text);
     const h = find(d, 'html');
     const hd = find(h, 'head');
-    pages.push({ path: r.path, slug: r.slug, parts, head: hd, body: find(h, 'body'), htmlEl: h, title: (els(hd).find((e) => e.tagName === 'title')?.childNodes[0]?.value || title).trim() });
+    pages.push({ path: r.path, slug: r.slug, parts, cloneParts, head: hd, body: find(h, 'body'), htmlEl: h, title: (els(hd).find((e) => e.tagName === 'title')?.childNodes[0]?.value || title).trim() });
   }
   docBodies.push(...pages.slice(1).map((pg) => pg.body));
   // where each page's relative references point: its own folder, or its <base href>
@@ -531,7 +568,8 @@ async function seededApp() {
     for (const m of css.matchAll(/@layer\s+([\w-]+(?:\s*,\s*[\w-]+)*)\s*[;{]/g)) for (const l of m[1].split(',').map((x) => x.trim())) if (!layerOrder.includes(l)) layerOrder.push(l);
     usesTailwind ||= /--tw-|tailwindcss v\d/.test(css);
   };
-  const localFile = (href) => (/^\/(?!\/)/.test(href) ? path.join(cloneDir, ...decodeURIComponent(href.split(/[?#]/)[0]).split('/').filter(Boolean)) : null);
+  // a root-relative address -> its file in clone/, by the bundled server's rule (routes.mjs; a bare % never throws)
+  const localFile = (href) => (/^\/(?!\/)/.test(href) ? path.join(cloneDir, ...decodeSegments(href.split(/[?#]/)[0]).map(safeSegment)) : null);
   const exists = (f) => fs.stat(f).then(() => true, () => false);
   const headAttr = (k, v) => `${k === 'crossorigin' ? 'crossOrigin' : k === 'hreflang' ? 'hrefLang' : k === 'referrerpolicy' ? 'referrerPolicy' : k === 'fetchpriority' ? 'fetchPriority' : k === 'imagesrcset' ? 'imageSrcSet' : k === 'imagesizes' ? 'imageSizes' : k}=${JSON.stringify(k === 'crossorigin' && v === '' ? 'anonymous' : v)}`;
   const linkTag = (a) => `<link ${Object.entries(a).filter(([k]) => !/^on/.test(k)).map(([k, v]) => headAttr(k, v)).join(' ')} />`;
@@ -609,7 +647,7 @@ async function seededApp() {
       used.add(k);
       return k;
     };
-    const from = pg.slug ? `clone/${pg.parts.join('/')}/index.html` : 'clone/index.html';
+    const from = pg.slug ? `clone/${pg.cloneParts.join('/')}/index.html` : 'clone/index.html';
     const writeComp = async (compName, node) => {
       usesStyle = false;
       const jsx = toJsx(node, 3);
@@ -726,7 +764,7 @@ export default function SiteScripts({ scripts }: { scripts: SiteScript[] }) {
     const bodyAttrs = jsxAttrs(pg.body, false);
     const layoutStyle = usesStyle;
     const preloads = m.scriptList.filter((s) => s.src).map((s) => `        <link rel="${s.type === 'module' ? 'modulepreload' : 'preload'}" href=${JSON.stringify(s.src)}${s.type === 'module' ? '' : ' as="script"'} />`);
-    await fs.writeFile(path.join(layoutDir, 'layout.tsx'), `// Generated by scripts/next.mjs: the <html>, <head> and <body> of ${pg.slug ? `clone/${pg.parts.join('/')}/index.html` : 'clone/index.html'}
+    await fs.writeFile(path.join(layoutDir, 'layout.tsx'), `// Generated by scripts/next.mjs: the <html>, <head> and <body> of ${pg.slug ? `clone/${pg.cloneParts.join('/')}/index.html` : 'clone/index.html'}
 import type { Metadata } from 'next';
 ${layoutStyle ? "import type { CSSProperties } from 'react';\n" : ''}import '${globalsImport.startsWith('.') ? globalsImport : './' + globalsImport}';
 
@@ -772,8 +810,9 @@ ${m.dataBlocks.join('\n')}
   }
   // the captured page at its own address too (/products/x, /en/getting-started), as in the clone: a link, Back or a
   // reload there finds the page (a single-page app already answers every address)
-  const startParts = (() => { try { return new URL(siteMeta.finalUrl || siteMeta.url).pathname.split('/').filter(Boolean).map(decodeURIComponent); } catch { return []; } })();
-  if (!spa && startParts.length && !startParts.some((p) => /^[([@_.]|[\\:*?"<>|]/.test(p))) {
+  // (encoded folder names, as every route's: routes.mjs appDir)
+  const startParts = (() => { try { return (appDir(new URL(siteMeta.finalUrl || siteMeta.url).pathname) ?? '.').split('/').filter(Boolean); } catch { return []; } })();
+  if (!spa && startParts.length && !startParts.some((p) => p.startsWith('.'))) {
     const group = separate.length ? '(home)' : '';
     const dir = path.join(out, 'app', ...(group ? [group] : []), ...startParts);
     await fs.mkdir(dir, { recursive: true });

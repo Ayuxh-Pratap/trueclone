@@ -8,7 +8,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeUnits } from '../../scripts/results.mjs';
-import { startIdentity, refIdOf } from '../../scripts/identity.mjs';
+import { startIdentity, refIdOf, codeHash, toolVersion } from '../../scripts/identity.mjs';
+import { MASK_VERSION } from '../../scripts/lib.mjs';
 
 export const SCRIPTS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts');
 export const VPS = ['desktop', 'tablet', 'mobile', 'laptop', 'wide'];
@@ -28,7 +29,7 @@ export async function makeSite(project, name, kind = 'doc', opts = {}) {
   const root = path.join(project, 'sites', name);
   const app = kind === 'app';
   const routes = [{ path: '/', slug: '', dir: 'reference' }, ...(opts.routes || []).map((p) => ({ path: p, slug: p.replace(/^\//, '').replace(/\//g, '__'), dir: `reference/routes/${p.replace(/^\//, '').replace(/\//g, '__')}` }))];
-  const meta = { url: 'http://127.0.0.1:9/', name, mode: opts.exact ? 'exact' : 'template', ...(opts.exact ? { permission: 'test' } : {}), hide: [], routes: routes.length > 1 ? routes : [], unroll: 'y', ...(opts.ignore ? { ignore: opts.ignore } : {}), stabilise: { seed: 20261021, clock: '2026-01-15T12:00:00.000Z', motion: 'no-preference', loops: 'held at 2300 ms' }, capturedAt: '2026-10-22T00:00:00.000Z', complete: true, viewports: VPS.map((v) => ({ viewport: v, pageHeight: 2000, sections: 3 })), ...(app ? { canvasApp: { canvas: 'canvas#c', engine: 'three' } } : {}) };
+  const meta = { maskVersion: MASK_VERSION, url: 'http://127.0.0.1:9/', name, mode: opts.exact ? 'exact' : 'template', ...(opts.exact ? { permission: 'test' } : {}), hide: [], routes: routes.length > 1 ? routes : [], unroll: 'y', ...(opts.ignore ? { ignore: opts.ignore } : {}), stabilise: { seed: 20261021, clock: '2026-01-15T12:00:00.000Z', motion: 'no-preference', loops: 'held at 2300 ms' }, capturedAt: '2026-10-22T00:00:00.000Z', complete: true, viewports: VPS.map((v) => ({ viewport: v, pageHeight: 2000, sections: 3 })), ...(app ? { canvasApp: { canvas: 'canvas#c', engine: 'three' } } : {}) };
   await put(root, 'reference/meta.json', meta);
   // calibrated (calibrate.mjs), with no entry: every bar is the fixed target
   await put(root, 'reference/noise.json', { refId: refIdOf(meta), at: '2026-10-22T02:00:00.000Z', draws: 2, drawDirs: [], entries: {} });
@@ -41,8 +42,8 @@ export async function makeSite(project, name, kind = 'doc', opts = {}) {
     for (const r of routes) for (const v of VPS) await put(root, `${r.dir}/states/${v}.json`, { steps: [] });
     await put(root, 'reference/states/desktop.summary.json', { counts: {} });
     await put(root, 'reference/desktop.spec.json', {});
-    await put(root, 'reference/reveals.desktop.json', { scrubs: opts.curves ? [{ cls: 'hero', path: 'section:1' }] : [] });
-    await put(root, 'reference/widgets.desktop.json', {});
+    await put(root, 'reference/reveals.desktop.json', { keys: 'id-path', scrubs: opts.curves ? [{ cls: 'hero', path: 'section:1' }] : [] });
+    await put(root, 'reference/widgets.desktop.json', { keys: 'id-path' });
     await put(root, 'reference/inline-styles.json', {});
     await put(root, 'reference/desktop.sections.json', []);
     await put(root, 'design-tokens.json', {});
@@ -52,7 +53,7 @@ export async function makeSite(project, name, kind = 'doc', opts = {}) {
   if (opts.interactions) await put(root, 'reference/interactions.auto.json', opts.interactions.map((n) => ({ name: n, viewport: 'desktop', steps: [] })));
   await put(root, 'clone/index.html', opts.cloneHtml || '<!doctype html><title>x</title><body><h1>clone</h1><script src="script.js" defer></script></body>\n');
   await put(root, 'clone/script.js', opts.cloneScript || 'const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\nconst e = 5;\nconsole.log(a + b + c + d + e);\n');
-  await put(root, 'clone/.seed.json', { capturedAt: meta.capturedAt, at: '2026-10-22T01:00:00.000Z', pages: 1 });
+  await put(root, 'clone/.seed.json', { capturedAt: meta.capturedAt, at: '2026-10-22T01:00:00.000Z', pages: 1, code: codeHash('seed'), tool: toolVersion() });
   await put(root, 'next/app/page.tsx', 'export default function Page() { return null; }\n');
   // reads and seed inputs must not look newer than the clone: set every file's time to the capture time + 1 h
   const t = new Date('2026-10-22T01:00:00.000Z');
@@ -89,20 +90,25 @@ export async function measureAll(site, side = 'clone', { value = 99.5, skip = []
   if (auto) await write('interact', [...auto.map((s) => ({ state: s.name, value: 99, score: 99, pass: true })), { state: '_plan', scenarios: auto.map((s) => s.name), skipped: [] }]);
 }
 
-// Review frames shot of the clone (or app) as it is now, every frame with a verdict
-export async function reviewAll(site, side = 'clone', { verdict = 'same', pct = 99 } = {}) {
-  const { reviewDirs } = await import('../../scripts/verdict.mjs');
+// Review frames shot of the clone (or app) as it is now, every frame with a verdict. The app's pictures are its own:
+// another token than the clone's frame of the same name, and its verdicts under "## Review: app" (rc.7; with one shared
+// token this helper hid the RC6 zero collision: docs/rc7-notes.md)
+export const TOKENS = { clone: 'tok01', app: 'tap02' };
+export async function reviewAll(site, side = 'clone', { verdict = 'same', pct = 99, token = TOKENS[side] } = {}) {
+  const { reviewDirs, REVIEW_HEADING } = await import('../../scripts/verdict.mjs');
   const ident = await startIdentity(site.root, 'review', side);
   const lines = [];
   for (const d of reviewDirs(site.meta, side)) {
     const id = `${d.route ? `${d.route.replace(/^\//, '')}/` : ''}01-top`;
-    await put(site.root, `${d.dir}/frames.json`, { size: d.size, at: ident.startedAt, subjectHash: ident.subjectHash, refId: ident.refId, frames: [{ id: site.app ? 'journey/00-load' : id, pct, token: 'tok01' }] });
-    lines.push(`${site.app ? 'journey/00-load' : id} ${d.size} [tok01]: ${verdict}`);
+    await put(site.root, `${d.dir}/frames.json`, { size: d.size, at: ident.startedAt, subjectHash: ident.subjectHash, refId: ident.refId, frames: [{ id: site.app ? 'journey/00-load' : id, pct, token }] });
+    lines.push(`${site.app ? 'journey/00-load' : id} ${d.size} [${token}]: ${verdict}`);
   }
-  const notes = await fs.readFile(path.join(site.root, 'notes.md'), 'utf8');
+  let notes = await fs.readFile(path.join(site.root, 'notes.md'), 'utf8');
+  const heading = `## ${REVIEW_HEADING[side === 'app' ? 'app' : 'clone']}\n`;
+  if (!notes.includes(heading)) notes = `${notes.replace(/\n*$/, '\n')}\n${heading}`;
   const have = new Set(notes.split('\n'));
   const add = lines.map((l) => `- ${l}`).filter((l) => !have.has(l));
-  await fs.writeFile(path.join(site.root, 'notes.md'), notes.replace('## Review\n', `## Review\n${add.join('\n')}${add.length ? '\n' : ''}`));
+  await fs.writeFile(path.join(site.root, 'notes.md'), notes.replace(heading, `${heading}${add.join('\n')}${add.length ? '\n' : ''}`));
 }
 
 // A fully verified site: clone and app measured, reviewed

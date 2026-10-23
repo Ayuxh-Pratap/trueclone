@@ -52,7 +52,7 @@ const report = { name, target: base, mode: cloneMode ? (structure ? 'clone-struc
 async function runRoute(r) {
   const refDir = path.join(root, r.dir);
   const outRoot = path.join(cloneMode ? (r.slug ? path.join(root, COMPARE, 'routes', r.slug) : path.join(root, COMPARE)) : refDir, 'states');
-  const target = r.slug ? new URL(cloneMode && !calibrating ? r.path.replace(/^\//, '') : r.path, base).href : base;
+  const target = r.slug ? (await import('./routes.mjs')).routeUrl(r.path, base, !(cloneMode && !calibrating)) : base;
   // the clone is only replayed where the reference has states (a capture older than the held-out sizes has none there)
   const viewports = [];
   for (const v of viewportsAll) {

@@ -18,10 +18,11 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl, mediaReady } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl, mediaReady, holdStill, releaseStill, STILL_AGE } from './lib.mjs';
 import { isEmpty } from './measure.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits } from './results.mjs';
+import { routeUrl, samePath } from './routes.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -62,7 +63,7 @@ if (flags.auto) {
   const dropped = [];
   // the captured page and every other captured route, as capture does: a route's scenarios start at its address
   const captured = new Set((meta.routes || [{ path: '/' }]).map((r) => r.path));
-  const pages = [{ path: null, url: meta.url }, ...(meta.routes || []).filter((r) => r.slug).map((r) => ({ path: r.path, url: new URL(r.path, meta.finalUrl || meta.url).href }))];
+  const pages = [{ path: null, url: meta.url }, ...(meta.routes || []).filter((r) => r.slug).map((r) => ({ path: r.path, url: routeUrl(r.path, meta.finalUrl || meta.url, true) }))];
   try {
     for (const pg of pages) {
       for (const vp of VIEWPORTS) {
@@ -140,7 +141,7 @@ async function runSide(url, side, list) {
       let docStatus = null;
       page.on('response', (r) => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) docStatus = r.status(); });
       // a scenario on another route of the site starts at that route's address, on both sides
-      const startUrl = sc.path && sc.path !== '/' ? new URL(side === 'ref' ? sc.path : sc.path.replace(/^\//, ''), url).href : url;
+      const startUrl = sc.path && sc.path !== '/' ? routeUrl(sc.path, url, side === 'ref') : url;
       await openUrl(page, startUrl); // a load event that never comes is not a failed scenario (lib.mjs)
       await page.mouse.move(5, vp.height - 5);
       await waitStill(page, { timeout: 15000, interval: 200 });
@@ -169,15 +170,28 @@ async function runSide(url, side, list) {
       const paths = {};
       const statuses = {};
       const states = [];
+      // the document the scenario starts on; a shot on any other one (a link followed, Back that reloaded the page) is
+      // a page that has just arrived
+      await page.evaluate(() => { window.__tcStartDoc = true; }).catch(() => {});
       const shot = async (label) => {
-        // the view as a visitor sees it once its media are in (both sides alike, whichever network is faster)
-        await mediaReady(page, 8000);
-        if (expectSel) states.push(await stateOf(page, expectSel));
-        const file = path.join(outDir, `${sc.name.replace(/[^a-z0-9]+/gi, '-')}.${label}.${side}${sc.compare === 'structure' ? '.mask' : ''}.png`);
-        if (sc.compare === 'structure') await maskToggle(page, true);
-        await page.screenshot({ path: file });
-        if (sc.compare === 'structure') await maskToggle(page, false);
-        shots[label] = file;
+        // RC4 VAR-11d: a page that has just arrived was shot a fixed time after the click (1500 ms, an auto scenario's
+        // wait), in the middle of its intro (~3.75 s on varsity), at whatever point each side had reached: 94.77-94.96
+        // flapping. It is shot after it settles under the page clock, as every still is (lib.mjs holdStill): held at
+        // STILL_AGE of its own page time, every timer and frame due by then run in order, the same age on both sides.
+        // (A single-page app's route change keeps its document: shot as before, after the scenario's own wait.)
+        const arrived = !(await page.evaluate(() => window.__tcStartDoc === true).catch(() => true));
+        const hold = arrived ? await holdStill(page, STILL_AGE) : null;
+        try {
+          // the view as a visitor sees it once its media are in (both sides alike, whichever network is faster); with
+          // the clock held, the page's own fallback timer cannot fire, so the bound is kept here
+          await (hold?.held ? Promise.race([mediaReady(page, 8000), page.waitForTimeout(8000)]) : mediaReady(page, 8000));
+          if (expectSel) states.push(await stateOf(page, expectSel));
+          const file = path.join(outDir, `${sc.name.replace(/[^a-z0-9]+/gi, '-')}.${label}.${side}${sc.compare === 'structure' ? '.mask' : ''}.png`);
+          if (sc.compare === 'structure') await maskToggle(page, true);
+          await page.screenshot({ path: file });
+          if (sc.compare === 'structure') await maskToggle(page, false);
+          shots[label] = file;
+        } finally { if (hold?.held) await releaseStill(page); }
         // the address at this moment: a link must take both sides to the same route
         paths[label] = new URL(page.url()).pathname.replace(/\/index\.html$/, '/').replace(/\/+$/, '') || '/';
         statuses[label] = docStatus;
@@ -251,7 +265,8 @@ const server = typeof flags.url === 'string' ? null : await serve(path.join(root
 const cloneUrl = server ? server.url : flags.url;
 // Reference results are cached per scenario (reference side + viewport + capture time) as long as the shot
 // files still exist; only new or edited scenarios touch the live site. --refresh-ref re-measures all.
-const refKey = (sc) => ({ tool: 'interact', v: 4, path: sc.path || '/', name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
+// v5: a page that has just arrived is shot held at STILL_AGE of page time (VAR-11d): older reference shots are not comparable
+const refKey = (sc) => ({ tool: 'interact', v: 5, path: sc.path || '/', name: sc.name, viewport: sc.viewport, at: sc.at, steps: sc.steps, expect: sc.expectChange?.ref, compare: sc.compare, click: JSON.stringify(sc.steps) });
 const refRes = [];
 const missing = [];
 for (const sc of scenarios) {
@@ -276,7 +291,8 @@ const END_STATE_MIN = 95; // the shots after the action must match this well
 // Next). Addresses are compared relative to it: the reference at /products/x and the clone at / are the same place.
 const routePathOf = (u) => { try { return new URL(u).pathname.replace(/\/index\.html$/, '/').replace(/\/+$/, '') || '/'; } catch { return '/'; } };
 const startPath = routePathOf(meta.finalUrl || meta.url);
-const canon = (p) => (p === startPath ? '/' : p);
+// compared decoded (routes.mjs samePath): two spellings of one address are one address
+const canon = (p) => (samePath(p, startPath) ? '/' : p);
 const unstableRoutes = new Set((meta.routes || []).filter((r) => r.unstable).map((r) => r.path));
 // a shot with almost nothing drawn on it (measure.mjs isEmpty: under 1% of it differs from its own background) where
 // the reference shows content is no page: a 404, a blank route. Absolute, not relative to the reference: the 0.3 ratio
@@ -311,7 +327,7 @@ for (const sc of scenarios) {
   if (sc.auto && a && a.changed === false) { report.scenarios.push({ name: sc.name, auto: true, notBehaviour: true, score: null, shots, expect: { ref: false, clone: b?.changed ?? null, endState: score, pass: true }, errors }); continue; }
   // the address at every shot must be the reference's: a link that shows the right view at the wrong address (or
   // stays on the same address) is not the same site
-  const wrongAddress = Object.keys(a?.paths || {}).filter((l) => b?.paths && l in b.paths && canon(a.paths[l]) !== canon(b.paths[l]));
+  const wrongAddress = Object.keys(a?.paths || {}).filter((l) => b?.paths && l in b.paths && !samePath(canon(a.paths[l]), canon(b.paths[l])));
   for (const l of wrongAddress) errors.push(`${l}: the clone is at ${b.paths[l]}, the reference at ${a.paths[l]}`);
   const visibleFail = empty.length > 0 || badStatus.length > 0;
   const expect = sc.expectChange

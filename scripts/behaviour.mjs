@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SCORED, parseArgs, openBrowser, newPage, serve, cached, COMPARE, siteDir, openUrl, unroll, withMachineLock } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
-import { writeUnits, mergeAggregate } from './results.mjs';
+import { writeUnits, mergeAggregate, readCheck, isCurrent, unitKey } from './results.mjs';
 
 export const BEHAVIOUR_VPS = ['desktop', 'mobile'];
 export const TOL = { speed: 0.15, interval: 0.1 };
@@ -219,13 +219,19 @@ if (isMain) {
   const vps = SCORED.filter((v) => BEHAVIOUR_VPS.includes(v.name) && (typeof flags.viewport !== 'string' || v.name === flags.viewport));
   const browser = await openBrowser(flags.cdp);
   const units = [], report = { name, at: ident.startedAt, routes: [] };
+  // Each unit is written as soon as it is measured, and a unit already measured on this content, against this
+  // reference, with this code is not measured again (--fresh does): a run killed on its time limit keeps what it
+  // finished, and the rerun does only what is left (RC6 heybhaskar: 14 finished units lost to a kill at 20 minutes)
+  const before = flags.fresh || flags['refresh-ref'] ? { units: {} } : await readCheck(root, COMPARE, 'behaviour');
+  let kept = 0;
   try {
     for (const r of routes) {
       const refUrl = new URL(r.slug ? r.path : '', meta.finalUrl || meta.url).href;
-      const cUrl = r.slug ? new URL(r.path.replace(/^\//, ''), cloneUrl).href : cloneUrl;
+      const cUrl = r.slug ? (await import('./routes.mjs')).routeUrl(r.path, cloneUrl) : cloneUrl;
       const rows = [];
       for (const vp of vps) {
         const route = r.slug ? r.path : '';
+        if (isCurrent(before.units[unitKey(route, vp.name, '')], ident)) { kept++; console.log(`${r.path} ${vp.name}: behaviour already measured on this clone (kept; --fresh measures it again)`); continue; }
         try {
           // speeds and intervals are timed: one such reading at a time on this machine (lib.mjs withMachineLock)
           const { ref, clone, refReduce, cloneReduce } = await withMachineLock(`behaviour ${name}`, async () => ({
@@ -236,22 +242,26 @@ if (isMain) {
           }));
           const members = [...compare(ref, clone), ...compareReduced(refReduce, cloneReduce)];
           const value = members.length ? +((100 * members.filter((m) => m.value === 100).length) / members.length).toFixed(2) : null;
-          units.push(members.length ? { route, viewport: vp.name, value, members } : { route, viewport: vp.name, value: null, na: 'nothing on the reference or the clone changes by itself' });
+          const unit = members.length ? { route, viewport: vp.name, value, members } : { route, viewport: vp.name, value: null, na: 'nothing on the reference or the clone changes by itself' };
+          units.push(unit);
+          await writeUnits(root, COMPARE, 'behaviour', [unit], ident);
           rows.push({ viewport: vp.name, value, ref, clone, members });
           console.log(`${r.path} ${vp.name}: behaviour ${value ?? 'n/a'}${members.filter((m) => m.reason).map((m) => `\n  - ${m.id}: ${m.reason}`).join('')}`);
         } catch (e) {
           const why = String(e.message).split('\n')[0];
           console.warn(`WARNING ${r.path} ${vp.name}: ${why}`);
-          units.push({ route, viewport: vp.name, value: null, error: why });
+          const unit = { route, viewport: vp.name, value: null, error: why };
+          units.push(unit);
+          await writeUnits(root, COMPARE, 'behaviour', [unit], ident);
         }
       }
       report.routes.push({ path: r.path, viewports: rows });
+      await mergeAggregate(path.join(root, COMPARE, 'behaviour.json'), { ...report, routes: [report.routes.at(-1)] });
     }
   } finally {
     if (!flags.cdp) await browser.close();
     server?.close();
   }
-  await writeUnits(root, COMPARE, 'behaviour', units, ident);
-  await mergeAggregate(path.join(root, COMPARE, 'behaviour.json'), report);
+  if (kept) console.log(`behaviour: ${kept} unit(s) kept from an earlier run on this clone; ${units.length} measured now`);
   if (units.some((u) => u.error)) process.exitCode = 1;
 }

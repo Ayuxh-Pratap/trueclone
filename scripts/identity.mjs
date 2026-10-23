@@ -28,8 +28,24 @@ const SKIP_FILES = new Set(['trueclone-app.txt', '.seed-pass.html', '.index.tmp.
 // The content hash of a folder. File contents are hashed once and remembered by (size, mtime) in a cache beside the
 // folder, so a large clone costs one full read, then only what changed; the cache is a speed-up, never the source of
 // truth (a file whose size or mtime moved is read again).
-export async function contentHash(dir, cacheFile) {
-  const cache = JSON.parse(await fs.readFile(cacheFile, 'utf8').catch(() => '{}'));
+// Several checks of one score start together and all hash the same folder (RC6 heybhaskar: four processes within 70 ms;
+// one read the cache while another was rewriting it in place, and JSON.parse of the half-written file killed the
+// states step). So the cache is read tolerantly (unreadable means empty) and written to a temporary file renamed into
+// place. `readOnly` (the auditor) never writes it.
+const readCache = async (file) => { try { const c = JSON.parse(await fs.readFile(file, 'utf8')); return c && typeof c === 'object' ? c : {}; } catch { return {}; } };
+export async function writeAtomic(file, text) {
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+  await fs.writeFile(tmp, text);
+  // Windows refuses a rename over a file another process has open for a moment (EPERM, EBUSY): try again briefly
+  for (let i = 0; ; i++) {
+    try { await fs.rename(tmp, file); return; } catch (e) {
+      if (i >= 20 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) { await fs.rm(tmp, { force: true }); throw e; }
+      await new Promise((r) => setTimeout(r, 25 + i * 10));
+    }
+  }
+}
+export async function contentHash(dir, cacheFile, { readOnly = false } = {}) {
+  const cache = cacheFile ? await readCache(cacheFile) : {};
   const next = {};
   const h = crypto.createHash('sha1');
   let files = 0;
@@ -40,25 +56,28 @@ export async function contentHash(dir, cacheFile) {
       if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(p); continue; }
       if (!e.isFile() || SKIP_FILES.has(e.name)) continue;
       const rel = path.relative(dir, p).split(path.sep).join('/');
-      const st = await fs.stat(p);
+      // a file removed while the folder is walked (a seed's temporary page) is not part of what was measured
+      const st = await fs.stat(p).catch(() => null);
+      if (!st) continue;
       const c = cache[rel];
-      const digest = c && c.size === st.size && c.mtimeMs === st.mtimeMs ? c.sha1 : sha1(await fs.readFile(p));
+      let digest = c && c.size === st.size && c.mtimeMs === st.mtimeMs ? c.sha1 : null;
+      if (!digest) { const data = await fs.readFile(p).catch(() => null); if (!data) continue; digest = sha1(data); }
       next[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha1: digest };
       h.update(`${rel}\0${digest}\n`);
       files++;
     }
   };
   await walk(dir);
-  if (cacheFile) await fs.writeFile(cacheFile, JSON.stringify(next)).catch(() => {});
+  if (cacheFile && !readOnly) await writeAtomic(cacheFile, JSON.stringify(next)).catch(() => {});
   return files ? h.digest('hex').slice(0, 16) : null;
 }
 
 // side: 'clone' (the HTML clone) or 'app' (the Next.js app)
 export const subjectDir = (root, side) => path.join(root, side === 'app' ? 'next' : 'clone');
-export async function subjectHash(root, side = 'clone') {
+export async function subjectHash(root, side = 'clone', { readOnly = false } = {}) {
   const dir = subjectDir(root, side);
   if (!fsSync.existsSync(dir)) return null;
-  return contentHash(dir, path.join(root, side === 'app' ? '.tc-hash-next.json' : '.tc-hash-clone.json'));
+  return contentHash(dir, path.join(root, side === 'app' ? '.tc-hash-next.json' : '.tc-hash-clone.json'), { readOnly });
 }
 
 // The reference identity: what a result was compared against. Only the fields that change what is measured.

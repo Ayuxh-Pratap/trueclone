@@ -5,11 +5,37 @@ import fsSync, { createReadStream } from 'node:fs';
 import http from 'node:http';
 import zlib from 'node:zlib';
 import path from 'node:path';
+import os from 'node:os';
 import { chromium } from 'playwright';
+import { canonicalPath, decodeEach, safeSegment } from './routes.mjs';
 import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 
 export { PNG };
+
+// A step whose reader went away (the agent's launcher timed out and was killed, a pipe closed) must keep working and
+// finish: its results and logs are on disk. Node throws EPIPE on the next console write and the process dies with exit
+// 1 and its error lost (RC6 varsity: calibrate exited 1 a second after its launcher's pipe was dropped, most likely so).
+for (const s of [process.stdout, process.stderr]) s.on?.('error', (e) => { if (e?.code !== 'EPIPE') throw e; });
+// The step's own log (bin/trueclone.mjs sets TC_LOG for a step on a site): everything this process and its children
+// print, an uncaught error with its stack, and the step's end record in logs/commands.jsonl, written by the process
+// itself, so nothing depends on who is still reading its console.
+if (process.env.TC_LOG) {
+  const logFile = process.env.TC_LOG;
+  const append = (f, data) => { try { fsSync.appendFileSync(f, data); } catch { /* a log is never a reason to fail */ } };
+  for (const s of [process.stdout, process.stderr]) {
+    const write = s.write.bind(s);
+    s.write = (chunk, ...rest) => { append(logFile, typeof chunk === 'string' ? chunk : Buffer.from(chunk)); try { return write(chunk, ...rest); } catch { return true; } };
+  }
+  process.on('uncaughtExceptionMonitor', (e, origin) => append(logFile, `\n# ${origin}: ${e?.stack || e}\n`));
+  if (process.env.TC_JOURNAL && process.ppid === Number(process.env.TC_LAUNCHER_PID)) {
+    process.on('exit', (code) => {
+      const endedAt = new Date().toISOString();
+      append(process.env.TC_JOURNAL, `${JSON.stringify({ event: 'end', step: process.env.TC_STEP, pid: process.pid, startedAt: process.env.TC_STEP_STARTED, endedAt, exit: code })}\n`);
+      append(logFile, `# ${endedAt} exit ${code}\n`);
+    });
+  }
+}
 
 // The seed sizes: the clone is built from what the reference shows at these.
 export const VIEWPORTS = [
@@ -42,10 +68,12 @@ export const COMPARE = process.env.TC_COMPARE || 'compare';
 // A route given on the command line ("/about", "about"): Git Bash on Windows rewrites an argument that starts with "/"
 // into a path inside its install folder ("C:/Program Files/Git/about"), so that is undone, and the leading slash is
 // optional.
+// The route's identity is the encoded path, as capture records it (routes.mjs): "/Landing Page.html" typed decoded is
+// "/Landing%20Page.html".
 export function routeArg(v) {
   if (typeof v !== 'string') return null;
   const s = v.replace(/\\/g, '/').replace(/^[a-z]:\/.*?\/git(\/|$)/i, '/');
-  return `/${s.replace(/^\/+/, '')}`.replace(/\/+$/, '') || '/';
+  return canonicalPath(`/${s.replace(/^\/+/, '')}`.replace(/\/+$/, '') || '/') || '/';
 }
 
 // sites/<name> from any folder inside the project: the current folder, the nearest parent that has sites/<name>, or
@@ -235,9 +263,10 @@ export function recordBundle(page, refDir) {
           if (r.body) { body = r.body; via = 'recovered'; if (r.empty) verdict = 'empty'; } else failed = r.failed;
         }
         if (body && body.length > 300 * 1024 * 1024) return;
-        let rel = decodeURIComponent(u.pathname);
+        // the same file name rule as every route and the clone server (routes.mjs): a bare % never throws here
+        let rel = decodeEach(u.pathname);
         if (rel.endsWith('/')) rel += 'index.html';
-        const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map((p) => p.replace(/[<>:"|?*\\]/g, '_'));
+        const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map(safeSegment);
         if (!parts.length) parts.push('index.html');
         const file = path.join(dir, u.host.replace(/[:]/g, '_'), ...parts);
         const key = `${u.origin}${u.pathname}`;
@@ -292,10 +321,26 @@ export async function bundleIntegrity(refDir) {
 // One timing-sensitive measurement at a time across every trueclone process on this machine (load sequences, reveals
 // and other frame-timed reads): several clones scored in parallel share the CPU and GPU, and a frame-timed check run
 // beside another heavy one measures the contention, not the page. A lock file in the system temp folder; a lock older
-// than its holder's limit is taken over (a crashed process). Everything else runs in parallel as before.
+// than its holder's limit, or whose holder is no longer running, is taken over. Everything else runs in parallel.
+// The holder's process id is in the file: a step killed on its time limit never runs its `finally` (RC6 heybhaskar's
+// behaviour, killed by score), and its lock used to block every other run for 20 minutes while doctor called it "a
+// measurement running".
+export const timingLockFile = () => path.join(os.tmpdir(), 'trueclone-timing.lock');
+export const pidAlive = (pid) => { if (!Number(pid)) return false; try { process.kill(Number(pid), 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+export async function timingLockHolder(file = timingLockFile()) {
+  const held = await fs.readFile(file, 'utf8').catch(() => null);
+  if (held === null) return null;
+  const parts = held.split(':');
+  const pid = Number(parts[0]), since = Number(parts.at(-1)) || 0;
+  return { pid, label: parts.slice(1, -1).join(':') || '?', since, alive: pidAlive(pid), raw: held };
+}
+// Remove the lock if a given (killed) process holds it: score calls this after killing a step on its time limit
+export async function releaseTimingLockOf(pid, file = timingLockFile()) {
+  const h = await timingLockHolder(file);
+  if (h && h.pid === Number(pid) && !h.alive) await fs.rm(file, { force: true });
+}
 export async function withMachineLock(label, fn, { limitMs = 20 * 60 * 1000 } = {}) {
-  const os = await import('node:os');
-  const file = path.join(os.tmpdir(), 'trueclone-timing.lock');
+  const file = timingLockFile();
   const me = `${process.pid}:${label}:${Date.now()}`;
   let waited = 0, said = false;
   for (;;) {
@@ -303,9 +348,14 @@ export async function withMachineLock(label, fn, { limitMs = 20 * 60 * 1000 } = 
       await fs.writeFile(file, me, { flag: 'wx' });
       break;
     } catch {
-      const held = await fs.readFile(file, 'utf8').catch(() => '');
-      const since = Number(held.split(':').pop()) || 0;
-      if (Date.now() - since > limitMs) { await fs.rm(file, { force: true }); continue; }
+      const h = await timingLockHolder(file);
+      if (!h) continue; // released between the two calls
+      if (!h.alive || Date.now() - h.since > limitMs) {
+        // taken over only if it is still the same stale lock (another process may have just taken a fresh one)
+        if ((await fs.readFile(file, 'utf8').catch(() => null)) === h.raw) await fs.rm(file, { force: true });
+        continue;
+      }
+      const held = h.raw;
       if (!said && waited > 2000) { console.log(`waiting for another trueclone measurement to finish (${held.split(':')[1] || 'timing'}), so the two do not distort each other`); said = true; }
       await new Promise((r) => setTimeout(r, 1000));
       waited += 1000;
@@ -507,15 +557,22 @@ export async function settle(page, hide = []) {
 
 // Structure mode: hide glyphs and turn every image/video/svg/background photo into a flat grey box,
 // so a clone with placeholder content can be scored on layout alone. Applied to both sides.
+// An iframe is a flat grey box too, never hidden: its content is masked (contrast(0) flattens whatever the frame
+// paints, an empty or transparent frame shows the #888 background), its presence and box are compared. RC6-23: hidden,
+// an iframe shell whose stage was empty in the clone scored 100 on elise's start page.
 const MASK_CSS = `*,*::before,*::after{color:transparent!important;text-shadow:none!important;
 -webkit-text-stroke-color:transparent!important;text-decoration-color:transparent!important}
 ::placeholder{color:transparent!important}
 img,video{object-position:-99999px -99999px!important;background:#888!important}
-svg{background:#888!important} svg *{visibility:hidden!important} iframe{visibility:hidden!important}
-canvas{background:#888!important;filter:contrast(0) brightness(1.066)!important}
+svg{background:#888!important} svg *{visibility:hidden!important}
+canvas,iframe{background:#888!important;filter:contrast(0) brightness(1.066)!important}
 [data-lab-cliptext]{background:none!important;-webkit-text-fill-color:transparent!important}
 [data-lab-bgi]{background-image:none!important;background-color:#888!important}
 [data-lab-bgb]::before,[data-lab-bga]::after{background-image:none!important;background-color:#888!important}`; // canvas = media (WebGL heroes, 3D models): flat grey box like images
+// The mask the reference's masked shots were taken with (capture records it in meta.maskVersion): a clone masked one
+// way against a reference masked another is no comparison (rc.7 replay: elise's start page 5.33 against an rc.6 mask
+// that hid the iframes the rc.7 mask paints), so status captures again when the two differ
+export const MASK_VERSION = crypto.createHash('sha1').update(MASK_CSS).digest('hex').slice(0, 8);
 
 // What CSS alone can't select: photo backgrounds (a script that rewrites an element's inline background every frame
 // would undo an inline override, so the mask is a stylesheet rule on a marker attribute, which inline styles lose
@@ -656,11 +713,17 @@ export function serve(dir, port = 0) {
     // the site's kind, from its capture next to the folder served (clone/ beside reference/): a site of separate
     // pages answers an address it does not have with a 404, as its host does; a single-page app with its document
     const kind = JSON.parse(fsSync.existsSync(path.join(dir, '..', 'reference', 'meta.json')) ? fsSync.readFileSync(path.join(dir, '..', 'reference', 'meta.json'), 'utf8') : '{}').app || null;
+    // routes.mjs: the route-to-file rule the seed writes with (imported here so this edit stays inside serve)
+    const rules = import('./routes.mjs');
     const server = http.createServer(async (req, res) => {
-      let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-      // a route asked with or without its trailing slash (/about/ and /about) is the same route
-      if (p.length > 1 && p.endsWith('/')) p = p.replace(/\/+$/, '');
-      if (p === '/' || p === '') p = '/index.html';
+      const { decodeSegments, safeSegment } = await rules;
+      // decoded once, segment by segment, each made the file name the seed gave it ("Landing%20Page.html" is
+      // "Landing Page.html", "%3F" is "_"); a malformed escape (a bare %) is a bad request, never a crash (RC6-07).
+      // A route asked with or without its trailing slash (/about/ and /about) is the same route.
+      const segs = decodeSegments(new URL(req.url, 'http://x').pathname, true);
+      if (!segs) { res.writeHead(400).end(); return; }
+      let p = `/${segs.map(safeSegment).join('/')}`;
+      if (p === '/') p = '/index.html';
       let file = path.join(dir, p);
       if (file !== dir && !file.startsWith(dir + path.sep)) { res.writeHead(403).end(); return; }
       // An address that is not a file is a route, served like a host does: its own page (/about -> about/index.html,
@@ -692,11 +755,15 @@ export function serve(dir, port = 0) {
 }
 
 // ---------- Image comparison ----------
-// White-pad so images of different sizes can be compared; the gap counts as mismatch.
+// Pad so images of different sizes can be compared; the gap always counts as mismatch. The padding is a sentinel no
+// page screenshot has (transparent magenta: screenshots are opaque), so match() knows it whatever the other side shows
+// there, and it survives crop(). RC6-16: white padding against allbirds' near-white extra band (rgb 236,233,226) was
+// under pixelmatch's threshold, so a clone 750 px (11%) taller scored 99.99; counted as different it is 88.73.
+export const isPad = (png, i) => png.data[i + 3] === 0 && png.data[i] === 255 && png.data[i + 1] === 0 && png.data[i + 2] === 255;
 export function pad(png, width, height) {
   if (png.width === width && png.height === height) return png;
   const out = new PNG({ width, height });
-  out.data.fill(255);
+  for (let i = 0; i < out.data.length; i += 4) { out.data[i] = 255; out.data[i + 1] = 0; out.data[i + 2] = 255; out.data[i + 3] = 0; }
   PNG.bitblt(png, out, 0, 0, png.width, png.height, 0, 0);
   return out;
 }
@@ -707,7 +774,19 @@ export function crop(png, y, h) {
   return out;
 }
 
-export const match = (a, b, diff) => pixelmatch(a.data, b.data, diff ? diff.data : null, a.width, a.height, { threshold: 0.1, includeAA: false });
+// pixelmatch at threshold 0.1, except that a pixel that is padding on either side is always different: counted here and
+// drawn red in the diff (pixelmatch is given the same opaque colour on both sides there, so it counts none of it)
+export const match = (a, b, diff) => {
+  const n = a.width * a.height;
+  let padded = 0;
+  for (let i = 0; i < n * 4; i += 4) if (isPad(a, i) || isPad(b, i)) padded++;
+  if (!padded) return pixelmatch(a.data, b.data, diff ? diff.data : null, a.width, a.height, { threshold: 0.1, includeAA: false });
+  const da = Buffer.from(a.data), db = Buffer.from(b.data);
+  for (let i = 0; i < n * 4; i += 4) if (isPad(a, i) || isPad(b, i)) { da[i] = db[i] = 0; da[i + 1] = db[i + 1] = 0; da[i + 2] = db[i + 2] = 0; da[i + 3] = db[i + 3] = 255; }
+  const bad = pixelmatch(da, db, diff ? diff.data : null, a.width, a.height, { threshold: 0.1, includeAA: false });
+  if (diff) for (let i = 0; i < n * 4; i += 4) if (isPad(a, i) || isPad(b, i)) { diff.data[i] = 255; diff.data[i + 1] = 0; diff.data[i + 2] = 0; diff.data[i + 3] = 255; }
+  return bad + padded;
+};
 
 // How alike two canvas regions look, 0-100: what a scene draws rarely matches pixel for pixel (time, physics, random
 // seeds), so it is compared by what is drawn rather than where: the colour distribution (64 bins) and how much of the
