@@ -1,5 +1,9 @@
 # Test plan: 0.5.0-rc.7, the end-to-end campaign
 
+> **Stopped at Elise (2026-10-24).** The run ended Blocked on tool defects (`docs/rc7-ledger.md` §8), and the other five
+> sites were not started. The next run is one manual Elise run on 0.5.0-rc.8: `docs/test-plan-0.5-rc8-elise.md`. The
+> prompts and criteria below stay as the record of this campaign.
+
 The campaign answers one question no run has answered yet: does each site reach a terminal outcome by itself, truthfully,
 with a clone a person judges faithful? Why each run is needed, and what earlier evidence still counts:
 `docs/rc7-status.md` §4. What rc.7 changed: `docs/rc7-notes.md`. Rules: `docs/policy.md`. The limitations that are

@@ -31,6 +31,30 @@ Incomplete lists exactly the items not passed; `tools/audit-run.mjs` recomputes 
 sets of ids are equal. (RC6: an error seen twice and an interaction plan never run fell out of both the work queue and
 the outcome: "Incomplete … verified as they are", with nothing listed.)
 
+**At Blocked, the cause owns what it kept from being reached (rc.8).** Every item a Blocked outcome did not reach is
+blocked by that cause: disposition blocked, the blocker's owner, its reason "not reached" with the cause. The auditor
+treats a pending item at any terminal outcome, Blocked included, as a finding, and so a Blocked with required items and
+no accounting (unless trueclone itself crashed). A Blocked run resumes under a new trueclone version: the version is
+one of the inputs a repeated failure is counted on. (RC7 elise: Blocked with 323 items pending and none blocked, and
+the auditor called it consistent.)
+
+**Loading a page (rc.8).** A page is ready at its load event. It is waited for as long as the page keeps loading, and
+fails only on silence (30 s with no byte received and no request starting or ending) or at a ceiling (10 minutes). A
+capture requires the load event: a page that goes silent is the live page not loading (owner: the environment). A
+read that meets a stalled request (a beacon that never answers) measures the parsed page and says so. Every read uses
+the same rule. (RC7 elise: a 21 MB page of autoplaying video and photos at ~300 KB/s reached load at 46-57 s alone and
+later when reads shared the link; a fixed 60 s limit failed every read, reported as "a request that never finishes",
+and four reads crashed on it.)
+
+**A route is captured at every size or not at all (rc.8).** A route that fails to load at any size, or whose own page
+was not saved, is listed in `meta.routesNotCaptured` with the sizes and the error, and is not part of the reference:
+not in `meta.routes`, not counted, not mirrored, no scenario drafted on or to it. It stays required: a route the
+capture was asked for and could not capture is an item the tool cannot verify (owner from its error), so the run ends
+Incomplete with it named, never Verified as if the request had been only the routes that loaded; REPORT says the result
+covers the routes captured, not the request. Pages the request left out (a cap, a `--routes` list) are not required.
+(RC7 elise: a route that failed at all five sizes was listed as captured, counted "captured at 5 sizes" and among the
+pages mirrored.)
+
 **Wording (D5).** REPORT.md and status say, in these words:
 
 - Verified: "Verified: every required result passes on the clone and on the Next.js app as they are now."

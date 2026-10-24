@@ -252,3 +252,19 @@ coverage and in this readiness assessment.
    sandbox with escalation and records the deviation.
 2. **Zero's public deployment** (made after the RC6 run, outside this work): whether the owner's permission covers
    public hosting. It is not test evidence, and this work does not change it.
+
+## 8. The RC7 campaign, as far as it went (2026-10-24)
+
+- **Elise (0.5.0-rc.7, exact, 9 named routes):** Blocked (owner tool) after 43 minutes. `reads` failed twice on the start
+  page's load event. The campaign's gate stopped there; the other five sites were not started. No clone was built, so
+  nothing about fidelity was learned.
+- **What it showed:** four tool defects and a fifth found while fixing them (`docs/rc7-ledger.md` §8). Readiness wrongly
+  treated a slow 21 MB page as a hung one (E1). Capture counted a route that failed at every size as captured (E2). The
+  Blocked outcome left 323 items pending (E3). The auditor accepted that (E4). A Blocked run could not resume under a
+  fixed version (E5).
+- **Fixed in the repository for 0.5.0-rc.8,** with regression tests. The suites pass on the fixed tree, and a live
+  probe established the cause of E1.
+- **The coordinator** used for the campaign is set aside. The next test is one site, one fresh workspace, one manually
+  started session: Elise again, on the corrected published version (`docs/test-plan-0.5-rc8-elise.md`).
+- **Readiness stays at 61.** Stopping truthfully is not readiness. The six-site campaign, the by-eye scores and the
+  unseen site are all still outstanding.
