@@ -178,3 +178,29 @@ Blocked (owner tool) after `reads` failed twice; the campaign gate stopped there
 
 Live probe (2026-10-24, from this machine): the start page alone reached load at 46.4 s; `NASA (Draft).html` at 56.7 s;
 four start pages at once: one at 26.5 s, one not within 90 s (images of the About view queued behind video downloads).
+
+## 9. The RC8 Elise retry (2026-10-24, 0.5.0-rc.8): fixed in rc.9
+
+Evidence: `C:\dev\tc-tests\rc8-elise-retry1` (kept as it was) and its copy `C:\dev\tc-tests\rc8-elise-retry1-evidence`, with
+`ORIGINAL-MANIFEST.sha256.txt` (7,444 files). The network was good throughout this run.
+
+**The run, from its journal.** capture 06:42 (9 min, `--routes 1000 --bundle`), reads (9 min), calibrate (72 min),
+design, seed and two briefs (1 min), score (48 min, exit 1), status's retry of the failed checks (15 min), then Blocked
+(owner tool) at 09:16. 2 h 34 min in all, 63 min of it scoring a clone that could not answer five of its nine routes.
+The agent did not run the prompt's explicit nine-route list: it captured with `--routes 1000` (discovery found all
+nine anyway) and added `--bundle`, the own-bundle mode, which the prompt did not ask for.
+
+| Id | Defect | Root cause (established) | Fix | Tests | Status |
+|---|---|---|---|---|---|
+| RC8-R1 | the clone had no page for /Kruiz.html, /AISS.html, /NASA%20(Draft).html, /Codazen.html, /NASA.html: every check on them was `net::ERR_HTTP_RESPONSE_CODE_FAILURE` on 127.0.0.1 (70 errors) | with `--bundle` the clone is the bundle, and the bundle was recorded on one desktop load of the start page: it held the start page, the two views the shell iframes and one it prefetched. The seed's bundle branch never consulted `meta.routes`, counted only the main frame's document (`pages: 1`), and status called the 84 files "whole" | capture records every captured page into the bundle and fetches whole every file it saved that the pages did not load (`bundle-complete.mjs`); `record-bundle <name>` does the same for an existing capture without capturing again; status names it when the bundle lacks a route's page or a saved file, and is Blocked (owner environment) if it is still missing after; the seed refuses a bundle without a route's page; any frame's document is a page | `test/e2e/bundle-routes.test.mjs` (shell + iframe view + encoded and plain pages, served and measured; an rc.8 bundle completed); RC8-B1 | Fixed + tests; recovery shown on a copy of this run |
+| RC8-R2 | missing images and wrong-looking About page: the About galleries' photos (`ctc-*`, `uci-*`, `friends-*`), the New Craft Society and project videos absent; About scored 75.7-88.5 (real pixels), 74-91 (scroll states) | the same: 76 of the 144 files the capture saved were never in the bundle, so the clone's service worker answered them 404 ("not recorded"). The capture's own asset list is no substitute: it held `cs-4.mp4` as a 206 range of 25,252 of its 680,612 bytes | as RC8-R1: the missing files fetched whole through the recorder's validation (status 200, own declared length, media type) | RC8-B1, the e2e; on the copy every one of them is served whole | Fixed; the About and New Craft Society scores must be measured again |
+| RC8-R3 | an hour of scoring before the missing pages were known | no check that each captured route has its page in the clone | after the seed, status checks from the files that every captured route of its own document has its page, Blocked (owner tool) at once if not | RC8-B2 | Fixed + test |
+| RC8-R4 | REPORT: "313 required result(s) cannot be measured; 0 not reached"; 63 measured failures shown "not reached", owner tool | rc.8's accounting at Blocked (RC7-E3) turned every pending item into "blocked, not reached", measured failures included | measured failures are "failing" (the clone's, open), unretried errors stay errors with their owner, only unmeasured items are "not reached"; REPORT counts the three apart; the auditor rejects a measured result shown as not reached | RC8-B3 | Fixed + test |
+| RC8-R5 | "behaviours (0 cited)" and two briefs asked for, in own-bundle mode | the bundle runs the site's own code: nothing is ported, so neither is required; status still listed and asked for them | status asks for neither in own-bundle mode and says why | (status text) | Fixed |
+| RC8-R6 | `npm install` reports 4 high-severity findings | one advisory (zod < 4.6.6, memory exhaustion on oversized constrained collections) counted through its dependents: zod 3.25.76 for `@google/design.md` 0.4.0 (requires `^3.24.0`; no patched 3.x exists) and zod 4.4.3 pinned by `rea-agents` (6.7.0, its latest, still pins it). Both run inside the CLI on local inputs it writes itself (DESIGN.md lint; REA, the optional deep case); the generated Next.js app does not depend on zod | none applied: npm `overrides` in a published package do not reach its users, and forcing zod 4 on `@google/design.md` would break it. Disposition: low practical exposure (local, trusted input; denial of service only); fix upstream (`rea-agents`: depend on zod `^4.6.6`; `@google/design.md`: move to zod 4) | – | Documented |
+
+**Open, measured again only after rc.9 (not fixed, not waived):**
+- the four nav links' hovers ("WRONG OUTCOME", desktop 0);
+- the About page's horizontal scrollers (interactions 82.9-91.5);
+- the shell's view transitions (94.7-97.5);
+- the reference start page shows "About" underlined in the nav while the home view is shown (`reference/desktop.png`). This is a hypothesis about the reference's own state at capture (a hover, or the shell's last view), not established.

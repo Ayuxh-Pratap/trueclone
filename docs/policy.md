@@ -23,7 +23,8 @@ result and never counts as an attempt.
 
 **Every required item is accounted for (rc.7).** At any terminal outcome status writes, in `compare/outcome.json`
 (`accounting`), every required item with exactly one disposition: passed, unresolved (a difference the loop
-concluded), not verifiable (the tool's limit here), blocked, or pending. An item is a unit (check, route, size, state,
+concluded), not verifiable (the tool's limit here), failing (Blocked only: measured below its bar, still open), blocked,
+or pending. An item is a unit (check, route, size, state,
 the interaction plan included) on the clone or on the app, a review frame, a review folder not shot yet, a written check
 (notes, coverage) or a lint finding. Nothing pending is ever part of a terminal outcome: status names a step for it,
 and reaching an outcome with any pending item is itself a defect (Blocked, owner tool). Verified has no item not passed;
@@ -31,8 +32,14 @@ Incomplete lists exactly the items not passed; `tools/audit-run.mjs` recomputes 
 sets of ids are equal. (RC6: an error seen twice and an interaction plan never run fell out of both the work queue and
 the outcome: "Incomplete … verified as they are", with nothing listed.)
 
-**At Blocked, the cause owns what it kept from being reached (rc.8).** Every item a Blocked outcome did not reach is
-blocked by that cause: disposition blocked, the blocker's owner, its reason "not reached" with the cause. The auditor
+**At Blocked, the cause owns what it kept from being reached (rc.8), and nothing measured is relabelled (rc.9).** Every
+item a Blocked outcome did not reach (never measured on this content: missing, stale, invalid, no verdict yet) is
+blocked by that cause: disposition blocked, the blocker's owner, its reason "not reached" with the cause. What was
+measured keeps what it is: a result below its bar (a frame that differs, a written check that fails) is **failing**,
+the clone's, still open when the run stopped; an error not yet retried is a measurement error, owned by what it says.
+REPORT's headline counts the three apart (errors, failing, not reached); the auditor treats a measured result reported
+as not reached, and a "failing" item at any outcome but Blocked, as findings. (RC8 elise: 63 measured failures were
+relabelled "not reached", owner tool, and REPORT said "313 cannot be measured; 0 not reached".) The auditor
 treats a pending item at any terminal outcome, Blocked included, as a finding, and so a Blocked with required items and
 no accounting (unless trueclone itself crashed). A Blocked run resumes under a new trueclone version: the version is
 one of the inputs a repeated failure is counted on. (RC7 elise: Blocked with 323 items pending and none blocked, and
@@ -276,8 +283,8 @@ passed with each combination).
 
 ## The site's own files (own bundle, exact mode)
 
-A canvas app in exact mode runs the site's own recorded files offline, so each recorded file is checked before it is
-kept (`lib.mjs recordBundle`, rc.6):
+A canvas app in exact mode (or any page captured with `--bundle`) runs the site's own recorded files offline, so each
+recorded file is checked before it is kept (`lib.mjs recordBundle`, rc.6):
 
 - **Verdicts.** Each body is compared with what the browser received and with the length the server declared (when
   the body is not content-encoded). The verdicts are ok, empty (legitimately: a 204, a zero-length answer), lost,
@@ -292,8 +299,26 @@ kept (`lib.mjs recordBundle`, rc.6):
 - **The cause found on RC5 zero.** Chrome's DevTools protocol hands over an empty body for a fetch the page consumes
   as a Blob, although the bytes arrived; nine textures and videos were saved as 0-byte files.
 - **Status checks the record, not the folder.** If a file is not whole (failed, missing, of another size, or an empty
-  file from before rc.6), the reference journey records every file again, once. If a file is still not whole after
-  that, the run is Blocked with the files named: no change to the clone can supply them.
+  file from before rc.6), the files are recorded again once (a canvas app: the reference journey; a document site:
+  `record-bundle`). If a file is still not whole after that, the run is Blocked with the files named: no change to the
+  clone can supply them.
+- **Whole is not enough: the bundle covers the capture (rc.9).** The clone of an own bundle is the bundle, so it holds a
+  page for every captured route (any frame's document counts: a view a shell loads in an iframe is a page at its own
+  address too) and every file the capture saved at any size. Capture records every captured page into the bundle and
+  fetches whole each saved file the pages did not load (`bundle-complete.mjs`: through the recorder's own validation,
+  so never a partial video). For a bundle that lacks any of these, status names `record-bundle <name>` once (the same
+  recording, without capturing again: the reference's shots, reads and calibration stay valid), then the seed again; if
+  something is still missing after that, Blocked (owner environment), what is missing named. The seed refuses a bundle
+  without a page for a captured route (no completion record, the routes named). (RC8 elise: the bundle was recorded on
+  one load of the start page; status called its 84 files "whole", the seed wrote 1 document, and the clone had no page
+  for 5 of the 9 routes and none of 76 saved files, the About page's photos and the project videos among them.)
+- **Every captured route has its page before anything is measured (rc.9).** After the seed, status checks from the
+  files that the clone has a page for every captured route of its own document (`clone/<route>` or
+  `clone/<route>/index.html`); a route without one is Blocked (owner tool) at once, the routes named, instead of an hour
+  of scoring ending in HTTP errors on 127.0.0.1. It checks that the page exists, not that it is faithful: fidelity is
+  every check after it.
+- **No briefs or behaviours for an own bundle.** The clone runs the site's own code: nothing is ported, so status asks
+  for neither, and says so (not "behaviours (0 cited)").
 
 ## Third-party content (D3)
 
