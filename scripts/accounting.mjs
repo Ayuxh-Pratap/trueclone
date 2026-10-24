@@ -20,7 +20,10 @@ import { objectiveKey } from './loop.mjs';
 
 export const itemId = (side, kind, rest) => `${side}:${kind}:${rest}`;
 
-export function account({ evs, loop, blockedUnits = new Set(), declared = {} }) {
+// blockedBy ({ owner, why }): the outcome is Blocked. Every item still pending was not reached because of that cause, so
+// it is "blocked", owned by the blocker's owner, its reason "not reached" with the cause: a terminal outcome never
+// leaves an item pending (RC7 elise: a Blocked outcome recorded 323 items pending and none blocked).
+export function account({ evs, loop, blockedUnits = new Set(), declared = {}, blockedBy = null }) {
   const all = [];
   for (const ev of evs) {
     if (!ev || ev.missingCapture) continue;
@@ -31,7 +34,7 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {} }) 
       const o = loop?.objectives?.[objectiveKey(side, u)];
       let disposition = 'pending', owner = null, reason = u.reason || null;
       if (['pass', 'accepted', 'na'].includes(u.status)) disposition = 'passed';
-      else if (u.status === 'tool') { disposition = 'not-verifiable'; owner = 'tool'; }
+      else if (u.status === 'tool') { disposition = 'not-verifiable'; owner = u.owner || 'tool'; }
       else if (u.status === 'error' && blockedUnits.has(id)) { disposition = 'blocked'; owner = blockedUnits.get?.(id) || 'tool'; }
       else if (['fail', 'error'].includes(u.status) && o?.state === 'concluded') { disposition = 'unresolved'; owner = o.owner || 'clone'; reason = `${o.concludedWhy}; best ${o.bestValue ?? '–'}, now ${o.lastValue ?? '–'}`; }
       else if (u.status === 'fail') { owner = 'clone'; reason = `${u.value ?? '–'} against ${u.bar ?? '–'}${(u.membersBelow || []).length ? `; ${u.membersBelow.length} frame(s) below their floor` : ''}`; }
@@ -56,6 +59,7 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {} }) 
   // the written checks are shared: the app's notes and coverage are the clone's (one notes.md)
   const seen = new Set();
   const items = all.filter((i) => { const k = i.kind === 'written' ? `written:${i.id.split(':').pop()}` : i.id; if (seen.has(k)) return false; seen.add(k); return true; });
+  if (blockedBy) for (const i of items) if (i.disposition === 'pending') Object.assign(i, { disposition: 'blocked', owner: blockedBy.owner || 'tool', reason: `not reached: the run is Blocked (${String(blockedBy.why || '').slice(0, 200)})${i.reason ? `; was: ${i.reason}` : ''}`, notReached: true });
   const counts = { passed: 0, unresolved: 0, 'not-verifiable': 0, blocked: 0, pending: 0 };
   for (const i of items) counts[i.disposition]++;
   return { total: items.length, counts, ids: items.map((i) => i.id), items: items.filter((i) => i.disposition !== 'passed') };

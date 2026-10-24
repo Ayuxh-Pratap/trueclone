@@ -22,7 +22,7 @@
 // usage: node scripts/reveals.mjs <name> [--viewport desktop]   -> sites/<name>/reference/reveals.<vp>.json
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo, siteDir, unroll, withMachineLock } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, wheelTo, siteDir, unroll, withMachineLock, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -229,7 +229,7 @@ async function record(vp) {
   let result, scrubs, pins;
   try {
     const { page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
-    await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
+    await openUrl(page, meta.url); // the readiness every read uses (lib.mjs); RC7 elise crashed here on a slow load
     await page.mouse.move(5, vp.height - 5);
     await waitStill(page, { timeout: 15000, interval: 200 });
     await unroll(page); // an app shell scrolls like a document (lib.mjs), as everywhere the page is measured

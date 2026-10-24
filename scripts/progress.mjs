@@ -72,10 +72,12 @@ const covers = (run, want) => {
 // What status decides on, as one digest: the clone and the app (content), the reference and its records, every result
 // and review frame, the instrument's configuration, and the notes sections that count (not an agent's own run log).
 // File sizes and times stand for contents (a touch counts as a change: a missed repeat, never a false one).
+// The installed trueclone version is an input too: a Blocked run says "run status again once a fixed version is
+// installed", and under a new version a step that failed twice is run again, never re-blocked on the old count.
 const NOTE_SECTIONS = /^(review|behaviours|stack|attempts|findings|accepted differences)\b/i;
-export async function inputsDigest(root, { subject = null, appSubject = null } = {}) {
+export async function inputsDigest(root, { subject = null, appSubject = null, tool = null } = {}) {
   const h = crypto.createHash('sha1');
-  h.update(`${subject}|${appSubject}\n`);
+  h.update(`${subject}|${appSubject}|${tool}\n`);
   const notes = await fs.readFile(path.join(root, 'notes.md'), 'utf8').catch(() => '');
   // a "- cannot:" declaration is an answer to the counters, never a change that resets them
   for (const m of notes.matchAll(/^## ([^\n]*)\n([\s\S]*?)(?=^## |(?![\s\S]))/gm)) {

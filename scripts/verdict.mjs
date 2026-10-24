@@ -22,6 +22,7 @@ import { SCORED } from './lib.mjs';
 import { readAll, parseKey } from './results.mjs';
 import { subjectHash, refIdOf, configHash, codeHash } from './identity.mjs';
 import { hamming, TOKEN_BITS } from './measure.mjs';
+import { errorOwner } from './failures.mjs';
 
 // behaviour: every member passes or fails on its own tolerance (behaviour.mjs TOL), so all of them must pass
 export const TARGETS = { layout: 98, 'layout-real': 98, reduced: 98, scroll: 95, canvas: 90, curves: 95, detail: 95, hovers: 90, load: 95, journey: 95, interact: 95, behaviour: 100 };
@@ -33,7 +34,7 @@ export const FLOORS = { scroll: 80, journey: 80, canvas: 75, behaviour: 100 };
 export const TEMPLATE_ALLOWANCE = 15;
 // an accepted difference explains the last few points, never a broken page
 export const ACCEPT_FLOOR = 95;
-export const LABELS = { layout: 'Layout (structure)', 'layout-real': 'Layout (real pixels)', reduced: 'Reduced motion (layout)', behaviour: 'Behaviour (what changes by itself)', scroll: 'Scroll states', canvas: 'Canvases', curves: 'Motion curves', detail: 'Detail (styles)', hovers: 'Hovers', load: 'Load sequence', interact: 'Interactions', journey: 'Journey', review: 'Review (by eye)', lint: 'Clone lint', notes: 'Notes (behaviours)', coverage: 'Coverage (site code)' };
+export const LABELS = { route: 'Route captured', layout: 'Layout (structure)', 'layout-real': 'Layout (real pixels)', reduced: 'Reduced motion (layout)', behaviour: 'Behaviour (what changes by itself)', scroll: 'Scroll states', canvas: 'Canvases', curves: 'Motion curves', detail: 'Detail (styles)', hovers: 'Hovers', load: 'Load sequence', interact: 'Interactions', journey: 'Journey', review: 'Review (by eye)', lint: 'Clone lint', notes: 'Notes (behaviours)', coverage: 'Coverage (site code)' };
 // the order failing checks are worked in (status) and listed in (REPORT)
 export const ORDER = ['journey', 'layout', 'layout-real', 'scroll', 'canvas', 'behaviour', 'interact', 'load', 'detail', 'hovers', 'curves', 'reduced'];
 const SEED_VPS = ['desktop', 'tablet', 'mobile'];
@@ -189,6 +190,13 @@ export async function evaluate(root, { side = 'clone', readOnly = false } = {}) 
     if (u.status === 'fail' && !['interact'].includes(u.check) && typeof u.value === 'number' && u.value >= ACCEPT_FLOOR && !(u.membersBelow || []).length && acceptedFor(u.check, u.viewport).length) { u.status = 'accepted'; u.accepted = acceptedFor(u.check, u.viewport)[0]; }
     u.shortfall = shortfallOf({ ...u, state: u.status });
     units.push(u);
+  }
+  // A route the capture was asked for and could not capture (capture.mjs routesFailed) stays required, and is not
+  // verifiable here: the run can end Incomplete with it named, never Verified as if the request had been only the
+  // routes that loaded (RC7 elise: 9 routes asked, 1 failed at every size). Pages left out at a cap or not in a
+  // --routes list were never asked for; status asks about those once (RC6-17).
+  for (const f of (meta.routesNotCaptured || []).filter((r) => r && typeof r === 'object' && (r.failed || /^capture failed|rendered page was not saved/.test(r.why || '')))) {
+    units.push({ check: 'route', route: f.path, viewport: '', state: '', value: null, record: null, status: 'tool', reason: `not captured: ${f.why}`, owner: errorOwner({ error: f.why }) });
   }
 
   // the review: every frame shot of what is there now, each with a verdict given to that picture

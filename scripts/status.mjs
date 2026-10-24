@@ -39,7 +39,7 @@ let loopRef = null;
 let runs = [];
 let digestP = null;
 // What status decides on, once per call (progress.mjs): the step counters and the report's freshness hang on it
-const digest = () => (digestP ||= (async () => inputsDigest(root, { subject: await subjectHash(root, 'clone'), appSubject: await subjectHash(root, 'app') }))());
+const digest = () => (digestP ||= (async () => inputsDigest(root, { subject: await subjectHash(root, 'clone'), appSubject: await subjectHash(root, 'app'), tool: toolVersion() }))());
 // Name the next step (exit 1). Every named step is counted (progress.mjs): one that failed twice, ran twice without
 // effect, or was named again and again while nothing changed ends the run Blocked with what was tried, instead of
 // being named for ever (RC6 astro, allbirds). `opts.owner` is who the step is for (clone work or a tool step).
@@ -98,11 +98,12 @@ let blockedUnitsRef = new Map(); // the units a Blocked outcome names (accountin
 // Blocked (exit 2): the cause, who owns it (tool, environment, clone, run), what was tried and what to do; everything
 // done so far is kept, and `status` resumes once the cause is fixed
 const blockedEarly = async (why, what, data = {}) => {
-  // every required item of both sides, accounted for: what is blocked, and what was not reached (pending)
+  // every required item of both sides, accounted for: what is blocked, and what the cause kept from being reached
+  // (blocked by that cause too: a terminal outcome leaves nothing pending, accounting.mjs)
   let accounting = null;
   try {
     const evs = [evsRef?.[0] || await evaluate(root, { side: 'clone' }), evsRef?.[1] || await evaluate(root, { side: 'app' })];
-    accounting = account({ evs, loop: loopRef, blockedUnits: blockedUnitsRef });
+    accounting = account({ evs, loop: loopRef, blockedUnits: blockedUnitsRef, blockedBy: { owner: data.owner || 'tool', why } });
   } catch { /* no capture yet: nothing to account for */ }
   await writeOutcome({ outcome: 'blocked', owner: data.owner || 'tool', why, next: what, resume: `fix the cause, then ${T(`status ${name}`)} (everything done so far is kept)`, subjectHash: await subjectHash(root, 'clone'), appSubjectHash: await subjectHash(root, 'app'), elapsed: elapsedRef, ...(accounting && accounting.total ? { accounting } : {}), ...data });
   if (loopRef) await saveLoop(root, loopRef);

@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill, bundleIntegrity, MASK_VERSION } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill, bundleIntegrity, MASK_VERSION, loadLive } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 import { detectInPage, operable } from './interactions-auto.mjs';
 import { canonicalPath, routeKey, routeDir, dirKey, uniqueSlugs, routeUrl } from './routes.mjs';
@@ -197,7 +197,9 @@ try {
     // exact mode, desktop: everything the page loads, at its own address (kept only for a canvas app, or --bundle:
     // the clone then runs the site's own code; see lib.mjs recordBundle)
     if (desktop && mode === 'exact') { await fs.rm(path.join(ref, 'bundle'), { recursive: true, force: true }); bundleDone = recordBundle(page, ref); }
-    await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+    // the load event, waited for as long as the page keeps loading (lib.mjs loadLive: RC7 elise, a 21 MB page on a
+    // slow link, overran a fixed 60 s limit at every size)
+    await loadLive(page, url);
     if (desktop) {
       const norm = (u) => { const x = new URL(u); return `${x.host.replace(/^www\./, '')}${x.pathname.replace(/\/$/, '')}`; };
       if (norm(page.url()) !== norm(url)) {
@@ -447,7 +449,7 @@ for (let wave = choose(); wave.length; wave = explicit ? [] : choose()) {
         // into reference/scripts/ below, so briefs and the coverage check see them
         const finishPageEvidence = ownPage ? await startScriptEvidence(page, routeUrl(r.path, home, true)).catch(() => null) : null;
         try {
-          await page.goto(routeUrl(r.path, home, true), { waitUntil: 'load', timeout: 60000 });
+          await loadLive(page, routeUrl(r.path, home, true));
           await settle(page, hide);
           if (finishPageEvidence) await finishPageEvidence(path.join(dir, 'scripts')).catch((e) => console.warn(`WARNING scripts of ${r.path} not saved: ${e.message}`));
           // the links on this route, for the next wave (RC6-17): read from the live DOM (settled, at desktop), as the
@@ -492,7 +494,7 @@ for (let wave = choose(); wave.length; wave = explicit ? [] : choose()) {
               const again = await newPage(browser3, vp, asked);
               watchErrors(again.page, r.path);
               try {
-                await again.page.goto(routeUrl(r.path, home, true), { waitUntil: 'load', timeout: 60000 });
+                await loadLive(again.page, routeUrl(r.path, home, true));
                 await settle(again.page, hide);
                 await mask(again.page);
                 selfs.push(matchPct(PNG.sync.read(maskShot), PNG.sync.read(await again.page.screenshot({ fullPage: true }))).pct);
@@ -501,7 +503,7 @@ for (let wave = choose(); wave.length; wave = explicit ? [] : choose()) {
             const self = selfs.length ? Math.min(...selfs) : 100;
             if (self < 99) { r.unstable = { match: self, loads: selfs }; console.log(`route ${r.path}: differs from itself between loads (${selfs.join('%, ')}% at desktop): random content, held to ${self}%`); }
           }
-        } catch (e) { console.warn(`WARNING route ${r.path} at ${vp.name} not captured: ${e.message.split('\n')[0]}`); }
+        } catch (e) { (r.failed ||= []).push({ viewport: vp.name, error: e.message.split('\n')[0] }); console.warn(`WARNING route ${r.path} at ${vp.name} not captured: ${e.message.split('\n')[0]}`); }
         finally { await context.close(); }
       }
     }));
@@ -512,11 +514,27 @@ for (let wave = choose(); wave.length; wave = explicit ? [] : choose()) {
 } finally {
   if (browser3 && !flags.cdp) await browser3.close();
 }
+// A route is captured only when it was captured at every size, its own page saved (RC7 elise: /NASA%20(Draft).html
+// failed at all five sizes and was still listed, counted "captured at 5 sizes", mirrored and given navigation
+// scenarios). One that failed anywhere leaves the routes and is listed as not captured, with the sizes and the error;
+// what it left in reference/routes/ is not part of the reference.
+const routesFailed = [];
+for (let i = routeInfo.length - 1; i >= 0; i--) {
+  const r = routeInfo[i];
+  if (!r.slug) continue;
+  const got = new Set((r.viewports || []).map((v) => v.viewport));
+  const missing = SCORED.filter((vp) => !got.has(vp.name)).map((vp) => vp.name);
+  const noPage = !r.sameDocument && !(await fs.stat(path.join(root, r.dir, 'rendered.html')).catch(() => null));
+  if (!missing.length && !noPage) continue;
+  routeInfo.splice(i, 1);
+  routesFailed.unshift({ path: r.path, from: null, failed: true, why: missing.length ? `capture failed at ${missing.length === SCORED.length ? 'every size' : missing.join(', ')}: ${r.failed?.[0]?.error || 'not captured'}` : 'its rendered page was not saved' });
+}
+for (const f of routesFailed) console.warn(`WARNING route ${f.path} not captured (${f.why}): not part of this reference, not verified`);
 const appKind = routeInfo.length < 2 ? 'single page' : routeInfo.every((r) => r.sameDocument) ? 'single-page app' : 'pages';
 const others = routeInfo.filter((r) => r.slug);
 // every page found and not captured, with why (meta.routesNotCaptured; printed at the end)
-const routesNotCaptured = routesFound.filter((f) => !chosen.some((c) => routeKey(c) === routeKey(f.path)))
-  .map((f) => ({ path: f.path, from: f.from, why: clashes.get(routeKey(f.path)) || (explicit ? 'not in the --routes list' : `beyond the cap of ${cap} route${cap === 1 ? '' : 's'} (--routes <n> for more)`) }));
+const routesNotCaptured = [...routesFailed, ...routesFound.filter((f) => !chosen.some((c) => routeKey(c) === routeKey(f.path)))
+  .map((f) => ({ path: f.path, from: f.from, why: clashes.get(routeKey(f.path)) || (explicit ? 'not in the --routes list' : `beyond the cap of ${cap} route${cap === 1 ? '' : 's'} (--routes <n> for more)`) }))];
 // a route's scenarios join the captured page's, except links the captured page already goes to at that size (the
 // same sidebar on every route would otherwise draft the same navigation once per route)
 // Navigation is drafted only to routes this capture has: a link to an uncaptured page would be scored against
@@ -530,6 +548,7 @@ const navCount = {};
 for (let i = 0; i < autoScenarios.length; i++) if (autoScenarios[i].navigation && (navCount[autoScenarios[i].viewport] = (navCount[autoScenarios[i].viewport] || 0) + 1) > 8) autoScenarios.splice(i--, 1);
 const homeNav = new Set(autoScenarios.filter((s) => s.navigation).map((s) => `${s.viewport}:${navTarget(s)}`));
 for (const s of routeScenarios) {
+  if (!captured.has(routeKey(s.path))) continue; // drafted on a route that was not captured at every size
   const target = s.navigation ? navTarget(s) : null;
   if (target && !captured.has(target)) continue;
   // a link back to the captured page is kept (Back and links must find it at its own address in the clone too)
@@ -578,7 +597,7 @@ if (fitSizes.length) {
         const { context, page } = await newPage(browser2, { name: `fit${s.width}`, width: s.width, height: s.height }, asked);
         watchErrors(page, '');
         try {
-          await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+          await loadLive(page, url);
           await settle(page, hide);
           inlineStyles[`${s.width}x${s.height}`] = await page.evaluate(readInlineStyles);
         } catch (e) { console.warn(`WARNING inline styles at ${s.width}x${s.height} not read: ${e.message.split('\n')[0]}`); }
@@ -608,6 +627,7 @@ await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: 
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
 // with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.
 const ownPages = routeInfo.filter((r) => r.slug && !r.sameDocument);
+const mirrored = []; // the pages actually mirrored: the count below is of these, never of the pages attempted
 for (const r of ownPages) {
   const rendered = path.join(root, r.dir, 'rendered.html');
   if (!(await fs.stat(rendered).catch(() => null))) { console.warn(`WARNING ${r.path}: no rendered page captured, not mirrored`); continue; }
@@ -620,10 +640,11 @@ for (const r of ownPages) {
   for (const [file, css] of out.css) await fs.writeFile(path.join(mirrorDir, 'css', file), css);
   await fs.mkdir(path.join(mirrorDir, 'routes'), { recursive: true });
   await fs.writeFile(path.join(mirrorDir, 'routes', `${r.slug}.html`), out.html);
+  mirrored.push(r);
 }
 if (ownPages.length) {
   await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
-  console.log(`mirror: ${ownPages.length} separate page(s) mirrored in reference/mirror/routes/ (${ownPages.map((r) => r.path).join(', ')})`);
+  console.log(`mirror: ${mirrored.length} of ${ownPages.length} separate page(s) mirrored in reference/mirror/routes/ (${mirrored.map((r) => r.path).join(', ') || 'none'})`);
 }
 console.table(summary);
 // the commit mark: everything above is written, so this capture is a reference
@@ -634,7 +655,8 @@ console.table(summary);
 }
 console.log(`${manifest.length} assets saved. Reference: ${path.relative(process.cwd(), ref)}, mirror in reference/mirror${mode === 'exact' ? ` (exact mode, authorised by: ${permission})` : ''}`);
 // last, so it is not lost above: the site's pages this reference does not have (RC6-17)
-if (routesNotCaptured.length) console.log(`routes not captured: ${routesNotCaptured.length} of the ${routesFound.length} pages found (meta.routesNotCaptured): ${routesNotCaptured.slice(0, 10).map((r) => `${r.path} (${r.why})`).join('; ')}${routesNotCaptured.length > 10 ? '; …' : ''}`);
+const leftOut = routesNotCaptured.length - routesFailed.length;
+if (routesNotCaptured.length) console.log(`routes not captured: ${[routesFailed.length ? `${routesFailed.length} that failed to capture` : '', leftOut ? `${leftOut} of the ${routesFound.length} pages found` : ''].filter(Boolean).join(' and ')} (meta.routesNotCaptured): ${routesNotCaptured.slice(0, 10).map((r) => `${r.path} (${r.why})`).join('; ')}${routesNotCaptured.length > 10 ? '; …' : ''}`);
 
 // ---------- Static local mirror of the rendered page ----------
 // Same DOM as rendered.html, asset URLs rewritten to the saved copies, every script and inline handler

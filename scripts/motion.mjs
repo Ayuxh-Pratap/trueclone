@@ -9,7 +9,7 @@
 // usage: node scripts/motion.mjs <name> [--viewport desktop|tablet|mobile]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, statesInPage, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, statesInPage, siteDir, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -189,7 +189,7 @@ try {
   const { context, page } = await newPage(browser, vp, { reducedMotion: 'no-preference' });
   await page.addInitScript(INIT);
   const t0 = Date.now();
-  await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
+  await openUrl(page, meta.url); // the readiness every read uses (lib.mjs); RC7 elise crashed here on a slow load
   await page.mouse.move(5, vp.height - 5);
   const intro = await waitStill(page, { timeout: 15000, interval: 200 });
   const introMs = Date.now() - t0;

@@ -245,6 +245,101 @@ test('RC6-03: a step that ran and changed nothing, twice, ends Blocked (owner to
   assert.equal(r.code, 2, r.out);
   assert.match(r.out, /ran \d+ times and changed nothing/);
 });
+// A requested route that failed to capture is dropped from what is measured (capture.mjs), but it stays required: the
+// run is Incomplete with it named, never Verified as if the request had been the routes that loaded. A page the request
+// left out (not in a --routes list) is not a required item.
+test('RC7-E2b: a requested route that failed to capture keeps the run from Verified (Incomplete, the route not verifiable, named)', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'rf');
+  assert.equal(status(p, 'rf').code, 0);
+  const mf = path.join(site.root, 'reference', 'meta.json');
+  const meta = JSON.parse(await fs.readFile(mf, 'utf8'));
+  meta.routesNotCaptured = [
+    { path: '/NASA%20(Draft).html', from: null, failed: true, why: 'capture failed at every size: the live page did not load (nothing arrived for 30s after 95s): https://example.test/NASA%20(Draft).html' },
+    { path: '/later.html', from: '/', why: 'not in the --routes list' },
+  ];
+  await fs.writeFile(mf, JSON.stringify(meta, null, 2));
+  const r = status(p, 'rf');
+  assert.equal(r.code, 3, r.out);
+  const out = await readJson(site, 'compare/outcome.json');
+  assert.equal(out.outcome, 'incomplete');
+  for (const side of ['clone', 'app']) {
+    const item = out.accounting.items.find((i) => i.id === `${side}:unit:route|/NASA%20(Draft).html||`);
+    assert.equal(item?.disposition, 'not-verifiable', `${side}: ${JSON.stringify(out.accounting.items)}`);
+    assert.equal(item.owner, 'environment');
+    assert.match(item.reason, /^not captured: capture failed at every size/);
+  }
+  assert.ok(!out.accounting.items.some((i) => /later\.html/.test(i.id)), 'a page not asked for is not a required item');
+  const rep = await fs.readFile(path.join(site.root, 'REPORT.md'), 'utf8');
+  assert.match(rep, /\*\*Requested, not captured, not verified\*\*: 1 route\(s\)[^\n]*NASA%20\(Draft\)\.html[^\n]*covers the 1 route\(s\) captured, not the request/);
+  assert.match(rep, /\*\*Not captured, not verified\*\*: 1 page\(s\)[^\n]*later\.html/);
+  await fs.rm(path.join(site.root, '.tc-hash-clone.json'), { force: true });
+  await fs.rm(path.join(site.root, '.tc-hash-next.json'), { force: true });
+  const a = audit(site.root);
+  assert.equal(a.status, 0, `${a.stdout}${a.stderr}`);
+});
+// The Blocked outcome above says to run status again once a fixed version is installed: under another trueclone version
+// the inputs differ, so the step that failed twice is named and run again instead of re-blocked on the old count.
+test('RC7-E5: a step failed twice under one trueclone version is run again under another (the Blocked resume holds)', async () => {
+  const { inputsDigest, trackStep } = await import('../scripts/progress.mjs');
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'rv');
+  const cmd = 'npx trueclone reads rv';
+  const at = (s) => new Date(Date.parse('2026-10-24T00:00:00Z') + s * 1000);
+  const run = (s) => ({ step: 'reads', args: ['rv'], startedAt: at(s).toISOString(), endedAt: at(s + 1).toISOString(), exit: 1 });
+  const d1 = await inputsDigest(site.root, { tool: '0.5.0-rc.7' });
+  assert.equal(await inputsDigest(site.root, { tool: '0.5.0-rc.7' }), d1, 'the same version, the same inputs');
+  const loop = {};
+  trackStep(loop, cmd, d1, [], at(0));
+  trackStep(loop, cmd, d1, [run(10)], at(20));
+  const s = trackStep(loop, cmd, d1, [run(10), run(30)], at(40));
+  assert.equal(s.failed, 2, JSON.stringify(s));
+  const d2 = await inputsDigest(site.root, { tool: '0.5.0-rc.8' });
+  assert.notEqual(d2, d1);
+  assert.equal(trackStep(loop, cmd, d2, [run(10), run(30)], at(50)).failed, 0, 'a new version resets the count: the step runs again');
+});
+// RC7 elise: `reads` failed twice and the run ended Blocked with 323 items "pending", none blocked, and the auditor
+// called it consistent. Every item a Blocked outcome did not reach is blocked by its cause, with its owner.
+test('RC7-E3/E4: a step that failed twice ends Blocked with nothing pending (unreached items blocked by the cause); the auditor rejects pending at Blocked', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'fb');
+  await fs.rm(path.join(site.root, 'compare', 'review', 'wide'), { recursive: true });
+  let r = status(p, 'fb');
+  assert.match(r.out, /next: npx trueclone review fb --size wide/);
+  for (let i = 0; i < 3 && r.code === 1; i++) {
+    const t = new Date(Date.now() + 5).toISOString();
+    await journal(site, [{ event: 'start', step: 'review', args: ['fb', '--size', 'wide'], pid: 999999980 + i, startedAt: t }, { event: 'end', step: 'review', pid: 999999980 + i, startedAt: t, endedAt: t, exit: 1 }]);
+    await tick();
+    r = status(p, 'fb');
+  }
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /Blocked \(owner: tool\)/);
+  const out = await readJson(site, 'compare/outcome.json');
+  assert.equal(out.outcome, 'blocked');
+  assert.equal(out.accounting.counts.pending, 0, JSON.stringify(out.accounting.counts));
+  const unreached = out.accounting.items.filter((i) => i.notReached);
+  assert.ok(unreached.length >= 1, JSON.stringify(out.accounting.items));
+  for (const i of unreached) { assert.equal(i.disposition, 'blocked'); assert.equal(i.owner, 'tool'); assert.match(i.reason, /^not reached: the run is Blocked \(/); }
+  assert.ok(out.accounting.items.some((i) => i.kind === 'review-dir' && i.notReached), 'the review never shot is blocked by the failed step');
+  await fs.rm(path.join(site.root, '.tc-hash-clone.json'), { force: true });
+  await fs.rm(path.join(site.root, '.tc-hash-next.json'), { force: true });
+  let a = audit(site.root);
+  assert.equal(a.status, 0, `${a.stdout}${a.stderr}`);
+  // the outcome as rc.7 wrote it (unreached items left pending): a finding
+  const old = structuredClone(out);
+  for (const i of old.accounting.items) if (i.notReached) { i.disposition = 'pending'; i.owner = null; delete i.notReached; }
+  old.accounting.counts.pending = unreached.length; old.accounting.counts.blocked -= unreached.length;
+  await fs.writeFile(path.join(site.root, 'compare', 'outcome.json'), JSON.stringify(old, null, 2));
+  a = audit(site.root);
+  assert.equal(a.status, 1, a.stdout);
+  assert.match(a.stdout, new RegExp(`${unreached.length} item\\(s\\) are still pending at a blocked outcome`));
+  // a Blocked with required items and no accounting at all: a finding too
+  delete old.accounting;
+  await fs.writeFile(path.join(site.root, 'compare', 'outcome.json'), JSON.stringify(old, null, 2));
+  a = audit(site.root);
+  assert.equal(a.status, 1, a.stdout);
+  assert.match(a.stdout, /the blocked outcome has no accounting of the \d+ required items/);
+});
 test('RC6-03: a work step named again and again with nothing changing asks once for a Finding, which ends the run with it named', async () => {
   const p = await tmpProject();
   const site = await verifiedSite(p, 'id');

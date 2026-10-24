@@ -5,7 +5,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, COMPARE, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, COMPARE, siteDir, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -66,7 +66,7 @@ const browser = await openBrowser(flags.cdp);
 try {
   for (const vp of VIEWPORTS) {
     const { context, page } = await newPage(browser, vp);
-    await page.goto(clone || meta.url, { waitUntil: 'load', timeout: 60000 });
+    await openUrl(page, clone || meta.url); // the readiness every read uses (lib.mjs); RC7 elise crashed here on a slow load
     await settle(page, hide);
     const tree = await page.evaluate(specInPage, depth);
     await fs.writeFile(path.join(outDir, `${vp.name}${clone ? '.clone' : ''}.spec.json`), JSON.stringify(tree));

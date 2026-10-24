@@ -4,8 +4,9 @@
 //     content there now (a run that stopped at "in progress", or whose outcome describes other content, is a finding)
 //   - every required item is accounted for: the set of ids in the outcome's accounting equals the set recomputed here
 //     (units of both sides, the interaction plan, review frames and folders), by identity, not by count; nothing is
-//     "pending" at a terminal outcome; Verified has no item not passed; Incomplete lists only differences the loop
-//     concluded and results the tool cannot verify; Blocked names its owner
+//     "pending" at any terminal outcome, Blocked included; Verified has no item not passed; Incomplete lists only
+//     differences the loop concluded and results the tool cannot verify; Blocked names its owner, and so does every
+//     item it blocks
 //   - the console, the outcome and REPORT.md agree: the last status output (logs/status.log) says the outcome recorded,
 //     and REPORT's headline says it too; REPORT's Scores header follows the sizes it shows
 //   - REPORT.md's result counts are the recomputed ones; the clone lint; results measured by a modified instrument
@@ -47,7 +48,9 @@ for (const ev of [clone, app]) {
   for (const d of ev.review?.missingDirs || []) required.add(`${ev.side}:review-dir:${d.dir}`);
 }
 const acc = outcome?.accounting;
-if (outcome && TERMINAL.includes(outcome.outcome) && outcome.outcome !== 'blocked' && !acc) findings.push(`the ${outcome.outcome} outcome has no accounting of the required items`);
+// a Blocked outcome accounts for every item too (RC7 elise: 323 items pending at Blocked, accepted). The one exception
+// is trueclone itself crashing (outcome.error): status could not evaluate anything then
+if (outcome && TERMINAL.includes(outcome.outcome) && !acc && (outcome.outcome !== 'blocked' || (required.size && !outcome.error))) findings.push(`the ${outcome.outcome} outcome has no accounting of the ${required.size} required items`);
 if (acc) {
   const recorded = new Set((acc.ids || []).filter((i) => /:(unit|frame|review-dir):/.test(i)));
   const missing = [...required].filter((i) => !recorded.has(i));
@@ -55,7 +58,10 @@ if (acc) {
   if (missing.length) findings.push(`${missing.length} required item(s) are in no disposition of the outcome: ${missing.slice(0, 6).join(', ')}${missing.length > 6 ? '…' : ''}`);
   if (extra.length) findings.push(`${extra.length} item(s) accounted for are not required now: ${extra.slice(0, 6).join(', ')}${extra.length > 6 ? '…' : ''}`);
   const pending = (acc.items || []).filter((i) => i.disposition === 'pending');
-  if (TERMINAL.includes(outcome.outcome) && outcome.outcome !== 'blocked' && pending.length) findings.push(`${pending.length} item(s) are still pending at a ${outcome.outcome} outcome: ${pending.slice(0, 4).map((i) => i.label).join('; ')}`);
+  if (TERMINAL.includes(outcome.outcome) && pending.length) findings.push(`${pending.length} item(s) are still pending at a ${outcome.outcome} outcome: ${pending.slice(0, 4).map((i) => i.label).join('; ')}`);
+  const ownerless = (acc.items || []).filter((i) => i.disposition === 'blocked' && !i.owner);
+  if (ownerless.length) findings.push(`${ownerless.length} blocked item(s) without an owner: ${ownerless.slice(0, 4).map((i) => i.label).join('; ')}`);
+  if (acc.counts && Object.values(acc.counts).reduce((a, b) => a + b, 0) !== acc.total) findings.push(`the accounting's counts add up to ${Object.values(acc.counts).reduce((a, b) => a + b, 0)}, not its total ${acc.total}`);
   if (outcome.outcome === 'verified' && (acc.items || []).length) findings.push(`Verified with ${(acc.items || []).length} item(s) not passed`);
   if (outcome.outcome === 'incomplete' && (acc.items || []).some((i) => !['unresolved', 'not-verifiable'].includes(i.disposition))) findings.push('Incomplete lists an item that is neither a concluded difference nor a result the tool cannot verify');
   if (outcome.outcome === 'incomplete' && !(acc.items || []).length) findings.push('Incomplete with nothing listed');

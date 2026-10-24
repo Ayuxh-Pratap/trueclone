@@ -14,7 +14,7 @@
 // usage: node scripts/widgets.mjs <name> [--viewport desktop]   -> sites/<name>/reference/widgets.<vp>.json
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, siteDir } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, waitStill, siteDir, openUrl } from './lib.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -159,7 +159,7 @@ const browser = await openBrowser(flags.cdp);
 let result;
 try {
   const { page } = await newPage(browser, vp, { reducedMotion: 'reduce' });
-  await page.goto(meta.url, { waitUntil: 'load', timeout: 60000 });
+  await openUrl(page, meta.url); // the readiness every read uses (lib.mjs); RC7 elise crashed here on a slow load
   await waitStill(page, { timeout: 15000, interval: 200 });
   await page.evaluate(installKeysInPage);
   const found = await page.evaluate(markInPage);

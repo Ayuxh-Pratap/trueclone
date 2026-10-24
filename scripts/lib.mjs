@@ -441,17 +441,56 @@ export async function newPage(browser, vp, { stabilise = process.env.TC_STABILIS
   return { context, page };
 }
 
-// Open a page for measuring. A live page whose load event never comes (a third-party request that hangs, several
-// checks loading the same site at once) is still the page a visitor sees once it is parsed: on a load timeout the
-// check carries on from DOMContentLoaded, says so, and settles as usual, instead of failing the whole check.
-export async function openUrl(page, url, timeout = 60000) {
+// Navigate and wait for the load event for as long as the page keeps loading. A heavy page on a slow link is slow, not
+// broken (RC7 elise: 21 MB of autoplaying video and photos at ~300 KB/s reached load at 46-57 s alone, later when
+// several reads shared the link, and a fixed 60 s limit failed every read): the limit is on silence, `stall` ms with
+// no byte received and no request starting or ending, with a `ceiling` on the whole load. The load event itself is
+// still required: nothing here measures a page before it.
+// Returns { loaded, ms, stalled } (stalled: the page went silent; otherwise the ceiling was reached).
+export async function gotoLoaded(page, url, { stall = 30000, ceiling = 600000 } = {}) {
+  const t0 = Date.now();
+  let last = t0, loadedAt = null;
+  const bump = () => { last = Date.now(); };
+  const onLoad = () => { loadedAt = Date.now(); };
+  const events = ['request', 'requestfinished', 'requestfailed', 'response'];
+  for (const e of events) page.on(e, bump);
+  page.on('load', onLoad);
+  // bytes arriving on a long download (a video) show progress no request event does: Chromium's network events
+  let cdp = null;
+  try { cdp = await page.context().newCDPSession(page); await cdp.send('Network.enable'); cdp.on('Network.dataReceived', bump); } catch { cdp = null; }
   try {
-    await page.goto(url, { waitUntil: 'load', timeout });
-  } catch (e) {
-    if (!/Timeout/i.test(e.name || e.message)) throw e;
-    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
-    console.warn(`WARNING ${url}: no load event within ${timeout / 1000}s (a request that never finishes); measured from the parsed page`);
+    await page.goto(url, { waitUntil: 'commit', timeout: 60000 });
+    for (;;) {
+      if (loadedAt) return { loaded: true, ms: loadedAt - t0, stalled: false };
+      if (Date.now() - last > stall) return { loaded: false, ms: Date.now() - t0, stalled: true };
+      if (Date.now() - t0 > ceiling) return { loaded: false, ms: Date.now() - t0, stalled: false };
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  } finally {
+    for (const e of events) page.off(e, bump);
+    page.off('load', onLoad);
+    if (cdp) await cdp.detach().catch(() => {});
   }
+}
+const notLoaded = (r, stall, ceiling) => (r.stalled ? `nothing arrived for ${stall / 1000}s (a request that never finishes)` : `still loading after ${ceiling / 1000}s`);
+
+// The live page, loaded for a capture: the load event is required. A page that goes silent or never finishes loading is
+// the live page not loading (owner: the environment), named with what was seen.
+export async function loadLive(page, url, { stall = 30000, ceiling = 600000 } = {}) {
+  const r = await gotoLoaded(page, url, { stall, ceiling });
+  if (!r.loaded) throw new Error(`the live page did not load (${notLoaded(r, stall, ceiling)} after ${Math.round(r.ms / 1000)}s): ${url}`);
+  return r;
+}
+
+// Open a page for measuring. A live page whose load event never comes because a request hangs (a third-party beacon)
+// is still the page a visitor sees once it is parsed: on a stall the check carries on from DOMContentLoaded, says so,
+// and settles as usual, instead of failing the whole check. A page still loading is waited for (gotoLoaded).
+export async function openUrl(page, url, { stall = 30000, ceiling = 600000 } = {}) {
+  const r = await gotoLoaded(page, url, { stall, ceiling });
+  if (r.loaded) return r;
+  await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+  console.warn(`WARNING ${url}: no load event: ${notLoaded(r, stall, ceiling)}; measured from the parsed page`);
+  return r;
 }
 
 // page.evaluate has no timeout in Playwright; anything that loops over evaluate goes through this.

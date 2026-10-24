@@ -45,7 +45,7 @@ for (const c of ev.checks.filter((x) => Array.isArray(x.units))) {
   const cell = (v) => fmt(main.find((u) => u.viewport === v));
   const other = c.units.filter((u) => u.route);
   const bad = c.units.filter((u) => !['pass', 'accepted', 'na'].includes(u.status));
-  const target = c.key === 'interact' ? `${c.units.filter((u) => ['pass', 'na'].includes(u.status)).length}/${c.units.length} scenarios` : `target ≥ ${TARGETS[c.key] ?? '–'}${FLOORS[c.key] ? `, every frame ≥ ${FLOORS[c.key]}` : ''}`;
+  const target = c.key === 'interact' ? `${c.units.filter((u) => ['pass', 'na'].includes(u.status)).length}/${c.units.length} scenarios` : c.key === 'route' ? `${(meta.routes || []).length || 1} of ${((meta.routes || []).length || 1) + c.units.length} requested routes captured; the rest are not verified` : `target ≥ ${TARGETS[c.key] ?? '–'}${FLOORS[c.key] ? `, every frame ≥ ${FLOORS[c.key]}` : ''}`;
   const why = bad.slice(0, 4).map((u) => `${unitName(u).replace(`${LABELS[u.check]} `, '')}: ${u.status}${u.reason ? ` (${u.reason.slice(0, 90)})` : u.membersBelow?.length ? ` (${u.membersBelow.slice(0, 3).map((m) => `${m.name || m.id}${m.y !== undefined ? ` y ${m.y}` : ''} ${m.value}`).join(', ')})` : ''}`).join('; ');
   const cells = c.key === 'interact' ? [`${c.units.filter((u) => u.status === 'pass').length}/${c.units.filter((u) => u.status !== 'na').length}`, ...VPS.slice(1).map(() => '')] : VPS.map(cell);
   rows.push(`| ${c.label} | ${cells.join(' | ')} | ${MARK[c.status] || c.status} | ${target}${other.length ? `; ${new Set(other.map((u) => u.route)).size} other route(s), see Routes` : ''}${why ? `. ${why}${bad.length > 4 ? ` (+${bad.length - 4} more)` : ''}` : ''} |`);
@@ -87,7 +87,7 @@ const n = (k) => acc?.counts?.[k] ?? 0;
 const headline = current
   ? { verified: `**Verified**: every required result passes on the clone and on the Next.js app as they are now`, incomplete: `**Incomplete**: ${acc ? n('unresolved') : unresolved.length} difference(s) remain (listed), ${acc ? n('not-verifiable') : toolUnits.length} item(s) not verifiable by the tool (listed)`, blocked: `**Blocked** (owner: ${outcome.owner || 'tool'}): ${acc ? `${n('blocked')} required result(s) cannot be measured; ${n('pending')} not reached` : 'the tool or the environment cannot measure what is required'} (the blocker, what was tried and what you can do are below)`, 'in-progress': '**In progress**' }[outcome.outcome] || outcome.outcome
   : ev.verified ? '**Every required result passes** (run `trueclone status` for the outcome)' : '**In progress**: not verified';
-const owner = (u) => (u.status === 'tool' ? 'tool' : ['error', 'invalid'].includes(u.status) ? 'tool/environment' : 'clone');
+const owner = (u) => (u.status === 'tool' ? u.owner || 'tool' : ['error', 'invalid'].includes(u.status) ? 'tool/environment' : 'clone');
 const DISPOSITION = { unresolved: 'difference left (the loop concluded)', 'not-verifiable': 'not verifiable by the tool here', blocked: 'cannot be measured (blocked)', pending: 'not measured or not looked at yet' };
 
 const outcomeSection = [
@@ -129,7 +129,18 @@ const claims = [
   (meta.pageErrors || []).some((e) => e?.count) ? `- **The live page threw errors while it was captured**: ${meta.pageErrors.filter((e) => e?.count).map((e) => `${e.route || '/'}: ${e.count} (${(e.first || []).slice(0, 2).map((m) => `"${String(m).slice(0, 80)}"`).join(', ')})`).join('; ')}. They are the site's own; the reference was measured as it loaded.` : '',
   // frames of the clone that still load the live site (pages that were not captured: seed could not point them at a local page)
   (seedRec?.liveFrames || []).length ? `- **Frames that still load the live site**: ${seedRec.liveFrames.slice(0, 6).map((f) => `\`${typeof f === 'string' ? f : f.src || f.url || JSON.stringify(f)}\``).join(', ')}: their pages were not captured, so the clone shows the live page there; not verified.` : '',
-  (meta.routesNotCaptured || []).length ? `- **Not captured, not verified**: ${meta.routesNotCaptured.length} page(s) the site links to: ${meta.routesNotCaptured.slice(0, 20).map((r) => `\`${typeof r === 'string' ? r : r.path}\`${r.why ? ` (${r.why})` : ''}`).join(', ')}${meta.routesNotCaptured.length > 20 ? '…' : ''}. Capture them with \`--routes\` to verify them.` : '',
+  // routes asked for that failed to capture (required, not verifiable: the run cannot be Verified) apart from pages
+  // left out of the request (a cap, a --routes list)
+  ...(() => {
+    const all = (meta.routesNotCaptured || []).map((r) => (typeof r === 'string' ? { path: r } : r));
+    const failed = all.filter((r) => r.failed || /^capture failed|rendered page was not saved/.test(r.why || ''));
+    const left = all.filter((r) => !failed.includes(r));
+    const list = (rs) => `${rs.slice(0, 20).map((r) => `\`${r.path}\`${r.why ? ` (${r.why})` : ''}`).join(', ')}${rs.length > 20 ? '…' : ''}`;
+    return [
+      failed.length ? `- **Requested, not captured, not verified**: ${failed.length} route(s) the capture was asked for and could not capture: ${list(failed)}. This result covers the ${(meta.routes || []).length || 1} route(s) captured, not the request.` : '',
+      left.length ? `- **Not captured, not verified**: ${left.length} page(s) the site links to: ${list(left)}. Capture them with \`--routes\` to verify them.` : '',
+    ];
+  })(),
 ].filter(Boolean).join('\n');
 
 // ---- descriptive sections kept from earlier versions (weak spots, what is not copied, motion) ----
