@@ -9,6 +9,8 @@
 //   same for later visits, for requests the page makes by markup too.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { isDocumentEntry, capturedRoutes } from './bundle-complete.mjs';
+import { routeKey } from './routes.mjs';
 
 const TRACKING = /google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|linkedin\.com\/px|tiktok|bat\.bing|vercel-insights|vitals\.vercel/i;
 const TEXT = /\.(html?|m?js|css|json|svg|txt|xml|webmanifest)$/i;
@@ -106,9 +108,11 @@ export async function seedBundle(root, meta) {
     for (const [from, to] of prefixes) t = t.split(from).join(to);
     if (t !== before) { await fs.writeFile(p.to, t); rewritten++; }
   }
-  // each recorded page: its document, with the guard first in <head> and noindex
+  // each recorded page: its document, with the guard first in <head> and noindex. A page is any frame's document (a
+  // view an app shell loads in an iframe is a page of its own at its address too) or HTML recorded another way
+  // (bundle-complete.mjs isDocumentEntry); RC8 elise counted only the start page's
   const guard = GUARD(map, site.host, TRACKING.toString());
-  for (const p of placed.filter((x) => x.entry.document && x.local.startsWith('/') && !x.local.startsWith('/_ext/'))) {
+  for (const p of placed.filter((x) => isDocumentEntry(x.entry) && x.u.host === site.host && x.local.startsWith('/') && !x.local.startsWith('/_ext/'))) {
     const html = (await fs.readFile(p.to, 'utf8')).replace(/<head([^>]*)>/i, (m) => `${m}\n<meta name="robots" content="noindex,nofollow"><!-- trueclone own-bundle clone of ${site.href} (exact mode, authorised by: ${String(meta.permission).replace(/--/g, '-')}). Local only. -->\n<script id="tc-net">${guard}</script>`);
     await fs.writeFile(p.to, html);
     const pagePath = p.u.pathname.replace(/\/+$/, '') || '/';
@@ -121,5 +125,8 @@ export async function seedBundle(root, meta) {
     docs['/'] = '/index.html';
   }
   await fs.writeFile(path.join(clone, 'tc-sw.js'), WORKER(map, docs, site.host, TRACKING.toString()));
-  return { files: placed.length, documents: Object.keys(docs).length, hosts: hosts.size, rewritten };
+  // every captured route has its page in the clone, or the seed says which do not (seed.mjs fails on them)
+  const served = new Set(Object.keys(docs).map((p) => routeKey(p)));
+  const missingRoutes = capturedRoutes(meta).filter((r) => !served.has(r.path === '/' ? routeKey(startPath) : routeKey(r.path))).map((r) => r.path);
+  return { files: placed.length, documents: Object.keys(docs).length, hosts: hosts.size, rewritten, missingRoutes };
 }

@@ -323,6 +323,12 @@ if (flags.patches) {
 if (meta.bundle && !routePage) {
   const { seedBundle } = await import('./bundle.mjs');
   const r = await seedBundle(root, meta);
+  // a captured route the bundle has no page for would be a 404 in the clone and an HTTP error in every check on it
+  // (RC8 elise: 5 of 9 routes, found only after an hour of scoring): no completion record, the routes named
+  if (r.missingRoutes.length) {
+    console.error(`the bundle has no page for ${r.missingRoutes.length} captured route(s): ${r.missingRoutes.join(', ')}. The clone would answer them 404. Record them into the bundle: npx trueclone record-bundle ${name}, then seed again (status names both)`);
+    process.exit(1);
+  }
   // notes.md: the review's verdicts, findings and accepted differences (nothing to plan: the code is the site's own)
   const notesFile = path.join(root, 'notes.md');
   if (!(await fs.stat(notesFile).then(() => true, () => false))) {

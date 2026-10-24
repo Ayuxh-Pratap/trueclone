@@ -185,7 +185,7 @@ export const releaseStill = (page) => page.clock.resume().catch(() => {});
 // documents, scripts and modules, wasm decoders, workers, models, textures, data), saved at its own address under
 // reference/bundle/<host>/<path> with a manifest, so the clone can run the site's own code on its own files. Tracking
 // is never saved; requests that are not GET (a form, a backend write) are never saved either.
-const TRACKING_HOSTS = /google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|linkedin\.com\/px|tiktok|bat\.bing|snap\.licdn|vercel-insights|vitals\.vercel/i;
+export const TRACKING_HOSTS = /google-analytics|googletagmanager|doubleclick|facebook\.(com|net)|hotjar|segment\.(io|com)|plausible|cloudflareinsights|clarity\.ms|sentry|datadog|mixpanel|amplitude|posthog|intercom|hubspot|linkedin\.com\/px|tiktok|bat\.bing|snap\.licdn|vercel-insights|vitals\.vercel/i;
 //
 // What the browser hands over is checked before it is kept (RC5 zero: nine textures and videos saved as 0-byte files).
 // Chrome's DevTools protocol (Network.getResponseBody, under Playwright's response.body()) returns an EMPTY body for a
@@ -218,9 +218,13 @@ const baseType = (t) => String(t || '').split(';')[0].trim().toLowerCase();
 const HOP = /^(:|host$|content-length$|range$|if-range$|cookie$|connection$|accept-encoding$)/i;
 // the same resource asked for again through the page's browser context; returns { body, via } or { failed }
 export async function recoverBody(context, req, res, { attempts = 2 } = {}) {
-  const url = res.url();
-  const want = baseType(res.headers()['content-type']);
   const headers = Object.fromEntries(Object.entries(await req.allHeaders().catch(() => ({}))).filter(([k]) => !HOP.test(k)));
+  return fetchWhole(context, res.url(), { want: baseType(res.headers()['content-type']), headers, attempts });
+}
+// A resource asked for whole (no Range) through a browser context, and kept only when it is that resource, all of it:
+// status 200, the same address after redirects, the media type expected (when one is), not an HTML page standing in
+// for something else, its own declared length. Returns { body, type, attempts, empty? } or { failed, attempts }.
+export async function fetchWhole(context, url, { want = '', headers = {}, attempts = 2 } = {}) {
   let why = 'not tried';
   for (let i = 1; i <= attempts; i++) {
     try {
@@ -237,17 +241,47 @@ export async function recoverBody(context, req, res, { attempts = 2 } = {}) {
       else if (want && got && got !== want) why = `answered ${got}, not ${want}`;
       else if (!/html/.test(want) && /html/.test(got)) why = 'answered an HTML page';
       else if (Number.isFinite(len) && body.length !== len) why = `answered ${body.length} of the ${len} bytes it declared`;
-      else return { body, attempts: i, ...(body.length ? {} : { empty: true }) };
+      else return { body, type: h['content-type'] || '', attempts: i, ...(body.length ? {} : { empty: true }) };
     } catch (e) { why = String(e.message).split('\n')[0]; }
   }
   return { failed: why, attempts };
+}
+// One writer for the bundle in this process: pages recording side by side and files fetched whole each read, change and
+// write manifest.json in turn (two pages writing it at once would lose each other's entries).
+let bundleWrites = Promise.resolve();
+const inBundleOrder = (fn) => (bundleWrites = bundleWrites.then(fn, fn));
+// A file fetched whole by its address (fetchWhole) into the bundle, when no good copy is recorded yet: how capture and
+// record-bundle complete a bundle with the files the capture saw at other sizes or on other pages (bundle-complete.mjs)
+export function recordFetched(refDir, url, got, { kind = 'other' } = {}) {
+  return inBundleOrder(async () => {
+    const dir = path.join(refDir, 'bundle');
+    const manifestFile = path.join(dir, 'manifest.json');
+    const u = new URL(url);
+    let rel = decodeEach(u.pathname);
+    if (rel.endsWith('/')) rel += 'index.html';
+    const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map(safeSegment);
+    if (!parts.length) parts.push('index.html');
+    const file = path.join(dir, u.host.replace(/[:]/g, '_'), ...parts);
+    const key = `${u.origin}${u.pathname}`;
+    const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8').catch(() => '{"entries":{}}'));
+    const had = manifest.entries[key];
+    if (had && !had.failed && had.file) return;
+    const base = { type: got.type || '', kind, document: false, status: got.body ? 200 : null, at: new Date().toISOString(), via: 'fetched' };
+    if (got.body) {
+      await fs.mkdir(path.dirname(file), { recursive: true });
+      await fs.writeFile(file, got.body);
+      manifest.entries[key] = { ...base, file: path.relative(dir, file).split(path.sep).join('/'), bytes: got.body.length, sha1: crypto.createHash('sha1').update(got.body).digest('hex'), ...(got.empty ? { empty: true } : {}) };
+    } else manifest.entries[key] = { ...base, failed: `fetched whole: ${got.failed}`, attempts: got.attempts };
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(manifestFile, JSON.stringify(manifest, null, 1));
+  });
 }
 export function recordBundle(page, refDir) {
   const dir = path.join(refDir, 'bundle');
   const manifestFile = path.join(dir, 'manifest.json');
   let pending = Promise.resolve();
   page.on('response', (res) => {
-    pending = pending.then(async () => {
+    pending = inBundleOrder(async () => {
       try {
         const req = res.request();
         const u = new URL(res.url());
@@ -272,7 +306,9 @@ export function recordBundle(page, refDir) {
         const key = `${u.origin}${u.pathname}`;
         const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8').catch(() => '{"entries":{}}'));
         const had = manifest.entries[key];
-        const base = { type: res.headers()['content-type'] || '', kind: req.resourceType(), document: req.isNavigationRequest() && req.frame() === page.mainFrame(), status: res.status(), wireBytes, encoding, at: new Date().toISOString() };
+        // document: the page's own document; frameDocument: any frame's (a view an app shell loads in an iframe), both
+        // served as pages by the clone (bundle.mjs)
+        const base = { type: res.headers()['content-type'] || '', kind: req.resourceType(), document: req.isNavigationRequest() && req.frame() === page.mainFrame(), frameDocument: req.isNavigationRequest(), status: res.status(), wireBytes, encoding, at: new Date().toISOString() };
         if (failed) {
           // a good copy recorded earlier (another load of the same address) is kept; otherwise the failure is recorded
           if (had && had.via && !had.failed && had.bytes > 0) return;

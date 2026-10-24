@@ -24,6 +24,8 @@ import { loadLoop, saveLoop, observe, nextObjective, recordActivity, objectiveKe
 import { readJournal, runsOf, runningNow, inputsDigest, trackStep, declaredCannot, LIMITS } from './progress.mjs';
 import { account } from './accounting.mjs';
 import { errorOwner, failureLine } from './failures.mjs';
+import { bundleCoverage, capturedRoutes } from './bundle-complete.mjs';
+import { routeDir } from './routes.mjs';
 
 const { pos } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -228,13 +230,31 @@ if (ownBundle) {
     if (!tried || Date.parse(tried.at) > manifestAt) {
       await fs.mkdir(path.join(root, 'compare'), { recursive: true });
       await fs.writeFile(path.join(root, 'compare', 'bundle-rerecord.json'), JSON.stringify({ at: new Date().toISOString(), problems: integrity.problems }, null, 1));
-      await next(T(`journey ${name}`), `${integrity.problems.length} of the site's ${integrity.entries} recorded files are not whole: ${list}${integrity.problems.length > 8 ? '…' : ''}. The reference journey loads the app again and records every file it asks for (each checked, and recovered when the browser does not hand it over)`, [T(`status ${name}`)]);
+      await next(T(app ? `journey ${name}` : `record-bundle ${name}`), `${integrity.problems.length} of the site's ${integrity.entries} recorded files are not whole: ${list}${integrity.problems.length > 8 ? '…' : ''}. ${app ? 'The reference journey loads the app again' : 'record-bundle loads every captured page again'} and records every file it asks for (each checked, and recovered when the browser does not hand it over)`, [T(`status ${name}`)]);
     }
     // the one Blocked path (owner, cause, accounting, REPORT), like every other
-    await blockedEarly(`${integrity.problems.length} of the site's own files could not be recorded, after the reference journey recorded them again: ${list}`, `the clone cannot run without them (no change to the clone can supply them). Check that the site serves them to this machine (open one of the addresses in a browser); if it does, report this with sites/${name}/reference/bundle/manifest.json. ${T(`journey ${name}`)} then ${T(`status ${name}`)} resumes`, { owner: 'tool', problems: integrity.problems });
+    await blockedEarly(`${integrity.problems.length} of the site's own files could not be recorded, after ${app ? 'the reference journey' : 'record-bundle'} recorded them again: ${list}`, `the clone cannot run without them (no change to the clone can supply them). Check that the site serves them to this machine (open one of the addresses in a browser); if it does, report this with sites/${name}/reference/bundle/manifest.json. ${T(app ? `journey ${name}` : `record-bundle ${name}`)} then ${T(`status ${name}`)} resumes`, { owner: 'tool', problems: integrity.problems });
   }
   await fs.rm(path.join(root, 'compare', 'bundle-rerecord.json'), { force: true });
-  done.push(`bundle (${integrity.entries} files whole)`);
+  // Whole is not enough: the clone of an own bundle is the bundle, so it must hold a page for every captured route and
+  // every file the capture saved (RC8 elise: "84 files whole", 5 of 9 routes and 76 of 144 files absent, every check on
+  // them an HTTP error on 127.0.0.1 after an hour of scoring). record-bundle completes it once; still incomplete after
+  // that, Blocked with what is missing and why (reference/bundle/manifest.json), the work kept
+  if (!app) {
+    const cov = await bundleCoverage(path.join(root, 'reference'), meta);
+    if (cov.routes.length || cov.assets.length) {
+      const what = [cov.routes.length ? `no page for ${cov.routes.length} captured route(s): ${cov.routes.slice(0, 9).map((r) => r.path).join(', ')}` : '', cov.assets.length ? `${cov.assets.length} file(s) the capture saved are not in it: ${cov.assets.slice(0, 4).map((u) => u.replace(/^https?:\/\//, '')).join(', ')}${cov.assets.length > 4 ? '…' : ''}` : ''].filter(Boolean).join('; ');
+      const tried = await json('compare/bundle-complete.json');
+      if (!tried || Date.parse(tried.at) > manifestAt) {
+        await fs.mkdir(path.join(root, 'compare'), { recursive: true });
+        await fs.writeFile(path.join(root, 'compare', 'bundle-complete.json'), JSON.stringify({ at: new Date().toISOString(), routes: cov.routes, assets: cov.assets }, null, 1));
+        await next(T(`record-bundle ${name}`), `the site's own bundle is the clone, and it lacks what the capture has: ${what}. record-bundle loads every captured page once more at desktop and records it, then fetches each missing file whole; the reference itself (shots, reads, calibration) is kept`, [T(`status ${name}`), `${T(`seed ${name}`)} (status names it) builds the clone again from the completed bundle`]);
+      }
+      await blockedEarly(`the site's own bundle still lacks what the capture has, after record-bundle: ${what}`, `the clone would answer these with 404. Check that the site serves them to this machine; the reasons are in sites/${name}/reference/bundle/manifest.json and the record-bundle log. ${T(`record-bundle ${name}`)} then ${T(`status ${name}`)} resumes`, { owner: 'environment', routes: cov.routes, assets: cov.assets });
+    }
+    await fs.rm(path.join(root, 'compare', 'bundle-complete.json'), { force: true });
+  }
+  done.push(`bundle (${integrity.entries} files whole${app ? '' : ', every captured page and file'})`);
 }
 // the reference against itself, before any clone work (PLAN.md 5.4 validity gate): every bar is set from it, and a
 // frame the reference varies on is known before the loop spends time on it. The reference's own reads that the
@@ -287,15 +307,31 @@ if (seedInputs.some((s) => s && s.mtimeMs > seeded.mtimeMs + 1000)) await next(T
 // clone/.seed-base.html", a file the agent may not edit, named as clone work and never resolvable)
 const seedLint = (await lintSubject(root, meta, 'clone')).findings.filter((f) => f.owner === 'tool');
 if (seedLint.length) await blockedEarly(`the clone as trueclone generated it fails trueclone's own lint: ${seedLint.slice(0, 3).map((f) => `${f.file}: ${f.what}`).join('; ')}`, 'a defect in trueclone (the seed): report it with the files named. Nothing in clone/script.js or clone/patches/ can remove it; do not edit the generated pages', { owner: 'tool', lint: seedLint });
+// Every captured route is a page the clone serves, checked from the files before anything is measured (RC8 elise: 5 of
+// 9 routes had no page, and the first sign was an hour of scoring ending in HTTP errors on 127.0.0.1). The page of a
+// route is the file the clone's server answers it with: clone/<route> (a page of an own bundle) or clone/<route>/index.html.
+// A route without one is what the seed generated, never the clone's work: Blocked now, the routes named.
+{
+  const pageOf = async (p) => {
+    const f = path.join(root, 'clone', ...routeDir(p).split('/').filter(Boolean));
+    if ((await fs.stat(f).catch(() => null))?.isFile()) return true;
+    return Boolean(await fs.stat(path.join(f, 'index.html')).catch(() => null));
+  };
+  const noPage = [];
+  // (a view of a single-page app has no page of its own: the server answers it with the app's document)
+  for (const r of capturedRoutes(meta).slice(1).filter((x) => !x.sameDocument)) if (!(await pageOf(r.path))) noPage.push(r.path);
+  if (noPage.length) await blockedEarly(`the clone has no page for ${noPage.length} captured route(s): ${noPage.join(', ')}. Its server would answer them 404, and every check on them would be an HTTP error`, ownBundle ? `the seed builds the pages from the bundle: ${T(`record-bundle ${name}`)}, then ${T(`seed ${name}`)}, then ${T(`status ${name}`)}; if the bundle has them and the seed still does not write them, report it with clone/.seed.json` : 'a defect in trueclone (the seed): report it with clone/.seed.json; nothing in clone/script.js or clone/patches/ can add a page', { owner: 'tool', routes: noPage });
+}
 done.push('seed');
 
 // ---- 3. a brief per section, behaviours written from the site's code ----
-const sections = app ? [] : await json('reference/desktop.sections.json', []);
+// (an own bundle runs the site's own code: nothing is ported, so neither briefs nor behaviours are asked for)
+const sections = app || ownBundle ? [] : await json('reference/desktop.sections.json', []);
 const briefs = [];
 for (let i = 1; i <= sections.length; i++) if (await stat(`compare/brief/desktop-${i}.md`)) briefs.push(i);
 const unbriefed = sections.map((_, i) => i + 1).filter((i) => !briefs.includes(i));
 if (unbriefed.length) await next(T(`brief ${name} ${unbriefed[0]}`), `section ${unbriefed[0]} of ${sections.length} has not been read yet: its brief lists the site's handlers (file:line), recorded motion and what a visitor operates there`, [`one section at a time, then write its behaviours in notes.md (## Behaviours, each citing a file:line from the brief)`, `${T(`brief ${name}`)} lists every section and its evidence`]);
-done.push(`briefs ${briefs.length}/${sections.length}`);
+if (!ownBundle) done.push(`briefs ${briefs.length}/${sections.length}`);
 const notes = await text('notes.md');
 const sectionOf = (h) => (notes.split(/^## /m).find((s) => s.toLowerCase().startsWith(h.toLowerCase())) || '').replace(/<!--[\s\S]*?-->/g, '').split('\n').slice(1).join('\n').trim();
 const scripts = await json('reference/scripts/scripts.json', { listeners: [] });
@@ -304,7 +340,8 @@ const cites = (behaviours.match(/[\w.-]+\.js:\d+/g) || []).length;
 if (app && !ownBundle && !behaviours) await next('write ## Behaviours in notes.md, one stage of the journey at a time', 'each checkpoint of journey.json (compare its frame in reference/journey/<size>/) and what draws it: the scene objects (reference/scene/<checkpoint>.json), the shader programs (reference/shaders/INDEX.md), the input that moves it, and the file:line of the site\'s code that builds it (reference/scripts/INDEX.md)', [`${T(`vendor ${name}`)} (three.js at the site's revision)`]);
 if (!ownBundle && !app && (!behaviours || (scripts.listeners.length && !cites))) await next('write ## Behaviours in notes.md', 'one line per behaviour (element, trigger, property, range, timing) with the file:line of the rule in reference/scripts/ (from the briefs); this is the plan script.js is written from', [`${T(`brief ${name} <n>`)} for any section you have not read`]);
 if (!ownBundle && !sectionOf('Stack')) await next('write ## Stack in notes.md', 'what the site is built with (reference/motion.desktop.md lists the libraries and where they live)');
-done.push(`behaviours (${cites} cited)`);
+// (RC8 elise printed "behaviours (0 cited)" for an own bundle, which reads as a requirement met with nothing)
+done.push(ownBundle ? 'behaviours (not asked: the clone runs the site\'s own code)' : `behaviours (${cites} cited)`);
 
 // ---- 4. script.js ----
 const script = await text('clone/script.js');

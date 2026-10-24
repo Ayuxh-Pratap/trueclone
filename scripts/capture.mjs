@@ -646,6 +646,15 @@ if (ownPages.length) {
   await fs.writeFile(path.join(ref, 'assets', 'manifest.json'), JSON.stringify(manifest, null, 2));
   console.log(`mirror: ${mirrored.length} of ${ownPages.length} separate page(s) mirrored in reference/mirror/routes/ (${mirrored.map((r) => r.path).join(', ') || 'none'})`);
 }
+// An own bundle is the clone (bundle.mjs): it gets every captured route's page and every file this capture saved, not
+// only what one load of the start page asked for (RC8 elise: 5 of 9 routes and 76 of 144 files absent, bundle-complete.mjs)
+if (ownBundle) {
+  const { completeBundle } = await import('./bundle-complete.mjs');
+  console.log('own bundle: recording every captured page and the files the capture saved');
+  const done = await completeBundle(root, { url, ...(finalUrl ? { finalUrl } : {}), routes: routeInfo, hide }, { cdp: Boolean(flags.cdp) });
+  const gaps = [done.coverage.routes.length ? `no page for ${done.coverage.routes.map((x) => x.path).join(', ')}` : '', done.coverage.assets.length ? `${done.coverage.assets.length} file(s) not fetched whole` : ''].filter(Boolean);
+  console.log(`own bundle: ${done.routes - done.routeFailures.length} of ${done.routes} page(s) recorded, ${done.fetched} of ${done.tried} more file(s) fetched whole${gaps.length ? `; WARNING still missing: ${gaps.join('; ')} (status names record-bundle)` : ''}`);
+}
 console.table(summary);
 // the commit mark: everything above is written, so this capture is a reference
 {

@@ -52,6 +52,8 @@ export async function makeSite(project, name, kind = 'doc', opts = {}) {
   }
   if (opts.interactions) await put(root, 'reference/interactions.auto.json', opts.interactions.map((n) => ({ name: n, viewport: 'desktop', steps: [] })));
   await put(root, 'clone/index.html', opts.cloneHtml || '<!doctype html><title>x</title><body><h1>clone</h1><script src="script.js" defer></script></body>\n');
+  // each captured route's page, where the seed writes it (clone/<route>/index.html), unless a test leaves one out
+  for (const r of routes.filter((x) => x.slug && !(opts.missingPages || []).includes(x.path))) await put(root, `clone/${r.path.replace(/^\//, '')}/index.html`, '<!doctype html><title>x</title><body><h1>route</h1></body>\n');
   await put(root, 'clone/script.js', opts.cloneScript || 'const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\nconst e = 5;\nconsole.log(a + b + c + d + e);\n');
   await put(root, 'clone/.seed.json', { capturedAt: meta.capturedAt, at: '2026-10-22T01:00:00.000Z', pages: 1, code: codeHash('seed'), tool: toolVersion() });
   await put(root, 'next/app/page.tsx', 'export default function Page() { return null; }\n');

@@ -250,6 +250,10 @@ passed; one that does not pass is a journey error in REPORT (the page's words qu
   `journey <name>` on the reference, then `seed`), or a call the site makes that needs a recorded answer (Findings).
   Every recorded file is checked; `status` re-records a bundle with files that are not whole, and if they still cannot
   be recorded it stops Blocked with them named: never edit `reference/bundle/` or download files into it yourself.
+  The bundle must also cover the capture: a page for every captured route and every file the capture saved. When it
+  does not, `status` names `npx trueclone record-bundle <name>` (it records the missing pages and files without
+  capturing again), then the seed; a captured route the clone still has no page for stops the run Blocked before
+  anything is measured. An own bundle asks for no briefs and no Behaviours: the code is the site's own.
 - **Port** (template mode, or exact without the bundle): you write the app in `clone/script.js`, stage by stage, in
   journey order: the renderer and post chain, each stage's scene from `reference/scene/` and `reference/shaders/` (same
   camera, geometry, material values, shader code ported), the stage machine moved by the virtual scroll with the

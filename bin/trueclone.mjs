@@ -30,6 +30,7 @@ const STEPS = {
   understand: ['understand.mjs', 'optional, rarely needed: REA code evidence -> reference/code.md (capture already saves every script, ranked, in reference/scripts/)'],
   reveals: ['reveals.mjs', 'record one-shot scroll reveals frame by frame, so seed can replay them (any library)'],
   widgets: ['widgets.mjs', 'record every tab and menu state by clicking it, so seed can replay them (template mode)'],
+  'record-bundle': ['record-bundle.mjs', 'own bundle (exact mode): record every captured page and every file the capture saved into reference/bundle/, without capturing again'],
   journey: ['journey.mjs', 'app mode (a canvas app): --draft finds the journey (gates, wheel, holds) on the live page; then the reference checkpoints (frames, three.js scene, shaders); --clone scores the clone through it'],
   reads: ['reads.mjs', 'every read of the live page the clone is built from (states, motion, spec, widgets side by side, then reveals alone); only the missing ones'],
   calibrate: ['calibrate.mjs', 'the reference against itself: two more loads through the same checks -> reference/noise.json, the bar of every frame'],

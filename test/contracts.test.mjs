@@ -245,6 +245,83 @@ test('RC6-03: a step that ran and changed nothing, twice, ends Blocked (owner to
   assert.equal(r.code, 2, r.out);
   assert.match(r.out, /ran \d+ times and changed nothing/);
 });
+// ---- RC8 elise (retry): an own bundle without the captured routes, a clone without their pages, a Blocked accounting
+// that relabelled measured failures ----
+const bundleFile = async (site, rel, body) => { await fs.mkdir(path.dirname(path.join(site.root, 'reference', 'bundle', rel)), { recursive: true }); await fs.writeFile(path.join(site.root, 'reference', 'bundle', rel), body); };
+test('RC8-B1: an own bundle lacking a captured route or a saved file: status names record-bundle once, then Blocked with what is missing (never "whole")', async () => {
+  const p = await tmpProject();
+  const site = await makeSite(p, 'bc', 'doc', { exact: true, routes: ['/work.html'] });
+  const mf = path.join(site.root, 'reference', 'meta.json');
+  const meta = JSON.parse(await fs.readFile(mf, 'utf8'));
+  meta.bundle = true;
+  await fs.writeFile(mf, JSON.stringify(meta, null, 2));
+  // the bundle as rc.8 recorded it: the start page and its stylesheet, whole; no page for /work.html
+  await bundleFile(site, '127.0.0.1_9/index.html', '<!doctype html><title>x</title>');
+  await bundleFile(site, '127.0.0.1_9/site.css', 'body{}');
+  await bundleFile(site, 'manifest.json', JSON.stringify({ entries: {
+    'http://127.0.0.1:9/': { type: 'text/html', kind: 'document', document: true, file: '127.0.0.1_9/index.html', bytes: 31, via: 'browser' },
+    'http://127.0.0.1:9/site.css': { type: 'text/css', kind: 'stylesheet', file: '127.0.0.1_9/site.css', bytes: 6, via: 'browser' },
+  } }));
+  // the capture saved a photo the start page never loaded
+  await fs.mkdir(path.join(site.root, 'reference', 'assets'), { recursive: true });
+  await fs.writeFile(path.join(site.root, 'reference', 'assets', 'manifest.json'), JSON.stringify([{ url: 'http://127.0.0.1:9/site.css', file: 'assets/stylesheet/site.css', contentType: 'text/css' }, { url: 'http://127.0.0.1:9/photos/team.jpg', file: 'assets/image/team.jpg', contentType: 'image/jpeg' }]));
+  const { bundleCoverage } = await import('../scripts/bundle-complete.mjs');
+  const cov = await bundleCoverage(path.join(site.root, 'reference'), meta);
+  assert.deepEqual(cov.routes.map((r) => r.path), ['/work.html']);
+  assert.deepEqual(cov.assets, ['http://127.0.0.1:9/photos/team.jpg']);
+  let r = status(p, 'bc');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /next: npx trueclone record-bundle bc/);
+  assert.match(r.out, /no page for 1 captured route\(s\): \/work\.html; 1 file\(s\) the capture saved are not in it/);
+  // record-bundle ran (the manifest is newer) and the site still did not serve them
+  await tick();
+  await fs.utimes(path.join(site.root, 'reference', 'bundle', 'manifest.json'), new Date(), new Date(Date.now() + 2000));
+  r = status(p, 'bc');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /Blocked \(owner: environment\): the site's own bundle still lacks what the capture has, after record-bundle/);
+});
+test('RC8-B2: a captured route the clone has no page for is Blocked (owner tool) before anything is measured', async () => {
+  const p = await tmpProject();
+  await makeSite(p, 'np', 'doc', { routes: ['/about', '/work'], missingPages: ['/work'] });
+  const r = status(p, 'np');
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /Blocked \(owner: tool\): the clone has no page for 1 captured route\(s\): \/work\./);
+  assert.doesNotMatch(r.out, /next: npx trueclone score/);
+});
+test('RC8-B3: Blocked keeps what was measured: a failure stays the clone\'s ("failing"), an error stays an error, only the unmeasured are "not reached"; the auditor rejects the relabelling', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'kf');
+  // a result measured below its bar on this content, and a review never shot
+  await tick();
+  await writeUnits(site.root, 'compare', 'reduced', ['mobile', 'desktop'].map((v) => ({ route: '', viewport: v, value: v === 'desktop' ? 40 : 99.5 })), await startIdentity(site.root, 'reduced'));
+  await fs.rm(path.join(site.root, 'compare', 'review', 'wide'), { recursive: true });
+  // the same tool error twice on this content: Blocked
+  await errorUnit(site, 'layout', 'layout exit 1: page.goto: net::ERR_HTTP_RESPONSE_CODE_FAILURE at http://127.0.0.1:52011/Kruiz.html', { errorKind: 'crash' });
+  let r = status(p, 'kf');
+  for (let i = 0; i < 4 && r.code === 1 && /--only layout/.test(r.out); i++) { await errorUnit(site, 'layout', 'layout exit 1: page.goto: net::ERR_HTTP_RESPONSE_CODE_FAILURE at http://127.0.0.1:52011/Kruiz.html', { errorKind: 'crash' }); r = status(p, 'kf'); }
+  assert.equal(r.code, 2, r.out);
+  const out = await readJson(site, 'compare/outcome.json');
+  const item = (id) => out.accounting.items.find((i) => i.id === id);
+  const failed = item('clone:unit:reduced||desktop|');
+  assert.deepEqual([failed?.disposition, failed?.owner, Boolean(failed?.notReached)], ['failing', 'clone', false], JSON.stringify(failed));
+  const err = item('clone:unit:layout||desktop|');
+  assert.deepEqual([err?.disposition, Boolean(err?.notReached)], ['blocked', false], JSON.stringify(err));
+  assert.ok(out.accounting.items.some((i) => i.kind === 'review-dir' && i.notReached && i.disposition === 'blocked'), 'the review never shot is not reached');
+  assert.equal(out.accounting.counts.pending, 0);
+  const rep = await fs.readFile(path.join(site.root, 'REPORT.md'), 'utf8');
+  assert.match(rep, /\*\*Blocked\*\* \(owner: tool\): \d+ required result\(s\) cannot be measured \(errors\); \d+ measured below their bar \(the clone's, still open\); \d+ not reached because of the blocker/);
+  await fs.rm(path.join(site.root, '.tc-hash-clone.json'), { force: true });
+  await fs.rm(path.join(site.root, '.tc-hash-next.json'), { force: true });
+  let a = audit(site.root);
+  assert.equal(a.status, 0, `${a.stdout}${a.stderr}`);
+  // rc.8's accounting: the measured failure relabelled "not reached", owner tool
+  Object.assign(failed, { disposition: 'blocked', owner: 'tool', notReached: true });
+  out.accounting.counts.failing -= 1; out.accounting.counts.blocked += 1;
+  await fs.writeFile(path.join(site.root, 'compare', 'outcome.json'), JSON.stringify(out, null, 2));
+  a = audit(site.root);
+  assert.equal(a.status, 1, a.stdout);
+  assert.match(a.stdout, /1 measured result\(s\) reported as not reached/);
+});
 // A requested route that failed to capture is dropped from what is measured (capture.mjs), but it stays required: the
 // run is Incomplete with it named, never Verified as if the request had been the routes that loaded. A page the request
 // left out (not in a --routes list) is not a required item.

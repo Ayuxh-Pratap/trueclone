@@ -59,8 +59,14 @@ if (acc) {
   if (extra.length) findings.push(`${extra.length} item(s) accounted for are not required now: ${extra.slice(0, 6).join(', ')}${extra.length > 6 ? '…' : ''}`);
   const pending = (acc.items || []).filter((i) => i.disposition === 'pending');
   if (TERMINAL.includes(outcome.outcome) && pending.length) findings.push(`${pending.length} item(s) are still pending at a ${outcome.outcome} outcome: ${pending.slice(0, 4).map((i) => i.label).join('; ')}`);
-  const ownerless = (acc.items || []).filter((i) => i.disposition === 'blocked' && !i.owner);
-  if (ownerless.length) findings.push(`${ownerless.length} blocked item(s) without an owner: ${ownerless.slice(0, 4).map((i) => i.label).join('; ')}`);
+  // a Blocked run keeps what it measured: a result measured below its bar is "failing" (the clone's), never "not
+  // reached"; "failing" belongs only to a Blocked outcome (Incomplete lists concluded differences)
+  const relabelled = (acc.items || []).filter((i) => i.notReached && ['fail', 'differs', 'error'].includes(i.state));
+  if (relabelled.length) findings.push(`${relabelled.length} measured result(s) reported as not reached: ${relabelled.slice(0, 4).map((i) => `${i.label} (${i.state})`).join('; ')}`);
+  const failing = (acc.items || []).filter((i) => i.disposition === 'failing');
+  if (failing.length && outcome.outcome !== 'blocked') findings.push(`${failing.length} item(s) "failing" at a ${outcome.outcome} outcome`);
+  const ownerless = (acc.items || []).filter((i) => ['blocked', 'failing'].includes(i.disposition) && !i.owner);
+  if (ownerless.length) findings.push(`${ownerless.length} blocked or failing item(s) without an owner: ${ownerless.slice(0, 4).map((i) => i.label).join('; ')}`);
   if (acc.counts && Object.values(acc.counts).reduce((a, b) => a + b, 0) !== acc.total) findings.push(`the accounting's counts add up to ${Object.values(acc.counts).reduce((a, b) => a + b, 0)}, not its total ${acc.total}`);
   if (outcome.outcome === 'verified' && (acc.items || []).length) findings.push(`Verified with ${(acc.items || []).length} item(s) not passed`);
   if (outcome.outcome === 'incomplete' && (acc.items || []).some((i) => !['unresolved', 'not-verifiable'].includes(i.disposition))) findings.push('Incomplete lists an item that is neither a concluded difference nor a result the tool cannot verify');

@@ -7,6 +7,7 @@
 // exactly one disposition:
 //   passed          pass, accepted with evidence, or nothing to measure; a review frame closed by eye
 //   unresolved      a difference the loop worked and concluded (its best and current values are in loop.json)
+//   failing         Blocked outcomes only: measured below its bar, the clone's, still open when the run stopped
 //   not-verifiable  the tool cannot measure it here (the reference does not match itself, a scenario it cannot run)
 //   blocked         it cannot be measured after its bounded recovery (an error owned by the tool or the environment),
 //                   or what trueclone generated is at fault (a lint finding in the seed's own output)
@@ -17,6 +18,7 @@
 // and the app are verified as they are" with nothing listed.
 import { unitName } from './verdict.mjs';
 import { objectiveKey } from './loop.mjs';
+import { errorOwner } from './failures.mjs';
 
 export const itemId = (side, kind, rest) => `${side}:${kind}:${rest}`;
 
@@ -59,8 +61,18 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {}, bl
   // the written checks are shared: the app's notes and coverage are the clone's (one notes.md)
   const seen = new Set();
   const items = all.filter((i) => { const k = i.kind === 'written' ? `written:${i.id.split(':').pop()}` : i.id; if (seen.has(k)) return false; seen.add(k); return true; });
-  if (blockedBy) for (const i of items) if (i.disposition === 'pending') Object.assign(i, { disposition: 'blocked', owner: blockedBy.owner || 'tool', reason: `not reached: the run is Blocked (${String(blockedBy.why || '').slice(0, 200)})${i.reason ? `; was: ${i.reason}` : ''}`, notReached: true });
-  const counts = { passed: 0, unresolved: 0, 'not-verifiable': 0, blocked: 0, pending: 0 };
+  // A Blocked run keeps what it measured: a result below its bar (a frame that differs, a written check that fails, a
+  // lint finding) is "failing", the clone's, as measured; an error not yet retried is a measurement error, owned by what
+  // it says; only what was never measured on this content (missing, stale, invalid, no verdict yet) was not reached
+  // because of the cause (RC8 elise: 63 measured failures were relabelled "not reached", owner tool, and REPORT said
+  // "313 cannot be measured; 0 not reached")
+  if (blockedBy) for (const i of items) {
+    if (i.disposition !== 'pending') continue;
+    if (i.state === 'fail' || i.state === 'differs') Object.assign(i, { disposition: 'failing', owner: i.owner || 'clone' });
+    else if (i.state === 'error') Object.assign(i, { disposition: 'blocked', owner: errorOwner({ error: i.reason || '' }), reason: `measurement error, not retried before the run stopped: ${i.reason || 'no message'}` });
+    else Object.assign(i, { disposition: 'blocked', owner: blockedBy.owner || 'tool', reason: `not reached: the run is Blocked (${String(blockedBy.why || '').slice(0, 200)})${i.reason ? `; was: ${i.reason}` : ''}`, notReached: true });
+  }
+  const counts = { passed: 0, unresolved: 0, 'not-verifiable': 0, failing: 0, blocked: 0, pending: 0 };
   for (const i of items) counts[i.disposition]++;
   return { total: items.length, counts, ids: items.map((i) => i.id), items: items.filter((i) => i.disposition !== 'passed') };
 }
