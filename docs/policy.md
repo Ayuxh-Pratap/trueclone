@@ -319,6 +319,15 @@ recorded file is checked before it is kept (`lib.mjs recordBundle`, rc.6):
   every check after it.
 - **No briefs or behaviours for an own bundle.** The clone runs the site's own code: nothing is ported, so status asks
   for neither, and says so (not "behaviours (0 cited)").
+- **Another host's address keeps its query (rc.10).** `fonts.googleapis.com/css2?family=A` and `?family=B` are two
+  files: each is recorded under its full address, kept in a file of its own with an extension from its type, and every
+  place the site's text names it points at that file (the clone's server types files by extension). The site's own
+  files keep path-only addresses. (RC9 elise: four stylesheets were one extensionless file, served as
+  application/octet-stream, and none of the site's three fonts loaded in the clone.)
+- **An own bundle's differences are not clone work (rc.10).** No permitted edit changes an own-bundle clone (the seed
+  regenerates it and applies no patch), so status concludes each measured difference at once, listed, owned by the
+  replay, instead of naming clone work for it. (RC9 elise: about 2,200 status calls went to declaring 572 such
+  differences impossible one by one.)
 
 ## Third-party content (D3)
 

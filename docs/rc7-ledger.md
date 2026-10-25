@@ -204,3 +204,24 @@ nine anyway) and added `--bundle`, the own-bundle mode, which the prompt did not
 - the About page's horizontal scrollers (interactions 82.9-91.5);
 - the shell's view transitions (94.7-97.5);
 - the reference start page shows "About" underlined in the nav while the home view is shown (`reference/desktop.png`). This is a hypothesis about the reference's own state at capture (a hover, or the shell's last view), not established.
+
+## 10. The RC8 Elise run resumed on rc.9 (2026-10-24): fixed in rc.10
+
+The resume worked as planned:
+- `record-bundle` completed the bundle (9 pages, 0.9 min).
+- The seed wrote 9 documents.
+- Every route was measured with no HTTP errors.
+- The Next.js app was built and verified (second attempt; the first hit `layout-real`'s 20-minute limit).
+- The run ended **Incomplete**: 572 differences, 13 not verifiable, 210 of 795 items passing, after 5 h 42 min.
+
+Two TrueClone defects shaped that result.
+
+| Id | Defect | Root cause (established) | Fix | Tests | Status |
+|---|---|---|---|---|---|
+| RC9-F1 | 669 of 714 review frames "differs" on a clone that runs the site's own code; "serif glyphs and caption spacing differ" | the bundle keyed files by address without the query: the site's four Google Fonts stylesheets (`fonts.googleapis.com/css2?family=...`: Hanken Grotesk with Space Mono, Instrument Serif, two Noto symbol sets) overwrote one another as one file `css2`, and the clone's server typed that extensionless file `application/octet-stream`, which a browser does not apply. In the clone none of the three families loaded on any page (checked in a browser: every `css2` answered octet-stream) | another host's address keeps its query in the bundle (`lib.mjs bundleKey`), each in a file of its own with an extension from its type; the seed rewrites each such address in the site's text (as is, `&amp;`, JSON-escaped, protocol-relative) to its file; the guard and the worker look addresses up with their query; coverage counts each address, so status names `record-bundle` for a bundle recorded before | `test/e2e/bundle-routes.test.mjs` (two stylesheets at one path on another host: two files, each linked by its page, each served `text/css`); on a copy of this run, after `record-bundle` and the seed, Hanken Grotesk, Space Mono and Instrument Serif load and the hero matches the reference's type | Fixed + test |
+| RC9-L1 | about 2,200 status calls; reviews named 9-14 times per route and size; 10 declarations to close 572 items | in own-bundle mode status still named clone work ("change clone/script.js or clone/patches/", then a review to look closer) for every failing result and differing frame, although an own bundle's seed applies no patch and regenerates clone/: no permitted edit could change any of them, so each was named, idled and declared impossible in turn | in own-bundle mode a measured difference is concluded at once, listed, owned by the replay; the review's verdicts and Findings say what it shows | RC9-L1 (contracts) | Fixed + test |
+
+**Also seen, not changed:**
+- `next --verify`'s first run lost its `layout-real` step to the 20-minute limit (45 route-sizes on the app); status's bounded retry passed, costing 51 minutes.
+- The canvases on About at mobile score 26.8 (the ASCII background, animated): open.
+- The four nav-link hovers remain "WRONG OUTCOME": open.
