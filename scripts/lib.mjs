@@ -61,9 +61,13 @@ export function viewportArg(v, list = SCORED) {
   console.error(`--viewport ${want}: use one of ${list.map((x) => x.name).join(', ')}, or a width in pixels (1366, 1366x768)`);
   process.exit(1);
 }
-// Where a score run writes (sites/<name>/<COMPARE>/, <REPORT_FILE>): the HTML clone's by default; `next --verify` sets
-// compare-next / REPORT.next.md for the app, so the two never share or move each other's files.
+// Where a score run writes (sites/<name>/<COMPARE>/, <REPORT_FILE>): the HTML clone's by default; a Next.js conversion
+// (`trueclone convert <name> --verify`) sets compare-nextjs / REPORT.nextjs.md, so the two workflows never share or move
+// each other's files. SIDE is what is measured: 'clone' (clone/) or 'app' (the conversion's nextjs/).
+export const APP_COMPARE = 'compare-nextjs';
+export const APP_REPORT = 'REPORT.nextjs.md';
 export const COMPARE = process.env.TC_COMPARE || 'compare';
+export const SIDE = COMPARE === APP_COMPARE ? 'app' : 'clone';
 
 // A route given on the command line ("/about", "about"): Git Bash on Windows rewrites an argument that starts with "/"
 // into a path inside its install folder ("C:/Program Files/Git/about"), so that is undone, and the leading slash is
@@ -293,12 +297,16 @@ export function recordFetched(refDir, url, got, { kind = 'other', siteHost = nul
     await fs.writeFile(manifestFile, JSON.stringify(manifest, null, 1));
   });
 }
-// siteHost: the site's own host (path-only addresses, bundleKey); by default the host of the page being recorded
-export function recordBundle(page, refDir, { siteHost = null } = {}) {
+// siteHost: the site's own host (path-only addresses, bundleKey); by default the host of the page being recorded.
+// tagOf: record only some responses (an embedded document's, capture.mjs): (response) => a tag kept with the entry
+// (entry.dependency), or null to leave the response out
+export function recordBundle(page, refDir, { siteHost = null, tagOf = null } = {}) {
   const dir = path.join(refDir, 'bundle');
   const manifestFile = path.join(dir, 'manifest.json');
   let pending = Promise.resolve();
   page.on('response', (res) => {
+    const tag = tagOf ? (() => { try { return tagOf(res); } catch { return null; } })() : undefined;
+    if (tagOf && !tag) return;
     pending = inBundleOrder(async () => {
       try {
         const req = res.request();
@@ -323,7 +331,7 @@ export function recordBundle(page, refDir, { siteHost = null } = {}) {
         const had = manifest.entries[key];
         // document: the page's own document; frameDocument: any frame's (a view an app shell loads in an iframe), both
         // served as pages by the clone (bundle.mjs)
-        const base = { type: res.headers()['content-type'] || '', kind: req.resourceType(), document: req.isNavigationRequest() && req.frame() === page.mainFrame(), frameDocument: req.isNavigationRequest(), status: res.status(), wireBytes, encoding, at: new Date().toISOString() };
+        const base = { type: res.headers()['content-type'] || '', kind: req.resourceType(), document: req.isNavigationRequest() && req.frame() === page.mainFrame(), frameDocument: req.isNavigationRequest(), status: res.status(), wireBytes, encoding, at: new Date().toISOString(), ...(tag ? { dependency: tag } : {}) };
         if (failed) {
           // a good copy recorded earlier (another load of the same address) is kept; otherwise the failure is recorded
           if (had && had.via && !had.failed && had.bytes > 0) return;
@@ -618,8 +626,8 @@ export function unrollInPage(axis = 'y') {
   return st.dataset.what;
 }
 // The clone is unrolled exactly as the reference was when it was captured (meta.unroll), so both sides match. A clone's
-// scripts may open a view at load (a case study's sheet at its own address; in the Next app they run after hydration,
-// later than in the HTML clone): the pane to unroll is the one they leave, so the boot contract is waited for first
+// scripts may open a view at load (a case study's sheet at its own address, or later, after a framework hydrates):
+// the pane to unroll is the one they leave, so the boot contract is waited for first
 // (tc-boot released: every clone script has run). A reference never has it.
 export const unroll = async (page) => {
   await page.waitForFunction(() => !document.documentElement.classList.contains('tc-boot'), null, { timeout: 5000 }).catch(() => {});

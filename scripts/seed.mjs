@@ -18,7 +18,9 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, openBrowser, newPage, serve, VIEWPORTS, siteDir, routeArg } from './lib.mjs';
 import { planInlineStyles } from './viewport-fit.mjs';
 import { codeHash, toolVersion } from './identity.mjs';
-import { routeDir, routeKey, decodeEach, canonicalPath } from './routes.mjs';
+import { routeDir, routeKey, decodeEach, canonicalPath, routeUrl } from './routes.mjs';
+import { siteLinks } from './scope.mjs';
+import { placeDependencies, dependencyMap } from './bundle.mjs';
 
 // placeholder vocabulary, wide enough to match most word widths
 const LOREM_TEXT = `lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore
@@ -215,7 +217,7 @@ const PLAYER = `// trueclone reveal player: replays what was recorded on the ref
 //   starts from the page as it was before any script ran, as the site's own script did; a state transform, such as a
 //   closed menu's scale(1, 0), is data-tc-gsap="state" and stays), and settles their scroll reveals at the end.
 // - tcBoot, the boot contract: <html class="tc-boot"> until every clone script has run (DOMContentLoaded comes after
-//   the deferred ones; the Next app's injector releases after its last script) and every hold is released. script.js
+//   the deferred ones) and every hold is released. script.js
 //   holds the boot while it prepares what a visitor must not see half-built: tcBoot.hold() at the top,
 //   tcBoot.release() when ready.
 const RUNTIME = `(() => {
@@ -335,7 +337,8 @@ if (meta.bundle && !routePage) {
     await fs.writeFile(notesFile, `# ${name}: clone notes\n\nReference: ${meta.url}. Mode: exact (permission: ${meta.permission}), app mode with the site's own bundle. Captured ${meta.capturedAt}.\nKeep every section; the report reads them back. One line per entry, no prose.\n\n## Review\n\n<!-- one line per journey frame of compare/review/journey-<size>/index.md, with its token: "- journey/03-step-2 desktop [token]: same" -->\n\n## Accepted differences\n\n<!-- "- <check> <size> <where>: <why>; evidence: <file>" -->\n\n## Findings\n\n<!-- what the bundle could not carry (a backend answer it stubs, a file never recorded), with evidence -->\n`);
   }
   // the same completion record as a rebuilt document's (capture, time, the seed's code and the tool's version)
-  await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: r.documents, bundle: true, code: codeHash('seed'), tool: toolVersion() }, null, 2));
+  await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: r.documents, bundle: true, code: codeHash('seed'), tool: toolVersion(), ...(r.outOfScope.length ? { outOfScopeLinks: [...new Set(r.outOfScope)].slice(0, 500) } : {}) }, null, 2));
+  if (r.outOfScope.length) console.log(`links: ${new Set(r.outOfScope).size} link(s) to pages of the site outside the scope open the live site`);
   console.log(`seeded ${path.relative(process.cwd(), clone)} from the site's own bundle: ${r.files} files from ${r.hosts} host(s), ${r.documents} document(s), served through clone/tc-sw.js (offline: tracking answered empty, writes never sent, anything not recorded a 404)`);
   console.log(`next: npx trueclone status ${name}`);
   process.exit(0);
@@ -443,8 +446,13 @@ const widgetRec = exact || routePage ? null : JSON.parse(await fs.readFile(path.
 const widgetGroups = (widgetRec?.groups || []).filter((g) => g.kind === 'portal' || new Set([...(g.states || []), ...(g.kind === 'expand' ? [g.closed] : [])].filter((s) => s != null)).size > 1);
 let marked = 0, classMarked = 0, scrubMarked = 0, widgets = null, runtime = null;
 step('browser pass: reveal marks, widgets, runtime clean-up' + (exact ? '' : ', placeholder text and media'));
-let liveFrames = [], find = null;
-({ html, marked, classMarked, scrubMarked, widgets, runtime, liveFrames, find } = await browserPass(!exact, recorded, classChanges, widgetGroups, scrubbed));
+let liveFrames = [], find = null, outOfScope = [];
+// the first-party documents the page embeds (exact mode; capture.mjs meta.dependencies): copied into clone/_dep/ once,
+// by the main seed, before any page points a frame at them
+const placedDeps = exact && !routePage ? await placeDependencies(root, meta) : null;
+if (placedDeps?.documents) console.log(`embedded documents: ${placedDeps.documents} document(s), ${placedDeps.files} file(s) in clone/_dep/ (served by the clone, never the live site)`);
+({ html, marked, classMarked, scrubMarked, widgets, runtime, liveFrames, outOfScope, find } = await browserPass(!exact, recorded, classChanges, widgetGroups, scrubbed));
+if (placedDeps) outOfScope.push(...placedDeps.outOfScope);
 if (!exact) html = html.split(REF_ASSETS).join('__tc_ref__').replace(/__tc_ref__[^"')\s]+/g, PLACEHOLDER);
 // template mode never loads the site's media: what still points at the network (a <template>'s images, a lazy
 // loader's data-* source, a source the capture could not save) becomes the placeholder too
@@ -468,7 +476,7 @@ if (marked || classMarked || scrubMarked) {
   html = html.replace(/<\/body>/i, `<script type="application/json" id="tc-reveals">${data}</script>\n<script src="trueclone-reveals.js" defer></script>\n</body>`);
 }
 // Boot contract: <html class="tc-boot"> from the first byte until every clone script has run (the reveal player drops
-// it after DOMContentLoaded; the Next app after its last script). Regions a script builds or re-lays out at boot
+// it after DOMContentLoaded). Regions a script builds or re-lays out at boot
 // (--hide-until-boot "<selectors>") stay invisible meanwhile, so a visitor never sees their captured, pre-script state;
 // a 3 s failsafe shows everything if no script ever runs.
 html = html.replace(/<html\b([^>]*)>/i, (all, attrs) => (/\bclass=/.test(attrs) ? `<html${attrs.replace(/\bclass=(["'])([^"']*)\1/, (m, q, v) => `class=${q}${v.trim() ? `${v.trim()} ` : ''}tc-boot${q}`)}>` : `<html${attrs} class="tc-boot">`));
@@ -488,6 +496,7 @@ if (routePage) {
   await fs.writeFile(path.join(clone, ...parts, 'index.html'), rebaseHtml(html, parts.length));
   await fs.rm(path.join(clone, passFile), { force: true });
   if (liveFrames.length) console.log(`live frames: ${JSON.stringify(liveFrames)}`); // read by the main seed (.seed.json)
+  if (outOfScope.length) console.log(`out of scope links: ${JSON.stringify(outOfScope)}`); // read by the main seed (.seed.json)
   console.log(`seeded ${routePage.path}: clone/${parts.join('/')}/index.html (a separate page of the site)`);
   process.exit(0);
 }
@@ -563,12 +572,15 @@ for (const r of ownPages) {
   console.log(ok || `WARNING ${r.path} not seeded: ${(child.stderr || '').split('\n')[0]}`);
   if (!ok) { console.error(`seed incomplete: the separate page ${r.path} did not seed; run trueclone seed ${name} again`); process.exit(1); }
   const frames = (child.stdout || '').split('\n').find((l) => l.startsWith('live frames: '));
-  if (frames) { const f = JSON.parse(frames.slice('live frames: '.length)); console.warn(`WARNING ${r.path}: ${f.length} frame(s) still load the live site (not captured): ${f.join(', ')}`); liveFrames.push(...f); }
+  if (frames) { const f = JSON.parse(frames.slice('live frames: '.length)); console.warn(`WARNING ${r.path}: ${f.length} frame(s) still load from the network (not recorded): ${f.join(', ')}`); liveFrames.push(...f); }
+  const links = (child.stdout || '').split('\n').find((l) => l.startsWith('out of scope links: '));
+  if (links) outOfScope.push(...JSON.parse(links.slice('out of scope links: '.length)));
 }
 // the completion record: every page of the seed is written (status requires it, so a seed that crashed is redone).
 // code: the seed's code (identity.mjs codeHash), so a clone seeded by older seed code is seeded again after an upgrade
-// (status); liveFrames: frames that still load the live site (RC6 elise), for the report
-await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: 1 + ownPages.length, code: codeHash('seed'), tool: toolVersion(), ...(liveFrames.length ? { liveFrames: [...new Set(liveFrames)] } : {}) }, null, 2));
+// (status); liveFrames: frames that still load from the network (RC6 elise), and outOfScopeLinks: the site's pages
+// outside the requested scope its links open on the live site, both for the report
+await fs.writeFile(path.join(clone, '.seed.json'), JSON.stringify({ capturedAt: meta.capturedAt, at: new Date().toISOString(), pages: 1 + ownPages.length, code: codeHash('seed'), tool: toolVersion(), ...(liveFrames.length ? { liveFrames: [...new Set(liveFrames)] } : {}), ...(outOfScope.length ? { outOfScopeLinks: [...new Set(outOfScope)].slice(0, 500) } : {}), ...(placedDeps?.documents ? { dependencies: { documents: placedDeps.documents, files: placedDeps.files } } : {}) }, null, 2));
 console.log(`next: write clone/script.js (behaviour), then npx trueclone score ${name}`);
 
 // ---------- One browser pass over the seeded page: placeholders (template mode) and reveal marks ----------
@@ -602,28 +614,42 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
     const fit = inlineStyles ? planInlineStyles(inlineStyles, VIEWPORTS) : null;
     const planned = fit ? Object.entries(fit.plan) : [];
     const found = fit ? await page.evaluate(markInlinePlanInPage, [planned.map(([p, e]) => [p, e.check]), fit.keys]) : null;
-    // the site's own links point at the clone's routes: an address on the site's host becomes a path (/about), in
-    // both modes, so a visitor of the clone stays in the clone (the local server and the Next app answer every route)
+    // The site's own links (scope.mjs), in both modes: a page the clone has (a captured route) is a link to it, its path
+    // (/about), so a visitor of the clone stays in the clone; any other page or file of the site opens on the live site,
+    // its absolute address with the query and fragment kept, never a local 404 or "#" (RC8: a landing page captured
+    // alone linked its twenty other pages to local paths nothing answered). Decided outside the page, against the
+    // page's own live address (a relative link is the site's).
     const siteHost = new URL(meta.finalUrl || meta.url).host;
-    const localised = await page.evaluate(localLinksInPage, siteHost);
-    if (localised) console.log(`links: ${localised} link(s) to the site's own pages now point at the clone's routes`);
-    // Frames of the site's own pages (exact mode; template mode blanks every frame): a frame whose route was captured
-    // opens the clone's page of it, query kept (elise's shell framed https://www.elise-ux.com/Landing%20Page.html?shell=1
-    // from every clone page, RC6 A6: the clone showed the live site). One whose route was not captured cannot be made
-    // local: it is left as it is, warned here and recorded in clone/.seed.json (liveFrames).
+    const pageLive = routePage ? routeUrl(routePage.path, new URL(meta.finalUrl || meta.url), true) : (meta.finalUrl || meta.url);
+    const decided = siteLinks(await page.evaluate(linkHrefsInPage), pageLive, meta);
+    if (decided.pairs.length) await page.evaluate(setLinksInPage, decided.pairs);
+    if (decided.local) console.log(`links: ${decided.local} link(s) to the site's pages in scope point at the clone's routes`);
+    if (decided.live.length) console.log(`links: ${decided.live.length} link(s) to pages of the site outside the scope open the live site (${decided.live.slice(0, 4).join(', ')}${decided.live.length > 4 ? '…' : ''})`);
+    // Frames (exact mode; template mode blanks every frame): a frame of a captured route opens the clone's page of it,
+    // query kept (elise's shell framed https://www.elise-ux.com/Landing%20Page.html?shell=1 from every clone page, RC6 A6:
+    // the clone showed the live site); a first-party document the capture recorded (meta.dependencies) opens the clone's
+    // copy of it (clone/_dep/). Any other frame still loads from the network: warned here and recorded in
+    // clone/.seed.json (liveFrames), named in REPORT.
     let liveFrames = [];
     if (!template) {
-      const srcs = await page.evaluate(sameHostFramesInPage, siteHost);
+      const srcs = await page.evaluate(framesInPage);
       const captured = new Map((meta.routes?.length ? meta.routes : [{ path: new URL(meta.finalUrl || meta.url).pathname }]).map((r) => [routeKey(r.path), canonicalPath(r.path)]));
+      const deps = await dependencyMap(root, meta);
       const to = [];
       for (const s of srcs) {
-        const u = new URL(s.abs);
-        const local = captured.get(routeKey(u.pathname));
-        if (local) to.push([s.src, `${local}${u.search}${u.hash}`]); else liveFrames.push(s.abs);
+        let u;
+        try { u = new URL(s.src, pageLive); } catch { continue; }
+        if (!/^https?:$/.test(u.protocol)) continue;
+        const sameHost = u.host.replace(/^www\./, '') === siteHost.replace(/^www\./, '');
+        const local = sameHost ? captured.get(routeKey(u.pathname)) : null;
+        const dep = deps[u.href] || deps[u.href.split('#')[0]];
+        if (local) to.push([s.src, `${local}${u.search}${u.hash}`]);
+        else if (dep) to.push([s.src, dep]);
+        else if (/^(https?:)?\/\//i.test(s.src.trim()) || sameHost) liveFrames.push(u.href);
       }
       const n = to.length ? await page.evaluate(setFrameSrcInPage, to) : 0;
-      if (n) console.log(`frames: ${n} frame(s) of the site's own pages now open the clone's routes (${to.map((t) => t[1]).join(', ')})`);
-      if (liveFrames.length) console.warn(`WARNING ${liveFrames.length} frame(s) still load the live site: their pages were not captured, so the clone has no page for them (capture --routes with them to localise): ${liveFrames.join(', ')}`);
+      if (n) console.log(`frames: ${n} frame(s) now open the clone's own pages or its copies of embedded documents (${to.map((t) => t[1]).join(', ')})`);
+      if (liveFrames.length) console.warn(`WARNING ${liveFrames.length} frame(s) still load from the network (not recorded): ${liveFrames.join(', ')}`);
     }
     await page.evaluate(installFindInPage);
     const counts = reveals.length || classes.length || scrubs.length ? await page.evaluate(markRevealsInPage, [reveals, classes, scrubs]) : [0, 0, 0, { missing: 0, unmatched: 0, ambiguous: 0 }];
@@ -639,15 +665,15 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       widgets = { groups: [], states: 0 };
       for (const g of groups) {
         if (!ok[g.i]) continue;
-        const shape = (stateHtml) => (stateHtml == null ? null : page.evaluate(([i, h, lorem, t]) => {
+        const shape = (stateHtml) => (stateHtml == null ? null : page.evaluate(([i, h, lorem, t, host]) => {
           const scope = document.querySelector(`[data-tc-scope~="${i}"]`);
           if (!scope) return null;
           const before = scope.innerHTML;
           scope.innerHTML = h;
-          const out = t ? window.__tcPlaceholders([lorem, `[data-tc-scope~="${i}"]`]) : scope.innerHTML;
+          const out = t ? window.__tcPlaceholders([lorem, `[data-tc-scope~="${i}"]`, [], host]) : scope.innerHTML;
           scope.innerHTML = before;
           return out;
-        }, [g.i, stateHtml, LOREM, template]));
+        }, [g.i, stateHtml, LOREM, template, siteHost]));
         const states = [];
         for (const st of g.states) states.push(await shape(st));
         const closed = g.kind === 'expand' ? await shape(g.closed) : undefined;
@@ -663,7 +689,7 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       const lazy = await page.evaluate(loadImagesInPage, 15000).catch(() => 0);
       if (lazy) step(`${lazy} lazy image(s) loaded for the placeholder test`);
       step('template placeholders: measuring every text run (the longest part on a big page)');
-      await page.evaluate(placeholdersInPage, [LOREM, null, scriptedNames]);
+      await page.evaluate(placeholdersInPage, [LOREM, null, scriptedNames, siteHost]);
       step('placeholders done');
     }
     // Excluded third-party widgets (meta.ignore, decision D3: "the clone must not contain them") are removed from the
@@ -698,7 +724,7 @@ async function browserPass(template, reveals, classes, groups = [], scrubs = [])
       const attrs = [...el.attributes].map((a) => ` ${a.name}="${a.value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`).join('');
       return `<html${attrs}>${inner}</html>`;
     });
-    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1], scrubMarked: counts[2], widgets, runtime, liveFrames, find: { reveals: counts[3], widgets: widgetFind } };
+    return { html: `<!DOCTYPE html>\n${out}`, marked: counts[0], classMarked: counts[1], scrubMarked: counts[2], widgets, runtime, liveFrames, outOfScope: decided.live, find: { reveals: counts[3], widgets: widgetFind } };
   } finally {
     if (!flags.cdp) await browser.close();
     server.close();
@@ -1031,18 +1057,9 @@ function dropExcludedInPage([sels, origins]) {
   return out;
 }
 
-// Same-host frames (exact mode): their src as written and as an absolute address, once each
-function sameHostFramesInPage(siteHost) {
-  const host = String(siteHost).replace(/^www\./, '');
-  const out = new Map();
-  for (const f of document.querySelectorAll('iframe[src]')) {
-    const src = f.getAttribute('src');
-    let u;
-    try { u = new URL(src, location.href); } catch { continue; }
-    if (!/^https?:$/.test(u.protocol) || u.host.replace(/^www\./, '') !== host || !/^https?:\/\//i.test(src.trim()) && !src.trim().startsWith('//')) continue;
-    out.set(src, { src, abs: u.href });
-  }
-  return [...out.values()];
+// Every frame's src as written, once each (resolved outside the page, against its live address)
+function framesInPage() {
+  return [...new Set([...document.querySelectorAll('iframe[src]')].map((f) => f.getAttribute('src')).filter(Boolean))].map((src) => ({ src }));
 }
 function setFrameSrcInPage(pairs) {
   const to = new Map(pairs);
@@ -1068,20 +1085,13 @@ async function loadImagesInPage(max) {
 // keeps the spacer as a plain block with the pin distance as padding (`data-tc-pin-spacer`), makes the element
 // sticky, and records the distance on it (`data-tc-pin`), so layout and scroll states hold without a script. The
 // clone's script may take the pin over (unwrap the spacer, drop the sticky style) and draws the marked canvases.
-// Links to the site's own pages (absolute on its host, or root-relative) become paths, so they open the clone's route.
-function localLinksInPage(siteHost) {
-  const host = String(siteHost).replace(/^www\./, '');
-  let n = 0;
-  for (const a of document.querySelectorAll('a[href]')) {
-    const h = a.getAttribute('href');
-    if (!/^https?:\/\//i.test(h) && !h.startsWith('//')) continue; // relative already
-    let u;
-    try { u = new URL(h, location.href); } catch { continue; }
-    if (u.host.replace(/^www\./, '') !== host || /\.(pdf|png|jpe?g|gif|svg|webp|zip|mp4|xml|txt)$/i.test(u.pathname)) continue;
-    a.setAttribute('href', `${u.pathname}${u.search}${u.hash}`);
-    n++;
-  }
-  return n;
+// The links of the page (every <a href> as written, once each); the decision is made outside the page (siteLinks)
+function linkHrefsInPage() {
+  return [...new Set([...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter(Boolean))];
+}
+function setLinksInPage(pairs) {
+  const to = new Map(pairs);
+  for (const a of document.querySelectorAll('a[href]')) if (to.has(a.getAttribute('href'))) a.setAttribute('href', to.get(a.getAttribute('href')));
 }
 
 function cleanRuntimeInPage() {
@@ -1163,7 +1173,7 @@ function cleanRuntimeInPage() {
 }
 
 
-function placeholdersInPage([lorem, rootSel, scripted = []]) {
+function placeholdersInPage([lorem, rootSel, scripted = [], siteHost = ""]) {
   // the whole page, or one region (a widget's recorded state placed into the page to be measured)
   const root = rootSel ? document.querySelector(rootSel) : document.body;
   if (!root) return null;
@@ -1357,8 +1367,11 @@ function placeholdersInPage([lorem, rootSel, scripted = []]) {
   for (const el of root.querySelectorAll('[style*="url("]')) el.setAttribute('style', el.getAttribute('style').replace(/url\((['"]?)(?!data:)[^)'"]+\1\)/g, 'url("assets/placeholder.svg")'));
 
   // links, forms and brand metadata
-  // the site's own routes stay links (made local by localLinksInPage); links elsewhere go nowhere
-  root.querySelectorAll('a[href]').forEach((a) => { const h = a.getAttribute('href'); if (!h.startsWith('#') && !(h.startsWith('/') && !h.startsWith('//'))) a.setAttribute('href', '#'); });
+  // the site's own pages stay links (siteLinks: a route in scope as its local path, any other page of the site as its
+  // live address, never "#"); links to other sites go nowhere
+  const ownHost = String(siteHost || '').replace(/^www\./, '');
+  const keepLink = (h) => h.startsWith('#') || (h.startsWith('/') && !h.startsWith('//')) || (() => { try { return Boolean(ownHost) && /^https?:\/\//i.test(h) && new URL(h).host.replace(/^www\./, '') === ownHost; } catch { return false; } })();
+  root.querySelectorAll('a[href]').forEach((a) => { if (!keepLink(a.getAttribute('href'))) a.setAttribute('href', '#'); });
   root.querySelectorAll('form').forEach((f) => f.setAttribute('action', '#'));
   // Open shadow roots (the capture's declarative <template shadowrootmode>, parsed into real ones here): the same
   // rules for frames, media and links, which querySelectorAll above does not reach. RC6-22: allbirds' shop-cart-sync
@@ -1376,7 +1389,7 @@ function placeholdersInPage([lorem, rootSel, scripted = []]) {
     }
     sr.querySelectorAll('picture source, video source, audio source, track').forEach((s) => s.remove());
     for (const v of sr.querySelectorAll('video')) { v.removeAttribute('src'); v.setAttribute('poster', box(v.videoWidth || 16, v.videoHeight || 16)); v.setAttribute('preload', 'none'); }
-    sr.querySelectorAll('a[href]').forEach((a) => { const h = a.getAttribute('href'); if (!h.startsWith('#') && !(h.startsWith('/') && !h.startsWith('//'))) a.setAttribute('href', '#'); });
+    sr.querySelectorAll('a[href]').forEach((a) => { if (!keepLink(a.getAttribute('href'))) a.setAttribute('href', '#'); });
     sr.querySelectorAll('form').forEach((f) => f.setAttribute('action', '#'));
   }
   if (root !== document.body) return root.innerHTML;

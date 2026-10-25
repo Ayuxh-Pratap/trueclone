@@ -6,10 +6,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, STABILISERS, holdStill, bundleIntegrity, MASK_VERSION, loadLive } from './lib.mjs';
+import { SCORED, VIEWPORTS, HELD_OUT, LOCALE, parseArgs, siteName, openBrowser, newPage, settle, sectionsOf, mask, siteDir, setReferenceProfile, parseCookies, matchPct, PNG, recordBundle, bundleKey, STABILISERS, holdStill, bundleIntegrity, MASK_VERSION, loadLive } from './lib.mjs';
 import { startScriptEvidence } from './scripts-evidence.mjs';
 import { detectInPage, operable } from './interactions-auto.mjs';
 import { canonicalPath, routeKey, routeDir, dirKey, uniqueSlugs, routeUrl } from './routes.mjs';
+import { requestedScope, notCapturedWhy, sameSite } from './scope.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [url, nameArg] = pos;
@@ -178,6 +179,9 @@ const locale = typeof flags.locale === 'string' ? flags.locale : LOCALE;
 const asked = { locale, extraHTTPHeaders: { 'accept-language': `${locale},${locale.split('-')[0]};q=0.9` } };
 let finalUrl = null; // where the page ended up, when that is not the URL asked for (a geo or consent redirect)
 let linkHrefs = []; // the page's links, for the routes
+// the frames each captured page embeds at desktop, by route ('' the captured page): their own top-level documents
+const framesOf = new Map();
+const topFrames = (page) => page.frames().filter((f) => f.parentFrame() === page.mainFrame()).map((f) => f.url()).filter((u) => /^https?:/.test(u));
 let overlaysAtLoad = []; // dialogs over the page at load that were not hidden (see the warning below)
 let canvasApp = null; // a full-window canvas driven by input, the document not scrolling (see below)
 let bundleDone = null; // own-bundle recording (exact mode, desktop)
@@ -301,6 +305,8 @@ try {
     }
     // every link on the page, hidden views' included: the site's routes are found from them (and sitemap.xml)
     if (desktop) linkHrefs = await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => []);
+    // the documents the page embeds (its frames): first-party ones are part of the page (meta.dependencies, below)
+    if (desktop) framesOf.set('', topFrames(page));
     // inline styles at this size, by element path: scripts size and place things from the viewport (a grid's computed
     // cells, a pin's distance), and the rendered HTML only keeps one size's values. With the extra sizes read below,
     // the seed tells a function of the viewport from a constant. Read here, settled and before any screenshot, in the
@@ -377,7 +383,9 @@ const routePath = canonicalPath;
 const homePath = routePath(home.pathname);
 const skipRoute = (p) => /\.(pdf|png|jpe?g|gif|svg|webp|avif|xml|txt|json|zip|mp4|webm|mp3|ico|css|js)$/i.test(p) || p.startsWith('/cdn-cgi/');
 const explicit = typeof flags.routes === 'string' && !/^\d+$/.test(flags.routes) ? [...new Map(flags.routes.split(',').map((s) => routePath(s.trim())).map((p) => [routeKey(p), p])).values()] : null;
-const cap = explicit ? explicit.length : flags.routes !== undefined && flags.routes !== true ? Math.max(1, Number(flags.routes) || 1) : 12;
+// the scope the user asked for (scope.mjs): one page, a list, or the site up to a cap; never widened here
+const scope = requestedScope(flags.routes, explicit);
+const cap = scope.cap;
 // every same-host page found, deduplicated by canonical path, in the order found: { path, from } (from: "start", the
 // path of the page that links it, "sitemap.xml", or "--routes")
 const routesFound = [];
@@ -454,7 +462,7 @@ for (let wave = choose(); wave.length; wave = explicit ? [] : choose()) {
           if (finishPageEvidence) await finishPageEvidence(path.join(dir, 'scripts')).catch((e) => console.warn(`WARNING scripts of ${r.path} not saved: ${e.message}`));
           // the links on this route, for the next wave (RC6-17): read from the live DOM (settled, at desktop), as the
           // captured page's own links are, so a page whose links a script writes is followed too
-          if (vp.name === 'desktop') linksOf.set(r.path, await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => []));
+          if (vp.name === 'desktop') { linksOf.set(r.path, await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.href)).catch(() => [])); framesOf.set(r.path, topFrames(page)); }
           // at the top, settled there, then shot; the page is saved right after the shot, so both show one moment
           await page.evaluate(() => { scrollTo(0, 0); dispatchEvent(new Event('scroll')); });
           await page.waitForTimeout(600);
@@ -534,7 +542,7 @@ const appKind = routeInfo.length < 2 ? 'single page' : routeInfo.every((r) => r.
 const others = routeInfo.filter((r) => r.slug);
 // every page found and not captured, with why (meta.routesNotCaptured; printed at the end)
 const routesNotCaptured = [...routesFailed, ...routesFound.filter((f) => !chosen.some((c) => routeKey(c) === routeKey(f.path)))
-  .map((f) => ({ path: f.path, from: f.from, why: clashes.get(routeKey(f.path)) || (explicit ? 'not in the --routes list' : `beyond the cap of ${cap} route${cap === 1 ? '' : 's'} (--routes <n> for more)`) }))];
+  .map((f) => ({ path: f.path, from: f.from, why: clashes.get(routeKey(f.path)) || notCapturedWhy(scope) }))];
 // a route's scenarios join the captured page's, except links the captured page already goes to at that size (the
 // same sidebar on every route would otherwise draft the same navigation once per route)
 // Navigation is drafted only to routes this capture has: a link to an uncaptured page would be scored against
@@ -614,6 +622,67 @@ if (droppedScenarios.length) console.log(`interactions: ${droppedScenarios.lengt
 console.log(`interactions: ${autoScenarios.length} scenario(s) found to operate (reference/interactions.auto.json, scored by default)`);
 await fs.writeFile(path.join(ref, 'inline-styles.json'), JSON.stringify({ breakpoints, scriptQueries: [...scriptQueries], keys: 'id-path', sizes: Object.keys(inlineStyles), styles: inlineStyles }));
 console.log(`inline styles read at ${Object.keys(inlineStyles).length} sizes (site breakpoints: ${breakpoints.join(', ') || 'none found'}; ${scriptQueries.size} width quer${scriptQueries.size === 1 ? 'y' : 'ies'} asked by its scripts)`);
+// ---------- Embedded documents: a first-party frame is part of the page that embeds it ----------
+// A frame on the site's own registrable domain (recorder.jam.dev on jam.dev; the shell a portfolio frames from its own
+// host) shows what a visitor sees on that page: its document and the files it loads are recorded (exact mode, into
+// reference/dependencies/bundle/), served by the clone from its own copy, and measured inside the page's own shots. It
+// is a rendering dependency, never a route of its own, and the capture stays bounded: the frames each captured page
+// embeds itself (at most 10 a page), and nothing they link to. A frame of a captured route opens the clone's page of it
+// (seed); another site's frame is a third-party widget (excluded on both sides, above) or an embed kept as it is (named
+// in REPORT). Template mode copies no content of the site: a frame there is a placeholder.
+const siteHostNow = new URL(finalUrl || url).host;
+const capturedKeys = new Set(routeInfo.map((r) => routeKey(r.path)));
+const dependencies = [];
+for (const [route, srcs] of framesOf) {
+  const onPage = route || homePath;
+  if (route && !capturedKeys.has(routeKey(route))) continue;
+  for (const src of srcs) {
+    let u;
+    try { u = new URL(src); } catch { continue; }
+    if (!sameSite(u.host, siteHostNow)) continue;
+    if (hostOf(u.host) === hostOf(siteHostNow) && capturedKeys.has(routeKey(routePath(u.pathname)))) continue;
+    if (ignore.some((i) => i.origin && src.startsWith(i.origin))) continue;
+    if (dependencies.some((d) => d.src === u.href && d.page === onPage) || dependencies.filter((d) => d.page === onPage).length >= 10) continue;
+    dependencies.push({ src: u.href, page: onPage, host: u.host });
+  }
+}
+if (dependencies.length && mode === 'exact') {
+  const depRef = path.join(ref, 'dependencies');
+  await fs.rm(depRef, { recursive: true, force: true });
+  const browser4 = await openBrowser(flags.cdp);
+  try {
+    for (const onPage of [...new Set(dependencies.map((d) => d.page))]) {
+      const roots = dependencies.filter((d) => d.page === onPage).map((d) => d.src);
+      const { context, page: p } = await newPage(browser4, VIEWPORTS.find((v) => v.name === 'desktop'), asked);
+      // the page's own top-level frame a response belongs to (a nested frame's files count for its top frame); before a
+      // frame's document commits, its navigation names it
+      const rootOf = (res) => {
+        const req = res.request();
+        let f = req.frame();
+        if (!f || f === p.mainFrame()) return null;
+        let at = req.isNavigationRequest() && f.parentFrame() === p.mainFrame() ? req.url() : null;
+        while (f.parentFrame() && f.parentFrame() !== p.mainFrame()) f = f.parentFrame();
+        at ||= f.url();
+        return roots.find((r) => r.split('#')[0] === String(at).split('#')[0]) || null;
+      };
+      const done = recordBundle(p, depRef, { siteHost: siteHostNow, tagOf: rootOf });
+      try {
+        await loadLive(p, routeUrl(onPage, home, true));
+        await settle(p, hide);
+        await p.waitForTimeout(1500);
+      } catch (e) { console.warn(`WARNING the embedded documents of ${onPage} were not recorded: ${e.message.split('\n')[0]}`); }
+      finally { await done(); await context.close(); }
+    }
+  } finally { if (!flags.cdp) await browser4.close(); }
+  const man = JSON.parse(await fs.readFile(path.join(depRef, 'bundle', 'manifest.json'), 'utf8').catch(() => '{"entries":{}}'));
+  for (const d of dependencies) {
+    const doc = man.entries[bundleKey(new URL(d.src), siteHostNow)];
+    const files = Object.values(man.entries).filter((e) => e.dependency === d.src && e.file && !e.failed).length;
+    Object.assign(d, doc && doc.file && !doc.failed ? { recorded: true, files } : { recorded: false, why: doc?.failed || 'its document was not seen when the page was loaded again' });
+  }
+} else for (const d of dependencies) Object.assign(d, { recorded: false, placeholder: true, why: 'template mode: a placeholder (no content of the site is copied)' });
+if (dependencies.length) console.log(`embedded documents: ${dependencies.map((d) => `${d.src} on ${d.page} (${d.recorded ? `recorded, ${d.files} file(s)` : d.placeholder ? 'placeholder' : `NOT recorded: ${d.why}`})`).join('; ')}`);
+
 // The own-bundle recording is kept for a canvas app in exact mode (or --bundle): the clone runs the site's own code
 // on its own files (the owner's permission covers their code). Any other capture drops it: a document is rebuilt.
 const ownBundle = mode === 'exact' && (Boolean(canvasApp) || Boolean(flags.bundle)) && await fs.stat(path.join(ref, 'bundle', 'manifest.json')).then(() => true, () => false);
@@ -622,7 +691,7 @@ else {
   const integrity = await bundleIntegrity(ref);
   console.log(`own bundle: ${integrity.entries} files the app loaded, kept in reference/bundle/ (exact mode: the clone runs the site's own code)${integrity.problems.length ? `; ${integrity.problems.length} could not be recorded (status reports them): ${integrity.problems.slice(0, 5).map((p) => `${p.url} (${p.why})`).join('; ')}` : ''}`);
 }
-await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, routesFound, routesNotCaptured, name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', stabilise: STABILISERS, maskVersion: MASK_VERSION, ...(ignore.length ? { ignore } : {}), ...(thirdParty.length ? { thirdParty } : {}), ...(scriptOrigins ? { scriptOrigins } : {}), ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), ...(pageErrors.size ? { pageErrors: [...pageErrors].map(([route, v]) => ({ route: route || homePath, ...v })) } : {}), capturedAt: new Date().toISOString(), complete: false, rootFontSize, viewports: summary }, null, 2));
+await fs.writeFile(path.join(ref, 'meta.json'), JSON.stringify({ url, ...(finalUrl ? { finalUrl } : {}), locale, app: appKind, routes: routeInfo, routesFound, routesNotCaptured, scope: { ...scope, sitemap: Boolean(sitemap) }, ...(dependencies.length ? { dependencies } : {}), name, mode, permission, hide, ...(cookies.length ? { cookies } : {}), unroll: 'y', stabilise: STABILISERS, maskVersion: MASK_VERSION, ...(ignore.length ? { ignore } : {}), ...(thirdParty.length ? { thirdParty } : {}), ...(scriptOrigins ? { scriptOrigins } : {}), ...(overlaysAtLoad.length ? { overlays: overlaysAtLoad } : {}), ...(canvasApp ? { canvasApp } : {}), ...(ownBundle ? { bundle: true } : {}), ...(pageErrors.size ? { pageErrors: [...pageErrors].map(([route, v]) => ({ route: route || homePath, ...v })) } : {}), capturedAt: new Date().toISOString(), complete: false, rootFontSize, viewports: summary }, null, 2));
 await buildMirror(manifest, url, mode === 'exact' ? `Exact mode, authorised by: ${permission}.` : "Template mode: the site's own content, kept as a reference only.");
 // Separate pages of the site (their own documents): each mirrored like the captured page, as mirror/routes/<slug>.html
 // with the same relative layout (assets at ../assets/, stylesheets in css/), so the seed treats it like index.html.
