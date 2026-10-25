@@ -2,24 +2,34 @@
 
 **The exact same website, from one URL, at every screen size, with the checks to prove it.**
 
-Give your coding agent a URL. trueclone captures the site, extracts its design system, seeds the clone with the original's structure, hands the agent the original's own scripts to port every behaviour from, and measures the result against the original until it matches: layout, scroll states, canvases, motion, interactions, hovers, styles and the load sequence, at the sizes it was built from and at sizes it never saw, plus a frame-by-frame visual review. You get the clone as HTML and as a Next.js app, plus the design system as `DESIGN.md` and a shadcn `globals.css`.
+Give your coding agent a URL. trueclone captures the site, extracts its design system, seeds the clone with the original's structure, hands the agent the original's own scripts to port every behaviour from, and measures the result against the original until it matches: layout, scroll states, canvases, motion, interactions, hovers, styles and the load sequence, at the sizes it was built from and at sizes it never saw, plus a frame-by-frame visual review. You get the clone as HTML, CSS and JavaScript, plus the design system as `DESIGN.md` and a shadcn `globals.css`. Later, if you ask for it, trueclone turns the finished clone into a maintainable Next.js application, verified the same way.
 
 ```bash
 npx @trueclone/cli init            # once per project: installs trueclone and the skill for your agent
 # then tell Claude Code, Codex or Cursor:
-#   "clone https://example.com with trueclone"
+#   "clone https://example.com with trueclone"            (or "clone only this page", "... in exact mode")
+# and later, only if you want it:
+#   "convert this clone into a proper Next.js application"
 ```
+
+## Two jobs, two requests
+
+| Request | What you get | Its loop and report |
+|---|---|---|
+| **Clone** a site, a page, or the pages you name | `clone/`: the site in HTML, CSS and JS, its scripts, interactions, animation and canvases running | `trueclone status`, `REPORT.md` |
+| **Convert** a finished clone (a separate, later request) | `nextjs/`: an App Router + TypeScript + Tailwind application a Next.js developer can maintain (components, typed content, cleaned-up effects, a README), built and measured against the original | `trueclone convert`, `REPORT.nextjs.md` |
+
+A cloning request never builds a Next.js app, and a conversion never changes the clone or its result.
 
 ## What you get from one URL
 
 | Output | What it is |
 |---|---|
 | `clone/` | The site in plain HTML, CSS and JS, interactions included (sliders, tabs, menus, canvas demos, scroll motion) |
-| `next/` | The same site as a Next.js + Tailwind v4 + shadcn app, one component per section, scored against the original too |
 | `DESIGN.md` | The design system in [Google's design.md format](https://github.com/google-labs-code/design.md), linted |
 | `globals.css` | A shadcn theme (Tailwind v4, oklch) generated from the same tokens |
 | `motion.md` | The motion recipe: every ScrollTrigger, tween, reveal and loop with its trigger, range, easing and timing |
-| `REPORT.md` | Every score against its target, what to fix first, and what was not copied (server logic, tracking, each API call) |
+| `REPORT.md` | Every score against its target, the scope (what was asked for, captured, and left out), what to fix first, and what was not copied (server logic, tracking, each API call) |
 
 ## Proof
 
@@ -55,7 +65,7 @@ Three benchmarks with very different stacks, scored by the tool itself. These nu
 | Hover effects | 100% | | |
 | Interactions (drag sliders, drag gallery, cursor follow, menu, skip) | 5/5 | | |
 
-The hand-built portfolio isn't perfect yet, and its report says so: computed styles and mobile layout are below target (placeholder text in highlighted phrases, a scroll-linked colour fade, mobile spacing). The generated Next.js app scores within half a point of the HTML clone on every check. A full scoring run takes 1.5 to 9 minutes.
+The hand-built portfolio isn't perfect yet, and its report says so: computed styles and mobile layout are below target (placeholder text in highlighted phrases, a scroll-linked colour fade, mobile spacing). A full scoring run takes 1.5 to 9 minutes. (These benchmarks predate 0.5; the Next.js output they mention was the retired generator, replaced by the `convert` workflow.)
 
 ## How it works
 
@@ -92,7 +102,7 @@ trueclone bundles [REA](https://github.com/morluto/rea) (Reverse Engineer Anythi
 | Mode | For | Content |
 |---|---|---|
 | `template` (default) | Any site: learning, layout study, a starting template | Structure, motion and behaviour of the original; your own text, images and brand |
-| `exact` | Sites you own or are authorised to copy, such as a Webflow, Framer or WordPress site moving to Next.js | The site's own text and media |
+| `exact` | Sites you own or are authorised to copy, such as a Webflow, Framer or WordPress site you are moving off its builder | The site's own text and media |
 
 - Exact mode refuses to run without `--permission "<who authorised it>"` and records it in the capture and the report.
 - No bot-check, CAPTCHA, login or paywall bypass. Tracking and analytics are never copied.
@@ -104,8 +114,8 @@ trueclone bundles [REA](https://github.com/morluto/rea) (Reverse Engineer Anythi
 npx @trueclone/cli init                 # set up a project for your agent (then `npx trueclone ...`)
 npx trueclone doctor                    # check Node, Chrome, DNS, a local page in the browser, the timing lock
 npx trueclone <url> [name]              # capture + design-system draft
-npx trueclone capture <url> [name] [--mode exact --permission "<owner>"] [--hide|--ignore|--include "<selectors>"]
-npx trueclone status <name>             # the one next step; exit 0 Verified, 1 work left, 2 Blocked, 3 Incomplete (docs/policy.md)
+npx trueclone capture <url> [name] [--routes 1 | --routes "/,/about"] [--mode exact --permission "<owner>"] [--hide|--ignore|--include "<selectors>"]
+npx trueclone status <name>             # cloning: the one next step; exit 0 Verified, 1 work left, 2 Blocked, 3 Incomplete (docs/policy.md)
 npx trueclone calibrate <name>          # the reference against itself (two more loads): the bar of every frame
 npx trueclone behaviour <name>          # what changes by itself on both live pages: loop speed and direction, carousel intervals, a startup shuffle
 npx trueclone motion <name>             # motion inventory
@@ -120,7 +130,9 @@ npx trueclone score <name> [--fresh]    # every check, then REPORT.md (--only de
 npx trueclone explain <name> <y>        # one place on the page: what every check saw there, plus a reference|clone|diff crop
 npx trueclone review <name> --size wide # reference and clone side by side at a held-out size: load, every section, hover
 npx trueclone journey <name> --draft    # canvas apps: find the journey (gates, wheel, holds); then `journey <name>` shoots the reference
-npx trueclone next <name> --verify      # Next.js + Tailwind + shadcn app, scored into REPORT.next.md
+npx trueclone serve <name>              # open the clone on localhost
+npx trueclone convert <name>            # converting (a separate, later request): start or resume; the next step; same exit codes
+npx trueclone convert <name> --verify   # install, typecheck, lint, build and serve the app, then measure it against the original
 npx trueclone rea <args>                # bundled REA, for the rare deep case
 npx trueclone help                      # every step
 ```
@@ -130,6 +142,8 @@ npx trueclone help                      # every step
 - **Server-side behaviour** is invisible from outside: databases, accounts, payments, search. trueclone rebuilds the client and lists every API call the original makes in the report.
 - A live site is never pixel-identical twice: rotating content, A/B tests and font hinting vary.
 - A canvas app in template mode is ported by the agent, scene by scene: a large app (dozens of shaders) is long work, and the report says which stages are not there. An exact copy of one needs the owner's permission (its own bundle).
+- A whole-site capture is bounded (12 pages unless you ask for more) and finds pages through links and sitemap.xml: pages reachable only through a form, a login, a search or a script never appear, and the report says what was left out.
+- A Next.js conversion is written by your agent, guided and checked by trueclone (source checks, build, review criteria, the same measurements against the original): it takes real work on a large site, and its report says what is not there yet.
 - Developed and tested on Windows 11 with Chrome. macOS and Linux should work but aren't tested yet.
 
 ## Requirements
@@ -138,7 +152,7 @@ Node 22.19+, 24.11+ or 26+ (the same as REA), and Google Chrome for captures (it
 
 ## Roadmap
 
-- **Whole sites:** crawl every route, shared header and footer as components.
+- **Whole sites:** discovery beyond links and sitemap.xml, for larger sites.
 - **Data layer:** captured API responses turned into mock routes and fixtures, so the clone works offline.
 - **Benchmarks by kind of site:** static, Tailwind/Next.js, Webflow, Webflow + GSAP, Framer, WordPress builders, WebGL showcases, docs, e-commerce, SPAs, scroll-jacking, embeds: each scored at build and held-out sizes, published here.
 - **A free web page:** paste a URL, get its DESIGN.md and globals.css.

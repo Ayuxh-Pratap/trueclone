@@ -1,23 +1,41 @@
-# trueclone policy (rc.7)
+# trueclone policy (rc.11)
 
 This page is the canonical statement of what trueclone claims and when. Code comments, the skill
 (`skill/SKILL.md`), the AGENTS.md block (`bin/trueclone.mjs init`) and REPORT.md point here. Where an older document
-(`docs/eval-rc4/`, `docs/plan-rc5/`, `docs/rc5-status.md`, `docs/rc6-notes.md`, earlier test plans) says something
-different, this page wins; those documents are kept as the record of how the decisions were reached. What changed in
-rc.7 and why: `docs/rc7-notes.md`.
+(`docs/eval-rc4/`, `docs/plan-rc5/`, `docs/rc5-status.md`, `docs/rc6-notes.md`, `docs/rc7-*`, the resume and test plans
+of rc.8 to rc.10) says something different, this page wins; those documents are kept, as historical records, of how
+the decisions were reached (they describe the retired Next.js generator where they mention one). What changed in rc.11
+and why: `docs/rc11-two-workflows.md`.
 
 Decisions D1 to D6 below were approved on 2026-10-22 (docs/plan-rc5/PLAN.md §9). The rc.7 changes to outcomes,
 recovery, review sections and the lint follow the RC6 evaluation (docs/rc7-notes.md §1).
 
+## Two workflows (rc.11)
+
+trueclone does two separate jobs, each asked for on its own, each with its own outcome and exit code:
+
+- **Cloning** (`capture`, then `status`): the HTML/CSS/JS clone in `clone/`, with its scripts, interactions, animation
+  and canvases. Its outcome (`compare/outcome.json`, `REPORT.md`) is decided on the clone alone. No Next.js application
+  is generated, installed, built, verified or required by it; nothing in `nextjs/` or `compare-nextjs/` (nor output of
+  the retired generator, `next/`, `compare-next/`) changes its status, its required items, its audit or its exit code.
+- **Converting** (`convert`): a later, separate request that turns a finished clone into a maintainable Next.js
+  application in `nextjs/` (below, "Converting a clone to Next.js"). Its outcome (`compare-nextjs/outcome.json`,
+  `REPORT.nextjs.md`) is its own, and it never writes the clone's.
+
+The Next.js generator of rc.1 to rc.10 (`trueclone next`: the clone's HTML in a Next.js shell) is retired: `trueclone
+next` says so and names `convert`. A request for both ("clone it into Next.js") is two stages: the clone first, the
+conversion only when asked for.
+
 ## Outcomes
 
-`trueclone status <name>` decides the outcome from the files alone, every time it runs. Running it never changes a
-result and never counts as an attempt.
+`trueclone status <name>` decides the cloning outcome from the files alone, every time it runs. Running it never
+changes a result and never counts as an attempt. (`trueclone convert <name>` decides a conversion's the same way, with
+the same exit codes: "Converting a clone to Next.js".)
 
 | Exit | Outcome | When |
 |---|---|---|
-| 0 | Verified | Every required result passes (or is accepted with evidence, or has nothing to measure) on the HTML clone **and** on the Next.js app, each measured on its content as it is now, against the current reference; the review closed by eye on both sides; notes, coverage and the clone lint pass; nothing invalid, stale, missing, errored or tool-owned |
-| 1 | Work left | Not terminal: the next step is printed. Building, measuring, restoring a regression, working an objective, recording a change of strategy, the final sweep, app verification; or "waiting" while a trueclone step on the site is still running |
+| 0 | Verified | Every required result passes (or is accepted with evidence, or has nothing to measure) on the HTML clone, measured on its content as it is now, against the current reference, for the scope captured; the review closed by eye; notes, coverage and the clone lint pass; nothing invalid, stale, missing, errored or tool-owned |
+| 1 | Work left | Not terminal: the next step is printed. Building, measuring, restoring a regression, working an objective, recording a change of strategy, the final sweep; or "waiting" while a trueclone step on the site is still running |
 | 2 | Blocked | Something the clone cannot change stops the run, after its bounded recovery (below): the environment (no network, the live reference does not load), trueclone (a step that fails or crashes twice on the same input, a step that runs without effect, a lint finding in what the seed generated, a modified instrument, own-bundle files that cannot be recorded, status's own failure), or a step the agent declared cannot be done within its permitted edits. It names the owner (environment, tool, clone, run), the cause, the affected items, the log, and how to resume |
 | 3 | Incomplete | Every required item is accounted for, none is pending and none is blocked; at least one is a difference the loop concluded or a result the tool cannot verify here. Each is listed |
 
@@ -25,8 +43,8 @@ result and never counts as an attempt.
 (`accounting`), every required item with exactly one disposition: passed, unresolved (a difference the loop
 concluded), not verifiable (the tool's limit here), failing (Blocked only: measured below its bar, still open), blocked,
 or pending. An item is a unit (check, route, size, state,
-the interaction plan included) on the clone or on the app, a review frame, a review folder not shot yet, a written check
-(notes, coverage) or a lint finding. Nothing pending is ever part of a terminal outcome: status names a step for it,
+the interaction plan included) of the clone, a review frame, a review folder not shot yet, a written check
+(notes, coverage) or a lint finding (a conversion's own items: "Converting a clone to Next.js"). Nothing pending is ever part of a terminal outcome: status names a step for it,
 and reaching an outcome with any pending item is itself a defect (Blocked, owner tool). Verified has no item not passed;
 Incomplete lists exactly the items not passed; `tools/audit-run.mjs` recomputes the required set and checks the two
 sets of ids are equal. (RC6: an error seen twice and an interaction plan never run fell out of both the work queue and
@@ -64,7 +82,8 @@ pages mirrored.)
 
 **Wording (D5).** REPORT.md and status say, in these words:
 
-- Verified: "Verified: every required result passes on the clone and on the Next.js app as they are now."
+- Verified: "Verified: every required result passes on the HTML clone as it is now", with what was delivered: "HTML/CSS/JS
+  clone (<mode> mode), scope: <what was asked for, captured and left out>".
 - Incomplete: "Incomplete: N difference(s) remain (listed), M item(s) not verifiable by the tool (listed)." Never
   "pass", never "done", never "verified as they are".
 - Blocked: the owner, the blocker, what was tried, and what the user can do (network, `--hide`, permission, unset
@@ -78,7 +97,7 @@ outcome, valid only for the content it was decided on; "in-progress" with the st
 every step's whole output in `logs/`. `status <name>` resumes from there.
 
 **The console, the outcome and REPORT agree.** REPORT.md is rendered by status whenever what it describes changed
-(the clone, the app, notes.md, a result) and at every terminal outcome; a REPORT that cannot be rendered fails the
+(the clone, notes.md, a result) and at every terminal outcome; a REPORT that cannot be rendered fails the
 command that tried (`score` exits non-zero; a terminal status becomes Blocked, owner tool), never silently.
 
 ## Failures and recovery (rc.7)
@@ -115,7 +134,7 @@ viewport, state).
 |---|---|
 | Document | layout and scroll states for every route × 5 sizes (390, 768, 1440 built from; 1280, 1920 held out); behaviour and reduced motion for every route × desktop and mobile; detail × 3; hovers (desktop); load × 5; motion curves × 3 when the reference has scroll curves or a motion map exists; real-pixel layout × 5 in exact mode; a canvas unit wherever the reference draws one |
 | Canvas app | the journey × its sizes; load × 5 |
-| Both | every interaction scenario planned; every review frame of the clone and of the app with a verdict given to that picture |
+| Both | every interaction scenario planned; every review frame with a verdict given to that picture; a requested route that failed to capture and a first-party embedded document that could not be recorded (each not verifiable) |
 
 Each unit has one state: pass, accepted, fail, missing, stale, invalid, error, tool, na. **Only pass, accepted and na
 count as verified.** Nothing absent is ever read as a pass. The interaction plan is a unit like any other: a plan
@@ -123,11 +142,33 @@ never measured, or measured by an earlier version of the check, is scheduled (rc
 
 **Routes (rc.7).** A route's identity is its encoded URL path, as capture records it (`scripts/routes.mjs`); its page
 is written to one file name derived from it (decoded segments made safe for the file system), the one the clone server
-answers, and the Next.js app keeps the encoded folder name (Next serves those at the encoded address; a decoded name
-404s). Capture follows the links on every page it captures, not only the first, up to `--routes`; it records every
-page found (`routesFound`) and every one left out with why (`routesNotCaptured`). Pages left out at the cap are named
-once by status (capture again with them, or say why they are out of scope) and listed in REPORT as not verified. A
-page reachable only through a script's router map, never through a link, is not found (a known limit).
+answers (a Next.js conversion keeps the encoded folder name: Next serves those at the encoded address; a decoded name
+404s).
+
+**Scope (rc.11).** The scope is what the user asked for, recorded at capture (`meta.scope`, `scripts/scope.mjs`), never
+widened: one page (`--routes 1`), the pages listed (`--routes "/,/about"`), or the site (the default: the links on the
+start page and on every page captured, and sitemap.xml, breadth first, up to a cap of 12; `--routes <n>`). Every page
+found (`routesFound`) and every one left out with why (`routesNotCaptured`) is recorded. For the site, pages left out
+at the cap are named once by status (capture again with them, or say why they are out of scope); for one page or a
+list nothing is asked, and every capture status names again keeps the scope. Every status outcome and REPORT state the
+scope: what was asked for, what was captured and verified, every page found and not captured, whether the cap was
+reached (then: never "the whole site"), and how pages are found and what that cannot find (a page reachable only
+through a form, a login, a search or a script's router map, never through a link). A link to a page of the site outside
+the scope opens that page on the live site, its absolute address with the query and fragment kept, in seeded pages,
+template mode, the own bundle's markup, its guard (a click) and its service worker (a top-level navigation); never a
+local 404 or "#" (RC8 elise; a landing page captured alone linked its other pages to local paths). A navigation is not
+a missing file: a subresource the clone has no copy of is still a 404, never fetched from the live site.
+
+**Embedded documents (rc.11).** A document a captured page embeds in a frame from the site's own registrable domain
+(a subdomain included, such as `recorder.example.com`; a hosting platform's other tenants are not the site:
+`scope.mjs registrableDomain`) is part of that page, not a page of the scope (`meta.dependencies`). Exact mode records
+it and the files it loads (`reference/dependencies/bundle/`, at desktop, once more after the capture: the frames each
+captured page embeds itself, at most 10 a page, nothing they link to); the clone serves its own copy (`clone/_dep/<host>/`,
+its recorded addresses and root-relative markup pointing at the copy, a guard keeping its run-time requests local),
+and it is measured inside the page's own shots. One that could not be recorded is required and not verifiable (the
+page cannot be verified as it is). Template mode copies no content of the site: a frame there is a placeholder. A
+frame of a captured route opens the clone's page; another site's frame is a third-party widget (excluded on both sides)
+or an embed kept as it is, named in REPORT.
 
 ## Identity and invalidation
 
@@ -136,7 +177,7 @@ measurement:
 
 | Field | What | A change makes the result |
 |---|---|---|
-| subjectHash | content hash of `clone/` (or `next/`), not file times; computed with uncommitted changes | stale |
+| subjectHash | content hash of `clone/` (or a conversion's `nextjs/`, its documentation aside), not file times; computed with uncommitted changes | stale |
 | refId | the capture, its visit profile (hide, ignore, cookies, locale, unroll) and its measurement controls | invalid |
 | configHash | journey.json, motion-map.json, interactions.json | invalid (that check) |
 | codeHash | the check's script and the shared measurement code | stale |
@@ -296,6 +337,12 @@ recorded file is checked before it is kept (`lib.mjs recordBundle`, rc.6):
   Otherwise the file is recorded as failed, with why.
 - **Provenance.** Every manifest entry records how it was obtained (`via: browser` or `recovered`, the verdict, the
   bytes, a sha1) or why it failed.
+- **The scope holds in the bundle too (rc.11).** A recorded document's links to pages of the site outside the scope
+  are written as their live addresses; the guard sends a click on any other such link to the live page before the site's
+  router can try to load it locally, and the service worker redirects a top-level navigation to a page the clone does
+  not have to the live site. A file the bundle does not have is still a 404 (a frame's document included), never
+  fetched live. Another host's frame document (an embedded first-party document) gets the guard, its root-relative
+  addresses kept in its own folder.
 - **The cause found on RC5 zero.** Chrome's DevTools protocol hands over an empty body for a fetch the page consumes
   as a Blob, although the bytes arrived; nine textures and videos were saved as 0-byte files.
 - **Status checks the record, not the folder.** If a file is not whole (failed, missing, of another size, or an empty
@@ -357,7 +404,7 @@ recorded file is checked before it is kept (`lib.mjs recordBundle`, rc.6):
 
 ## The clone lint
 
-The clone (and the app) fail when they:
+The clone (and a conversion) fail when they:
 
 - load an excluded widget;
 - replace `Math.random`, `Date.now`, `performance.now` or `requestAnimationFrame` (the measurement's controls built
@@ -369,8 +416,9 @@ The clone (and the app) fail when they:
 Every finding names its owner. The agent may edit `clone/script.js` and `clone/patches/` only: a finding there, or put
 into a generated page by a patch (the patch is named), is clone work, named by the file to change. A finding in what
 the seed itself generated (it is in the seed's own record, `.seed-base*.html`) is trueclone's defect: Blocked at once,
-never "fix the clone" in a file the agent may not edit (RC6 allbirds). In the app, a finding the clone has too is the
-clone's; the rest is the generator's. The seed's working files (`.seed-*`) are not delivered and are not linted.
+never "fix the clone" in a file the agent may not edit (RC6 allbirds). In a conversion every finding is the
+conversion's own, fixed in `nextjs/`. The seed's working files (`.seed-*`) and the copies of embedded documents
+(`clone/_dep/`) are not the agent's work and are not linted.
 
 ## Review
 
@@ -378,7 +426,7 @@ clone's; the rest is the generator's. The seed's working files (`.seed-*`) are n
   Mbit/s), the reference twice: "reference vs itself" per frame.
 - **Verdicts are given to a picture.** The perceptual token above (journey frames: a 5-character token that must match
   exactly).
-- **Each side has its own verdicts (rc.7).** The HTML clone's under `## Review` in notes.md, the Next.js app's under
+- **Each workflow has its own verdicts (rc.7).** The HTML clone's under `## Review` in notes.md, a conversion's under
   `## Review: app`: the two reviews share frame ids and sizes, not pictures. Nothing is inherited from one side to the
   other (RC6 zero: one shared list closed one side and reopened the other, 52 frames, for ever).
 - **A frame marked "differs" is clone work: the step is the change.** Status names the frame and what to change; it
@@ -448,8 +496,66 @@ The loop ends automatically when progress stalls. `scripts/loop.mjs`, records in
   under 20 minutes (RC6 heybhaskar: behaviour over 8 routes needs about 22 minutes on a first run; a fixed 20 killed it).
   Behaviour keeps every unit it finished, and a rerun measures only what is left.
 - **Status re-measures selectively.** It re-measures missing, invalid and errored results, the pending objective's
-  check, and stale failing results; stale passing results wait for one final sweep.
+  check, and stale failing results; stale passing results wait for one final sweep. A result is current only for the
+  content it was measured on (the whole clone's content hash, the reference, the check's code and configuration): a
+  change anywhere in the clone makes every result of it stale, never a subset guessed to be unaffected.
+- **The preview comes before the calibration (rc.11).** The design system and the seed run before `calibrate`, one after
+  the other, so the clone can be looked at as soon as the reads end (RC8 elise: calibrate took 71.5 of the 90 minutes
+  before its seed). The order changes no measurement: calibrate loads the live page through the checks into
+  `reference/calib/` and writes `reference/noise.json`, and reads nothing the seed writes; the seed reads the mirror and
+  the reads, never the calibration. Nothing heavy runs beside calibrate (status says "waiting" and asks for no other
+  trueclone step meanwhile); the preview is provisional (not calibrated, not measured) until the checks run on it.
+- **A read is done only when it finished (rc.11).** `reads` records each read as finished for the capture
+  (`reference/reads.json`, marked unfinished before it starts); status asks for a read whose record is missing,
+  unfinished or of another capture, whatever files it left (a read killed part-way leaves its first size written).
+- **No Next.js work in cloning (rc.11).** A cloning run installs, builds and measures nothing but the clone (RC8 elise:
+  the generator's build and its scoring took 119 of the 219 step-minutes of the rc.9 resume, 51 of them on a timeout).
 - **Doctor checks the environment.** Node, the browsers, DNS, a localhost page in the browser, and the timing lock.
+
+## Converting a clone to Next.js (rc.11)
+
+A separate, later request: `trueclone convert <name>`. It is never named by `status`, and cloning never starts it.
+
+- **The request.** The first `convert` needs the clone's outcome Verified on the clone as it is now; an Incomplete clone
+  only with the user's words (`--from-incomplete "<words>"`), recorded with the clone's limitations and disclosed in
+  `REPORT.nextjs.md`. Any other state (no outcome, in progress, Blocked, an outcome of earlier content) is refused
+  (exit 2, owner clone) with nothing created. The request and its baseline (the clone's outcome and content) are
+  `compare-nextjs/request.json`; a clone changed later is reported, and the app is measured against the original
+  reference either way.
+- **The project.** A conventional, empty Next.js project in `nextjs/` (App Router, TypeScript strict, Tailwind v4,
+  ESLint, `next` 16.4.2, one placeholder page): only files that are missing are written (`compare-nextjs/scaffold.json`
+  records them); a file that exists is never overwritten, and no step deletes or regenerates the conversion's source.
+  Nothing of the clone is copied in: the conversion is written.
+- **What is checked in the source** (`scripts/conversion.mjs lintConversion`; each finding names its rule, file and
+  line): the project (dev, build, start and lint scripts; next, react, typescript, tailwindcss), strict TypeScript (no
+  `strict: false`, no ignored build errors, no `@ts-nocheck` or `@ts-ignore`, no index signature switching attribute
+  checks off), Tailwind configured and carrying the styling (at least 60% of class names Tailwind utilities; no whole or
+  minified stylesheet carried over), no HTML strings (`dangerouslySetInnerHTML` aside JSON-LD, no markup string over
+  1 KB), no frame of the clone or the site (a recorded first-party embedded document may stay the embed it is), no
+  script loader or global run-once flag, no page or script in `public/`, components not named by position, client
+  components only where needed and cleaning up every listener, observer, interval, animation frame and GSAP tween, no
+  selector-driven DOM in components, `next/link` between the app's routes, alt text, no clickable `<div>`, `<html lang>`,
+  every route of the scope a page (or a rewrite, checked when served), and a README with run, routes, content, styling
+  and behaviour sections and no TODO.
+- **What is judged by reading** (the review criteria C1 to C10, `CRITERIA`): components' responsibilities, data-driven
+  repetition, where content lives, styling, boundaries, behaviour's ownership and cleanup, routes and layouts,
+  accessibility, the README, and three edits (a section's text, a hover, a page) in one obvious file each. Answered under
+  `## Conversion review [<token>]` in notes.md: "met" with `nextjs/` files that exist, or "not met" with why; the token
+  is the app's content hash, so a changed app is reviewed again.
+- **Built and served** (`convert <name> --verify`): `npm install`, `tsc --noEmit`, `npm run lint`, `next build`, then the
+  production build served (`next start`) on a port free on every interface, identifying itself with a token file, and
+  every route of the scope answering 200 (`compare-nextjs/build.json`, current only for the app content it was made on).
+- **Measured against the original reference.** Every check the clone has, the same required units and bars, into
+  `compare-nextjs/` (side "app"; an interaction scenario finds its control on the app by what it recorded of it, its
+  tag, text or label and a link's destination, when the reference's selector finds nothing there, since a conversion
+  renames classes; the reference and the HTML clone always resolve by the selector), plus the app's own review frames
+  (wide and phone, every route) with verdicts under
+  `## Review: app`. Comparing the app with the clone may help while converting; it never replaces this measurement, so
+  the app cannot inherit the clone's defects as passes.
+- **Its own loop and outcome.** Differences are objectives worked in `nextjs/` (`compare-nextjs/loop.json`, the same loop
+  control); accounting covers the app's units and frames, the build steps, the source findings and the criteria; exit 0
+  Verified, 1 work left, 2 Blocked, 3 Incomplete (a criterion not met is unresolved), written to
+  `compare-nextjs/outcome.json` and `REPORT.nextjs.md`. A conversion's outcome never changes the clone's.
 
 ## Permissions and preflight (rc.7)
 

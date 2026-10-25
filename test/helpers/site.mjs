@@ -56,7 +56,8 @@ export async function makeSite(project, name, kind = 'doc', opts = {}) {
   for (const r of routes.filter((x) => x.slug && !(opts.missingPages || []).includes(x.path))) await put(root, `clone/${r.path.replace(/^\//, '')}/index.html`, '<!doctype html><title>x</title><body><h1>route</h1></body>\n');
   await put(root, 'clone/script.js', opts.cloneScript || 'const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\nconst e = 5;\nconsole.log(a + b + c + d + e);\n');
   await put(root, 'clone/.seed.json', { capturedAt: meta.capturedAt, at: '2026-10-22T01:00:00.000Z', pages: 1, code: codeHash('seed'), tool: toolVersion() });
-  await put(root, 'next/app/page.tsx', 'export default function Page() { return null; }\n');
+  // every read finished for this capture (reads.mjs records it; status trusts nothing else)
+  await put(root, 'reference/reads.json', { capturedAt: meta.capturedAt, reads: Object.fromEntries((app ? ['motion', 'journey'] : ['states', 'motion', 'spec', 'widgets', 'reveals']).map((s) => [s, { complete: true, at: '2026-10-22T00:30:00.000Z' }])) });
   // reads and seed inputs must not look newer than the clone: set every file's time to the capture time + 1 h
   const t = new Date('2026-10-22T01:00:00.000Z');
   for (const f of walk(root)) fsSync.utimesSync(f, t, t);
@@ -69,9 +70,10 @@ export function notesWith(reviewLines, extra = '') {
   return `# notes\n\n## Stack\n- static html\n\n## Behaviours\n- h1: no motion\n- hero: scroll parallax, ported in script.js\n\n## Review\n${reviewLines.map((l) => `- ${l}`).join('\n')}\n${extra}`;
 }
 
-// Every required result of the site measured as passing (or with `value`), on the clone (compare) or the app
+// Every required result of the site measured as passing (or with `value`), on the clone (compare) or a Next.js
+// conversion (compare-nextjs)
 export async function measureAll(site, side = 'clone', { value = 99.5, skip = [], members = null, onlyVps = null } = {}) {
-  const compare = side === 'app' ? 'compare-next' : 'compare';
+  const compare = side === 'app' ? 'compare-nextjs' : 'compare';
   const vps = onlyVps || VPS;
   const routeKeys = site.routes.map((r) => (r.slug ? r.path : ''));
   const write = async (check, units) => { if (!skip.includes(check)) await writeUnits(site.root, compare, check, units, await startIdentity(site.root, check, side)); };
@@ -113,13 +115,11 @@ export async function reviewAll(site, side = 'clone', { verdict = 'same', pct = 
   await fs.writeFile(path.join(site.root, 'notes.md'), notes.replace(heading, `${heading}${add.join('\n')}${add.length ? '\n' : ''}`));
 }
 
-// A fully verified site: clone and app measured, reviewed
+// A fully verified HTML clone: measured and reviewed (cloning has no other side: a conversion is its own workflow)
 export async function verifiedSite(project, name, kind = 'doc', opts = {}) {
   const site = await makeSite(project, name, kind, opts);
   await measureAll(site, 'clone');
   await reviewAll(site, 'clone');
-  await measureAll(site, 'app');
-  await reviewAll(site, 'app');
   return site;
 }
 

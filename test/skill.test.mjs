@@ -34,3 +34,24 @@ test('every command the skill and status name is a CLI step, and every step has 
   for (const n of named) if (!['init', 'doctor', 'rea'].includes(n)) assert.ok(steps[n], `"${n}" is named but is not a step`);
   for (const s of ['calibrate', 'behaviour', 'status', 'score', 'review']) assert.ok(steps[s], s);
 });
+
+test('two workflows: cloning delivers the HTML clone, converting is a separate request; the retired generator is named nowhere it would be run', async () => {
+  const skill = await read('skill/SKILL.md');
+  const bin = await read('bin/trueclone.mjs');
+  const status = await read('scripts/status.mjs');
+  const policy = await read('docs/policy.md');
+  const readme = await read('README.md');
+  assert.match(skill, /## Two jobs, two requests/);
+  assert.match(skill, /## Converting a clone to Next\.js \(a separate request\)/);
+  assert.match(skill, /If one request asks for both[^\n]*two stages/);
+  assert.match(bin, /converting a finished clone into a Next\.js application is a later, separate request/);
+  assert.match(policy, /## Two workflows \(rc\.11\)/);
+  assert.match(policy, /## Converting a clone to Next\.js \(rc\.11\)/);
+  // (status names the retired generator's folders in one place: the note that they are ignored)
+  const statusRuns = status.split('\n').filter((l) => !/retired Next\.js generator|'next', 'compare-next', 'REPORT\.next\.md'/.test(l)).join('\n');
+  for (const [file, text] of [['skill', skill], ['bin', bin], ['status', statusRuns], ['README', readme]]) {
+    assert.doesNotMatch(text, /next <name> --verify|next \$\{name\} --verify|REPORT\.next\.md|compare-next\//, `${file} names the retired generator`);
+  }
+  assert.doesNotMatch(bin, /\bnext: \['next\.mjs'/, 'no `next` step');
+  assert.match(bin, /trueclone next is retired/);
+});

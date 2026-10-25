@@ -1,0 +1,23 @@
+/* The two-workflows fixture: a plain stylesheet whose base is the one Tailwind v4's preflight sets, so a Next.js
+   conversion with Tailwind utilities can render the same pixels (test/e2e/two-workflows.test.mjs) */
+*, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; }
+html { line-height: 1.5; -webkit-text-size-adjust: 100%; tab-size: 4; font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; }
+body { line-height: inherit; background: #ffffff; color: #0f172a; }
+h1, h2, h3, p { font-size: inherit; font-weight: inherit; }
+a { color: inherit; text-decoration: inherit; }
+iframe { display: block; vertical-align: middle; }
+ul { list-style: none; }
+.header { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; }
+.brand { font-weight: 600; }
+.nav { display: flex; gap: 24px; font-size: 14px; line-height: 20px; }
+main { max-width: 1152px; margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; }
+.hero { padding-top: 96px; padding-bottom: 96px; text-align: center; }
+.hero h1 { font-size: 48px; line-height: 56px; font-weight: 700; }
+.hero p { margin-top: 16px; font-size: 18px; line-height: 28px; color: #475569; }
+.cards { display: grid; gap: 24px; }
+@media (width >= 48rem) { .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.card { border-width: 1px; border-color: #e2e8f0; border-radius: 12px; padding: 24px; }
+.card h3 { font-weight: 600; }
+.card p { margin-top: 8px; font-size: 14px; line-height: 20px; color: #475569; }
+.embed { margin-top: 48px; margin-bottom: 48px; width: 100%; height: 120px; border-width: 1px; border-color: #e2e8f0; border-radius: 12px; }
+.footer { padding: 32px 24px; font-size: 14px; line-height: 20px; color: #64748b; }

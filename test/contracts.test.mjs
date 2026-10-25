@@ -118,41 +118,53 @@ test('accounting: a verified run accounts for every required item; an Incomplete
   assert.equal(out.accounting.items.length, 0);
   assert.equal(out.accounting.counts.passed, out.accounting.total);
   assert.equal(new Set(out.accounting.ids).size, out.accounting.total);
-  // the evaluated items, recomputed: units of both sides, frames, written checks
+  // the evaluated items, recomputed: the HTML clone's units, frames, written checks (cloning has no other side)
   const { evaluate } = await import('../scripts/verdict.mjs');
   const root = path.join(p, 'sites', 'v');
   const ids = new Set();
-  for (const side of ['clone', 'app']) {
-    const ev = await evaluate(root, { side, readOnly: true });
-    for (const u of ev.units) ids.add(`${side}:unit:${u.check}|${u.route || ''}|${u.viewport || ''}|${u.state || ''}`);
-    for (const f of ev.review.frames) ids.add(`${side}:frame:${f.dir}|${f.id}`);
-  }
+  const ev = await evaluate(root, { side: 'clone', readOnly: true });
+  for (const u of ev.units) ids.add(`clone:unit:${u.check}|${u.route || ''}|${u.viewport || ''}|${u.state || ''}`);
+  for (const f of ev.review.frames) ids.add(`clone:frame:${f.dir}|${f.id}`);
   const recorded = new Set(out.accounting.ids.filter((i) => !/:written:/.test(i)));
   assert.deepEqual([...recorded].sort(), [...ids].sort());
+  assert.ok(out.accounting.ids.every((i) => i.startsWith('clone:')), 'the clone\'s outcome accounts for nothing of a conversion');
 });
 
-// ---- RC6-01: the clone's and the app's review verdicts, separate ----
-test('RC6-01: different clone and app tokens, verdicts in either order, both reviews close (exit 0)', async () => {
+// ---- RC6-01: the clone's and a conversion's review verdicts, separate (each workflow reads its own heading) ----
+test('RC6-01: different clone and app tokens, verdicts in either order: each review closes on its own heading', async () => {
+  const { evaluate } = await import('../scripts/verdict.mjs');
   for (const order of ['clone-first', 'app-first']) {
     const p = await tmpProject();
     const site = await verifiedSite(p, 'r', 'app');
+    await fs.mkdir(path.join(site.root, 'nextjs'), { recursive: true });
+    await edit(site, 'nextjs/page.tsx', 'export default function Page() { return null; }\n');
+    await measureAll(site, 'app');
+    await reviewAll(site, 'app');
     const notes = await fs.readFile(path.join(site.root, 'notes.md'), 'utf8');
     if (order === 'app-first') {
       const m = /## Review: app\n[\s\S]*$/.exec(notes)[0];
       await edit(site, 'notes.md', notes.replace(m, '').replace('## Review\n', `${m.trim()}\n\n## Review\n`));
     }
-    const r = status(p, 'r');
-    assert.equal(r.code, 0, `${order}\n${r.out}`);
+    assert.equal((await evaluate(site.root, { side: 'clone' })).review.status, 'pass', order);
+    assert.equal((await evaluate(site.root, { side: 'app' })).review.status, 'pass', order);
+    assert.equal(status(p, 'r').code, 0, order);
   }
 });
-test('RC6-01: an app verdict written under the clone\'s heading does not close the app frame (and says where it goes)', async () => {
+test('RC6-01: an app verdict written under the clone\'s heading does not close the app frame; the clone\'s review is untouched', async () => {
+  const { evaluate } = await import('../scripts/verdict.mjs');
   const p = await tmpProject();
   const site = await verifiedSite(p, 'w', 'app');
+  await fs.mkdir(path.join(site.root, 'nextjs'), { recursive: true });
+  await edit(site, 'nextjs/page.tsx', 'export default function Page() { return null; }\n');
+  await measureAll(site, 'app');
+  await reviewAll(site, 'app');
   const notes = await fs.readFile(path.join(site.root, 'notes.md'), 'utf8');
   await edit(site, 'notes.md', notes.replace(/## Review: app\n/, ''));
-  const r = status(p, 'w');
-  assert.equal(r.code, 1, r.out);
-  assert.match(r.out, /write review verdicts for the Next\.js app's \d+ frame\(s\) under "## Review: app"/);
+  const app = await evaluate(site.root, { side: 'app' });
+  assert.equal(app.review.status, 'fail');
+  assert.ok(app.review.frames.every((f) => f.state === 'open'));
+  assert.equal((await evaluate(site.root, { side: 'clone' })).review.status, 'pass');
+  assert.equal(status(p, 'w').code, 0, 'the HTML clone stays Verified whatever a conversion\'s review says');
   assert.equal(reviewVerdicts('## Review\n- a wide [x]: same\n## Review: app\n- a wide [y]: same\n', 'app')[0], 'a wide [y]: same');
   assert.equal(reviewVerdicts('## Review\n- a wide [x]: same\n## Review: app\n- a wide [y]: same\n', 'clone')[0], 'a wide [x]: same');
 });
@@ -165,7 +177,7 @@ const IGN = [{ sel: `iframe[src^="${ORIGIN}"]`, why: 'third-party widget', origi
 async function seededSite(p, name, opts, base) {
   const site = await makeSite(p, name, 'doc', opts);
   await fs.writeFile(path.join(site.root, 'clone', '.seed-base.html'), base);
-  await measureAll(site, 'clone'); await reviewAll(site, 'clone'); await measureAll(site, 'app'); await reviewAll(site, 'app');
+  await measureAll(site, 'clone'); await reviewAll(site, 'clone');
   return site;
 }
 test('RC6-05: the exclusion\'s own CSS rule and an inert data-tc-origin placeholder are not "kept widgets"', async () => {
@@ -196,7 +208,7 @@ test('RC6-05: a widget a patch put back is the clone\'s: the step names the patc
   await fs.writeFile(path.join(site.root, 'clone', '.seed-base.html'), base);
   await fs.mkdir(path.join(site.root, 'clone', 'patches'), { recursive: true });
   await fs.writeFile(path.join(site.root, 'clone', 'patches', 'body-widget.html'), `<script src="${ORIGIN}/t.js" async></script>`);
-  await measureAll(site, 'clone'); await reviewAll(site, 'clone'); await measureAll(site, 'app'); await reviewAll(site, 'app');
+  await measureAll(site, 'clone'); await reviewAll(site, 'clone');
   const r = status(p, 'lp');
   assert.equal(r.code, 1, r.out);
   assert.match(r.out, /next: fix the clone: clone\/patches\/body-widget\.html/);
@@ -311,7 +323,6 @@ test('RC8-B3: Blocked keeps what was measured: a failure stays the clone\'s ("fa
   const rep = await fs.readFile(path.join(site.root, 'REPORT.md'), 'utf8');
   assert.match(rep, /\*\*Blocked\*\* \(owner: tool\): \d+ required result\(s\) cannot be measured \(errors\); \d+ measured below their bar \(the clone's, still open\); \d+ not reached because of the blocker/);
   await fs.rm(path.join(site.root, '.tc-hash-clone.json'), { force: true });
-  await fs.rm(path.join(site.root, '.tc-hash-next.json'), { force: true });
   let a = audit(site.root);
   assert.equal(a.status, 0, `${a.stdout}${a.stderr}`);
   // rc.8's accounting: the measured failure relabelled "not reached", owner tool
@@ -367,18 +378,15 @@ test('RC7-E2b: a requested route that failed to capture keeps the run from Verif
   assert.equal(r.code, 3, r.out);
   const out = await readJson(site, 'compare/outcome.json');
   assert.equal(out.outcome, 'incomplete');
-  for (const side of ['clone', 'app']) {
-    const item = out.accounting.items.find((i) => i.id === `${side}:unit:route|/NASA%20(Draft).html||`);
-    assert.equal(item?.disposition, 'not-verifiable', `${side}: ${JSON.stringify(out.accounting.items)}`);
-    assert.equal(item.owner, 'environment');
-    assert.match(item.reason, /^not captured: capture failed at every size/);
-  }
+  const item = out.accounting.items.find((i) => i.id === 'clone:unit:route|/NASA%20(Draft).html||');
+  assert.equal(item?.disposition, 'not-verifiable', JSON.stringify(out.accounting.items));
+  assert.equal(item.owner, 'environment');
+  assert.match(item.reason, /^not captured: capture failed at every size/);
   assert.ok(!out.accounting.items.some((i) => /later\.html/.test(i.id)), 'a page not asked for is not a required item');
   const rep = await fs.readFile(path.join(site.root, 'REPORT.md'), 'utf8');
-  assert.match(rep, /\*\*Requested, not captured, not verified\*\*: 1 route\(s\)[^\n]*NASA%20\(Draft\)\.html[^\n]*covers the 1 route\(s\) captured, not the request/);
-  assert.match(rep, /\*\*Not captured, not verified\*\*: 1 page\(s\)[^\n]*later\.html/);
+  assert.match(rep, /\*\*Requested, not captured, not verified\*\*: `\/NASA%20\(Draft\)\.html`[^\n]*covers the 1 route\(s\) captured, not the whole request/);
+  assert.match(rep, /\*\*Found and not captured, not verified\*\* \(1\): `\/later\.html`[^\n]*Outside the requested scope\. Links to them open the live site/);
   await fs.rm(path.join(site.root, '.tc-hash-clone.json'), { force: true });
-  await fs.rm(path.join(site.root, '.tc-hash-next.json'), { force: true });
   const a = audit(site.root);
   assert.equal(a.status, 0, `${a.stdout}${a.stderr}`);
 });
@@ -426,7 +434,6 @@ test('RC7-E3/E4: a step that failed twice ends Blocked with nothing pending (unr
   for (const i of unreached) { assert.equal(i.disposition, 'blocked'); assert.equal(i.owner, 'tool'); assert.match(i.reason, /^not reached: the run is Blocked \(/); }
   assert.ok(out.accounting.items.some((i) => i.kind === 'review-dir' && i.notReached), 'the review never shot is blocked by the failed step');
   await fs.rm(path.join(site.root, '.tc-hash-clone.json'), { force: true });
-  await fs.rm(path.join(site.root, '.tc-hash-next.json'), { force: true });
   let a = audit(site.root);
   assert.equal(a.status, 0, `${a.stdout}${a.stderr}`);
   // the outcome as rc.7 wrote it (unreached items left pending): a finding
@@ -508,7 +515,6 @@ test('RC6-21: the auditor writes nothing; a verified run is clean; a run left at
   const site = await verifiedSite(p, 'au', 'doc', { interactions: ['menu'] });
   assert.equal(status(p, 'au').code, 0);
   await fs.rm(path.join(site.root, '.tc-hash-clone.json'), { force: true });
-  await fs.rm(path.join(site.root, '.tc-hash-next.json'), { force: true });
   const before = await snapshot(site.root);
   let r = audit(site.root);
   assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
@@ -535,7 +541,35 @@ test('RC6-17: pages left out at the route cap: status asks once (capture again w
   r = status(p, 'rt');
   assert.doesNotMatch(r.out, /--routes 3/, 'asked once');
   report(p, 'rt');
-  assert.match(await fs.readFile(path.join(site.root, 'REPORT.md'), 'utf8'), /Not captured, not verified\*\*: 1 page\(s\)[^\n]*NASA%20\(Draft\)\.html/);
+  const rep = await fs.readFile(path.join(site.root, 'REPORT.md'), 'utf8');
+  assert.match(rep, /Found and not captured, not verified\*\* \(1\): `\/NASA%20\(Draft\)\.html`[^\n]*The cap of 2 routes was reached\*\*: this is not the whole site/);
+  assert.match(rep, /\*\*Discovery\*\*: pages are found from the links/);
+});
+// A request for one page, or for a list, is that scope: nothing is asked about the pages it leaves out, and capturing
+// again keeps the scope (RC8: the re-capture command dropped --routes 1 and would have cloned 12 pages)
+test('scope: a one-page request asks nothing about the pages it leaves out, and every re-capture keeps it one page', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'one');
+  const mf = path.join(site.root, 'reference', 'meta.json');
+  const meta = JSON.parse(await fs.readFile(mf, 'utf8'));
+  meta.scope = { kind: 'page', requested: null, cap: 1 };
+  meta.routesNotCaptured = [{ path: '/pricing', from: '/', why: 'outside the requested scope (this page only)' }, { path: '/docs', from: '/', why: 'outside the requested scope (this page only)' }];
+  await fs.writeFile(mf, JSON.stringify(meta));
+  let r = status(p, 'one');
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /scope: this page only \(\/\); 2 other pages of the site are outside it, linked to the live site/);
+  const out = await readJson(site, 'compare/outcome.json');
+  assert.equal(out.scope.kind, 'page');
+  assert.deepEqual(out.scope.outside.map((x) => x.path), ['/pricing', '/docs']);
+  // capturing again (here: the live site changed) keeps --routes 1
+  const { refIdOf } = await import('../scripts/identity.mjs');
+  await fs.writeFile(path.join(site.root, 'compare', 'drift.json'), JSON.stringify({ refId: refIdOf(meta), stale: true, unreachable: [], viewports: [] }));
+  r = status(p, 'one');
+  assert.match(r.out, /next: npx trueclone capture \S+ one --routes 1\b/, r.out);
+  const { scopeArgs } = await import('../scripts/scope.mjs');
+  assert.equal(scopeArgs({ ...meta, scope: { kind: 'list', requested: ['/', '/pricing'], cap: 2 } }), ' --routes "/,/pricing"');
+  assert.equal(scopeArgs({ ...meta, scope: { kind: 'site', requested: null, cap: 12 } }), '');
+  assert.equal(scopeArgs({ ...meta, scope: { kind: 'site', requested: null, cap: 30 } }), ' --routes 30');
 });
 
 // ---- RC7-37: reference masks taken with another structure mask are taken again (never compared unevenly) ----

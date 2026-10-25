@@ -1,6 +1,6 @@
 ---
 name: trueclone
-description: Build the exact same website from its URL - HTML/CSS/JS clone and Next.js + Tailwind + shadcn app, identical at every screen size, plus DESIGN.md and a shadcn globals.css - and prove it with layout, scroll, canvas, motion, hover, interaction, style and load checks at seed and held-out screen sizes, and a frame-by-frame visual review. Use when the user gives a URL and asks to clone, replicate, rebuild or migrate a site or page, or to extract its design system.
+description: Clone a website from its URL into an HTML/CSS/JS copy - its scripts, interactions, animation and canvases included - identical at every screen size, with DESIGN.md and a shadcn globals.css, and prove it with layout, scroll, canvas, motion, hover, interaction, style and load checks at seed and held-out screen sizes and a frame-by-frame visual review. Later, on a separate request, convert a finished clone into a maintainable Next.js application, verified the same way. Use when the user gives a URL and asks to clone, replicate, rebuild or copy a site or page, to extract its design system, or to convert a trueclone clone into Next.js.
 ---
 
 # Build the same website, at every screen size
@@ -9,32 +9,54 @@ The goal: the user opens the clone on localhost on any device, at any window siz
 like the original. Accuracy comes first, time second, scores third: a score is an instrument; when it and your eyes
 disagree, your eyes win and you say so in `notes.md` (Findings).
 
-Everything for a site lives in `sites/<name>/` (local, gitignored): `clone/` (the source of truth), `next/` (the
-Next.js app generated from it), `notes.md` (your record), `REPORT.md` (the deliverable).
+Everything for a site lives in `sites/<name>/` (local, gitignored): `clone/` (the deliverable: the HTML/CSS/JS clone),
+`notes.md` (your record), `REPORT.md` (what it is and what was proven).
 
-## The loop
+## Two jobs, two requests
+
+trueclone does two separate jobs, each asked for on its own, each with its own loop and its own outcome:
+
+1. **Cloning** ("clone this site", "clone only this page", "clone it in exact mode"): an HTML/CSS/JS clone in
+   `clone/`, measured and reviewed. "HTML" is not a screenshot: the site's scripts, interactions, animation and canvases
+   run in it. This is everything a cloning request gets: no Next.js app is generated, installed, built or verified, and
+   none is part of the cloning outcome. Loop: `npx trueclone status <name>` (below).
+2. **Converting** ("now convert this clone into a proper Next.js application"): a later, separate request, only when
+   the user asks for it. It turns the finished clone into a maintainable Next.js + TypeScript + Tailwind application in
+   `nextjs/`, verified against the original site. Loop: `npx trueclone convert <name>` (see "Converting a clone to
+   Next.js"). It never changes the clone or its outcome.
+
+If one request asks for both ("clone it into a Next.js app"), say that these are two stages, do the cloning, hand over
+the clone, and wait: start the conversion only when the user asks for it.
+
+## The loop (cloning)
 
 ```powershell
 npx trueclone capture <url> [name] [--mode exact --permission "<owner>"] [--hide "<banner selectors>"] [--cookie "consent=1"] [--locale en-US] [--routes 1]
 npx trueclone status <name>
 ```
 
-Capture the right page the first time, once: `--routes 1` when the user wants one page, not the whole site; `--hide`
-for a banner or popup a visitor dismisses (capture warns when a dialog covers the page at load), or `--cookie` with
-the cookie that dismissal sets (a consent or region choice, never a login). Every check after capture applies both.
-Third-party widgets (a chat launcher, an assistant, a reviews badge another site's script injects) are found by the
-capture and **excluded on both sides** by default; `--include "<selector>"` keeps one the user wants cloned.
+Capture the right scope the first time, once: `--routes 1` when the user wants one page ("only the landing page"),
+`--routes "/,/pricing"` for the pages they name, nothing for the site (its pages found from links and sitemap.xml, up
+to 12; `--routes <n>` for more). The scope is kept: every page outside it stays out, and the clone's links to it open
+the live page (absolute address, query and fragment kept), never a local 404. `--hide` for a banner or popup a visitor
+dismisses (capture warns when a dialog covers the page at load), or `--cookie` with the cookie that dismissal sets (a
+consent or region choice, never a login). Every check after capture applies both. Third-party widgets (a chat
+launcher, an assistant, a reviews badge another site's script injects) are found by the capture and **excluded on both
+sides** by default; `--include "<selector>"` keeps one the user wants cloned. A document a page embeds from the site's
+own domain (an iframe on a subdomain, such as `recorder.example.com`) is part of that page: exact mode records it and
+the clone serves its own copy (`clone/_dep/`); it is not a page of the scope.
 
 Then: **do exactly what `status` says, then run `status` again.** It reads the site folder and names the one next
-step as a command, with why and what follows: the reads, the calibration, the design system, the seed, a brief per
-section, your Behaviours, `script.js`, scores (re-measured whenever the clone changed), the failing checks one
-objective at a time (each with the command to look closer), the review at every size, the Next.js app.
+step as a command, with why and what follows: the reads, the design system, the seed (a provisional preview you can
+open with `serve` from here on: not calibrated, not measured), the calibration, a brief per section, your Behaviours,
+`script.js`, scores (re-measured whenever the clone changed), the failing checks one objective at a time (each with
+the command to look closer), and the review at every size.
 
 `status` ends the run itself, with one of four exit codes:
 
 | Exit | Outcome | What you do |
 |---|---|---|
-| 0 | **Verified**: every required result passes on the clone and the app as they are now | hand over REPORT.md |
+| 0 | **Verified**: every required result passes on the HTML clone as it is now, for the scope captured (status says what was delivered) | hand over the clone and REPORT.md: the cloning request is done |
 | 1 | **Work left**: it named the next step (or "waiting": a trueclone step is still running) | do it, run `status` again |
 | 2 | **Blocked**: something the clone cannot change stops it (the environment, trueclone, or a step that cannot be done); it names the owner, the cause, the affected results and the log | report what it says, with the log; resume with `status` after the cause is fixed |
 | 3 | **Incomplete**: every required result is accounted for; differences the loop concluded, or results the tool cannot verify here, remain, each listed | hand over REPORT.md and say it is incomplete, naming each item listed |
@@ -55,7 +77,7 @@ with nothing changing, write one line under `## Findings`: `- cannot: <the step 
 <why>` (say "tool" when trueclone's own output is at fault, with evidence), and run `status`. It concludes that
 objective (listed in REPORT) or ends the run Blocked, named. A trueclone command it names is never declared: run it.
 
-**Running steps.** Capture, reads, calibrate, scores and `next --verify` take minutes; calibrate on a large exact-mode
+**Running steps.** Capture, reads, calibrate, scores and `convert --verify` take minutes; calibrate on a large exact-mode
 site can take two hours or more (status says how long to expect). Never give a trueclone command a time limit shorter
 than that, and never stop one because it is quiet: if your tool cannot wait, run the step in the background and run
 `status`, which says "waiting" while a step is still running (that is never counted against you). Every step's whole
@@ -90,7 +112,7 @@ result.
 4. **Test what you built.** After each behaviour, operate it: `status` re-runs the interaction scenarios with every
    re-score. Your own controls also handle `pointercancel` and `lostpointercapture` (a drag that ends outside the
    window must not stick to the cursor).
-5. **Never edit generated files** (`clone/index.html`, `next/`). Add what the clone needs in `clone/patches/`. A fix
+5. **Never edit generated files** (`clone/index.html` and the pages beside it, `clone/_dep/`). Add what the clone needs in `clone/patches/`. A fix
    that needs generated markup changed is a tool defect: write it in Findings, with evidence, and carry on.
 6. **Look, don't just score.** `review` shows reference and clone side by side at every size, sections and hovers; give
    every frame a verdict. A frame that differs is open, whatever the numbers say.
@@ -132,10 +154,6 @@ result.
   (`same: the reference's photo arrives later`). "tool" closes a frame only where the table shows the reference
   differing from itself there, or with `evidence: <file>` named after that frame; a frame marked "clone only" is a
   difference whatever you write. Never write verdicts from pixel match or with a script: look at every sheet.
-- **Review: app**: the Next.js app's frames (`compare-next/review/<size>/index.md`) get their own verdicts, under their
-  own heading `## Review: app`, in the same line format with the app frame's own token. The two reviews share frame
-  names and sizes but not pictures: a line under `## Review` never answers for the app, and one under `## Review: app`
-  never for the clone.
 - **Attempts**: when `status` asks for a change of strategy, one line naming the objective (its label or key), what
   the evidence shows, what the next attempt does differently, and `evidence: <file>` made for it.
 - **Accepted differences**: `- <check> <size> <where>: <why>; evidence: compare/explain/wide-5200.png`, only for the
@@ -161,10 +179,13 @@ too (`clone/<path>/index.html`, so links, Back and a reload there find it).
 `</head>`, `*.css` after the site's stylesheets, `body-*.html` and `*.js` (deferred) before `script.js`, in name order.
 `npx trueclone vendor <name>` puts the site's libraries there at the site's versions.
 
-**Routes**: a site is all its pages. Capture follows the links of every page it captures and sitemap.xml (`--routes N`,
-or `--routes "/,/about"`), captures every route at every size, and tells a single-page app (one document, a script shows
-the view for the address: your `script.js` routes like the site's, `pushState`/`popstate`) from separate pages. Pages
-it left out at the cap are listed (REPORT, `meta.routesNotCaptured`); status asks once whether to capture them. A route
+**Routes and scope**: the scope is what the user asked for: one page (`--routes 1`), the pages named (`--routes
+"/,/about"`), or the site (the default: the links of every page captured and sitemap.xml, breadth first, up to 12;
+`--routes N`). Capture captures every route of the scope at every size, and tells a single-page app (one document, a
+script shows the view for the address: your `script.js` routes like the site's, `pushState`/`popstate`) from separate
+pages. Every page found and not captured is listed (REPORT's Scope, `meta.routesNotCaptured`) and never verified; a
+link to it opens the live page. For the site, status asks once whether to capture pages left out at the cap; for one
+page or a list, nothing is asked. REPORT never calls a capture that reached its cap the whole site. A route
 is named by its encoded address (`/Landing%20Page.html`); in `script.js`, build local addresses the same way. Layout
 and scroll states are scored per route; navigation is scored (each link: the right view at the right address, then
 Back); `brief --route /about` and `review --route /about` work on one route. An app shell (a fixed sidebar and a pane
@@ -183,8 +204,7 @@ Findings, never counted as a pass), load, notes, coverage, the clone lint and re
 1440; held out (scored, never built from) 1280 and 1920. A frame the reference differs from itself on is judged by its
 nearest reference draw and what stays the same between draws (how much of the view a scene fills), never passed by
 being declared noisy; do not chase a number inside the noise. If `drift` says the live site changed (its height, its
-sections, or where its scripts come from), re-capture (status then asks for fresh reads). The Next app is verified as
-delivered, with every check and its own review frames.
+sections, or where its scripts come from), re-capture (status then asks for fresh reads).
 
 **Recipes** (the work that looks large is ordinary work):
 - *A canvas (three.js, WebGL, 2D)*: `motion` names the engine and its version, `vendor` puts it in `clone/patches/`.
@@ -206,15 +226,67 @@ delivered, with every check and its own review frames.
 `brief <name> [<n>] [--viewport]`, `explain <name> <y> --viewport <size>`,
 `calibrate <name>`, `score <name> [--only layout,states,behaviour,reduced,interact,…] [--viewport <size>]`,
 `behaviour <name>`, `review <name> --size <size>`,
-`rules <name> "<selector>" [--clone]`, `tiles <name>`, `owned <name>`, `serve <name> [--next]`,
-`next <name> --verify`. REA is bundled for the rare part no script reading explains (`npx trueclone rea --help`).
+`rules <name> "<selector>" [--clone]`, `tiles <name>`, `owned <name>`, `serve <name>`. REA is bundled for the rare part
+no script reading explains (`npx trueclone rea --help`).
 
-**Next.js**: generated from the HTML clone (one component per section, the clone's scripts run at hydration, the
-site's stylesheets loaded as the browser loads them, `<template>`s and every file of the clone carried; a single-page
-app is served at every address, a site of separate pages gets one route per page); done when `REPORT.next.md` matches
-`REPORT.md` within a point. A difference only the app has is a tool defect: write it in Findings. A known limit, not a
-defect: the clone's scripts start after React hydration in the app, so a pointer move made before hydration ends is not
-seen until the next move (the checks move the pointer only after the page settles; nothing to record).
+## Converting a clone to Next.js (a separate request)
+
+Only when the user asks for it, after the clone is finished. `npx trueclone convert <name>` is the request: it needs
+the clone's outcome Verified on the clone as it is now (an Incomplete clone only when the user says to convert it
+anyway: `--from-incomplete "<their words>"`, and its limitations are recorded and disclosed). It records the request
+and creates a conventional, empty Next.js project in `sites/<name>/nextjs/` (App Router, TypeScript strict, Tailwind,
+ESLint, one placeholder page). Then the same loop as cloning: **do what `convert` says, run `convert` again**, with the
+same four exit codes for the conversion alone (its outcome `compare-nextjs/outcome.json`, its report `REPORT.nextjs.md`).
+`convert` never writes over a file of yours (it only creates missing scaffold files) and never touches `clone/`,
+`compare/` or `REPORT.md`.
+
+**What you build.** Source code a Next.js developer can understand, edit and maintain, that looks and behaves like the
+original at every size. Choose the smallest clear architecture:
+- **Routes and layouts**: every route of the clone's scope is an App Router page at its address; chrome shared by pages
+  (header, footer) is a layout; links between routes use `next/link`; a page outside the scope links to the live site
+  as the clone does.
+- **Components**: named for what they are (`Hero`, `PricingTable`, `SiteHeader`), one clear responsibility each;
+  repeated content (cards, rows, logos, slides) rendered from typed data with `.map()`; text, links and data in typed
+  modules (`content/`) where an editor finds them.
+- **TypeScript**: strict, useful types for props and content; no `@ts-ignore`, no attribute checking turned off.
+- **Styling**: Tailwind utilities first (arbitrary values like `text-[18px]` where the site's exact values need them);
+  focused CSS (a CSS module or a small stylesheet, saying why) only for what Tailwind cannot express clearly; the
+  theme from `DESIGN.md`.
+- **Server and client**: server components by default; `"use client"` only for a component that needs state, effects,
+  handlers or browser APIs.
+- **Behaviour**: port each behaviour from the clone's `script.js` and `notes.md` (## Behaviours, with the site's
+  file:line) into the component that owns it: start it in `useEffect` or a handler, reach elements through refs,
+  clean up every listener, observer, timer, `requestAnimationFrame` loop and animation (GSAP: `gsap.context()` or
+  `useGSAP`, reverted) on unmount. A canvas, WebGL or animation runtime may stay as it is inside a named component
+  (`HeroScene`) that owns its setup and teardown, documented in the README.
+- **Markup**: semantic landmarks and headings, alt text, keyboard-operable controls (a `<button>`, not a clickable
+  `<div>`), the site's reduced-motion rules.
+- **Assets** in `public/` (images, fonts, media), never pages or scripts. A first-party document the page embeds may stay
+  the embed it is.
+- **README.md**: how to run (dev and production), and where to change content, styling, behaviour and routes.
+
+Never: the clone's pages copied into `public/` and served as they are, an iframe of the clone or of the live site, HTML
+strings in `dangerouslySetInnerHTML` (JSON-LD aside), components named by position (`Div05`), a global script loader that
+rebuilds the page after hydration, `strict: false` or ignored build errors, Tailwind configured and unused. `convert`
+checks these and more in the source (each finding names its file and line) before anything is built.
+
+**The loop names, in order**: write the conversion (the placeholder replaced, every route a page); fix each source
+finding; `convert <name> --verify` (install, typecheck, lint, `next build`, `next start`, every route of the scope
+served, then every check the clone had, measured on the app against the original reference, and the app's review
+frames at wide and phone size); a verdict for each of the app's frames under `## Review: app` in notes.md (the same line
+format as the clone's, with the app frame's own token: a line under `## Review` never answers for the app); each
+difference as an objective, fixed in `nextjs/`; the README; and the review criteria under `## Conversion review
+[<token>]` (the token is the app's content: a changed app is reviewed again):
+
+```
+- C1 components: met: nextjs/components/Hero.tsx, nextjs/components/PricingTable.tsx
+- C2 data: not met: the footer's links are copied markup
+```
+
+Answer every criterion (C1 components, C2 data, C3 content, C4 styling, C5 boundaries, C6 behaviour, C7 routes,
+C8 accessibility, C9 docs, C10 edits) by reading the source, met with the `nextjs/` files that show it, or not met with
+why. While developing, `npm run dev` in `nextjs/` and compare with `npx trueclone serve <name>` (the clone); the
+verdict is always the measurement against the original reference, never against the clone.
 
 ## Apps (canvas experiences)
 
@@ -224,7 +296,7 @@ hold button), not by scrolling. Its states are the **checkpoints of a journey**,
 checkpoint, desktop and phone, worst one ≥ 80, mean ≥ 95; each checkpoint the lowest of its UI layer, its scene and
 its interface text; template mode judges the scene by composition with a stated 15-point allowance and reports "media
 replaced"), interactions and load; the document checks do not apply.
-`status` walks it like any site: journey draft, reads, seed, the clone, scores, review, Next.
+`status` walks it like any site: journey draft, reads, seed, the clone, scores, review.
 
 **The journey** (`sites/<name>/journey.json`): `journey <name> --draft` finds it on the live page at desktop and phone
 size: it passes gates the page names in words (draw/trace → a circle, then an ellipse; hold → a press of 2.5 s;
@@ -263,7 +335,7 @@ passed; one that does not pass is a journey error in REPORT (the page's words qu
 
 **Review**: `compare/review/journey-desktop/` and `journey-mobile/`, one frame per checkpoint; verdict lines as for any
 frame, with the frame's 5-character token (it must match exactly): `- journey/02-step-1 desktop [7djqh]: same` under
-`## Review`, and the app's (`compare-next/review/journey-<size>/`) with its own tokens under `## Review: app`.
+`## Review` (in a conversion, the app's `compare-nextjs/review/journey-<size>/` with its own tokens under `## Review: app`).
 
 ## Honest limits
 

@@ -18,8 +18,14 @@ test('a complete, passing site is verified (true pass: the rules are not over-st
   const site = await verifiedSite(p, 'ok', 'doc', { routes: ['/about'], interactions: ['menu opens'], curves: true });
   const ev = await evaluate(site.root);
   assert.equal(ev.verified, true, JSON.stringify(ev.counts));
+  // a conversion measured and reviewed the same way is verified on its side (its own source checks are conversion.mjs)
+  await fs.mkdir(path.join(site.root, 'nextjs', 'app'), { recursive: true });
+  await edit(site, 'nextjs/app/page.tsx', 'export default function Page() { return null; }\n');
+  await measureAll(site, 'app');
+  await reviewAll(site, 'app');
   const evApp = await evaluate(site.root, { side: 'app' });
   assert.equal(evApp.verified, true, JSON.stringify(evApp.counts));
+  assert.deepEqual(evApp.written, {}, 'the clone\'s notes and coverage are never the conversion\'s checks');
 });
 
 test('a canvas app with its journey measured and reviewed is verified', async () => {

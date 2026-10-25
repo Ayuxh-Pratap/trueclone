@@ -5,8 +5,8 @@
 //   - ALLBIRDS-7 (D5): a lazy cut-out image below the fold becomes its silhouette, not an opaque box
 //   - RC6-15: positional inline-style keys that shifted between sizes (allbirds' pixel container) are never applied to
 //     another element; the container keeps height:0 and the page its height
-//   - elise (A6): exact mode makes a same-host frame of a captured route local (query kept); one of an uncaptured page
-//     is left, warned and recorded in clone/.seed.json
+//   - elise (A6): exact mode makes a same-host frame of a captured route local (query kept); any other frame not recorded
+//     as an embedded document is left, warned and recorded in clone/.seed.json
 //   - the seed's own browser pass never loads a frame from the site (it did, before the frames were made local/blank)
 //   - reveal and widget records: a position that a late body child moved onto another element is never marked (RC6
 //     allbirds 0/8 reveals, 0/3 widgets); a record's stable id (rc.7) finds its own element
@@ -112,12 +112,13 @@ test('exact seed: a same-host frame of a captured route opens the clone\'s page 
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const html = await fs.readFile(path.join(root, 'clone', 'index.html'), 'utf8');
   assert.match(html, /<iframe id="a" src="\/Landing%20Page\.html\?shell=1">/, 'the captured route\'s frame still loads the live site');
-  // not captured: left as it was, said, and recorded for the report
+  // not captured and not recorded as an embedded document (meta.dependencies): left as it was, said, and recorded for the
+  // report; another site's embed too (rc.11: every frame that still loads from the network is named, never silent)
   assert.match(html, /<iframe id="b" src="https:\/\/site\.example\/Other\.html\?shell=1">/);
   assert.match(html, /<iframe id="c" src="https:\/\/player\.example\/embed\/1">/); // another site's: not the seed's to change
-  assert.match(r.stderr, /1 frame\(s\) still load the live site/);
+  assert.match(r.stderr, /2 frame\(s\) still load from the network \(not recorded\)/);
   const rec = JSON.parse(await fs.readFile(path.join(root, 'clone', '.seed.json'), 'utf8'));
-  assert.deepEqual(rec.liveFrames, ['https://site.example/Other.html?shell=1']);
+  assert.deepEqual(rec.liveFrames, ['https://site.example/Other.html?shell=1', 'https://player.example/embed/1']);
   // the completion record says which seed code made it (status re-seeds after an upgrade)
   assert.match(rec.code, /^[0-9a-f]{12}$/);
   assert.ok(rec.tool);

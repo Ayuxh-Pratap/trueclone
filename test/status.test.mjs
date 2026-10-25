@@ -11,15 +11,46 @@ import { writeUnits } from '../scripts/results.mjs';
 import { startIdentity } from '../scripts/identity.mjs';
 import { tmpProject, makeSite, measureAll, reviewAll, verifiedSite, status, report, edit, readJson, scriptEdit } from './helpers/site.mjs';
 
-test('true pass: a verified site (clone and app) exits 0 and says Verified', async () => {
+test('true pass: a verified HTML clone exits 0, says Verified with what was delivered, and has no Next.js app', async () => {
   const p = await tmpProject();
   await verifiedSite(p, 'ok', 'doc', { routes: ['/about'], interactions: ['menu'] });
   const r = status(p, 'ok');
   assert.equal(r.code, 0, r.out);
-  assert.match(r.out, /Verified/);
-  const out = await readJson({ root: path.join(p, 'sites', 'ok') }, 'compare/outcome.json');
+  assert.match(r.out, /Verified: every required result passes on the HTML clone/);
+  assert.match(r.out, /Delivered: HTML\/CSS\/JS clone \(template mode\), scope: /);
+  // cloning never names, schedules or creates Next.js work
+  assert.doesNotMatch(r.out, /next\.js|nextjs|convert|next --verify/i);
+  const root = path.join(p, 'sites', 'ok');
+  const out = await readJson({ root }, 'compare/outcome.json');
   assert.equal(out.outcome, 'verified');
+  assert.equal(out.deliverable, 'html');
+  assert.equal(out.appSubjectHash, undefined);
+  for (const d of ['nextjs', 'next', 'compare-nextjs', 'compare-next']) assert.equal(await fs.stat(path.join(root, d)).catch(() => null), null, `${d} must not exist after cloning`);
 });
+
+// The HTML outcome depends on the clone alone: whatever a conversion folder holds (absent, failing, edited, a leftover
+// of the retired generator), the clone's status, required items and exit code do not change
+const appNoise = [
+  ['a conversion that fails every check', async (s) => { await fs.mkdir(path.join(s.root, 'nextjs', 'app'), { recursive: true }); await edit(s, 'nextjs/app/page.tsx', 'export default function P() { return null; }\n'); await writeUnits(s.root, 'compare-nextjs', 'scroll', [{ route: '', viewport: 'desktop', value: 10 }], await startIdentity(s.root, 'scroll', 'app')); await fs.writeFile(path.join(s.root, 'compare-nextjs', 'outcome.json'), JSON.stringify({ outcome: 'blocked', owner: 'tool' })); }],
+  ['an edited conversion after the clone was verified', async (s) => { await fs.mkdir(path.join(s.root, 'nextjs', 'app'), { recursive: true }); await edit(s, 'nextjs/app/page.tsx', 'export default function P() { return <main/>; }\n'); }],
+  ['output of the retired generator (next/, compare-next/)', async (s) => { await fs.mkdir(path.join(s.root, 'next', 'app'), { recursive: true }); await edit(s, 'next/app/page.tsx', 'x'); await fs.mkdir(path.join(s.root, 'compare-next', 'results'), { recursive: true }); }],
+];
+for (const [label, mutate] of appNoise) {
+  test(`independence: ${label} leaves the HTML clone Verified with the same required items`, async () => {
+    const p = await tmpProject();
+    const site = await verifiedSite(p, 'ind', 'doc', { routes: ['/about'] });
+    const before = status(p, 'ind');
+    assert.equal(before.code, 0, before.out);
+    const a = await readJson(site, 'compare/outcome.json');
+    await mutate(site);
+    const after_ = status(p, 'ind');
+    assert.equal(after_.code, 0, after_.out);
+    const b = await readJson(site, 'compare/outcome.json');
+    assert.deepEqual(b.accounting.ids, a.accounting.ids);
+    assert.equal(b.subjectHash, a.subjectHash);
+    assert.doesNotMatch(after_.out, /\nnext: /);
+  });
+}
 
 test('true pass: a verified canvas app exits 0', async () => {
   const p = await tmpProject();
@@ -31,9 +62,6 @@ test('true pass: a verified canvas app exits 0', async () => {
 const golden = [
   ['P1 missing result files', async (s) => { await fs.rm(path.join(s.root, 'compare', 'results', 'detail.json')); await fs.rm(path.join(s.root, 'compare', 'results', 'load.json')); }],
   ['P2/P3 one width measured, the rest gone', async (s) => { await fs.rm(path.join(s.root, 'compare', 'results', 'scroll.json')); await writeUnits(s.root, 'compare', 'scroll', [{ route: '', viewport: 'desktop', value: 99 }], await startIdentity(s.root, 'scroll')); }],
-  ['VAR-1 the app fails a check the clone passes', async (s) => { await writeUnits(s.root, 'compare-next', 'scroll', [{ route: '', viewport: 'desktop', value: 99, members: [{ id: '17', y: 7650, value: 50 }] }], await startIdentity(s.root, 'scroll', 'app')); }],
-  ['A11 the app edited after it was verified', async (s) => { await edit(s, 'next/app/page.tsx', 'export default function Page() { return <main/>; }\n'); }],
-  ['A11 an app result missing', async (s) => { await fs.rm(path.join(s.root, 'compare-next', 'results', 'load.json')); }],
   ['VAR-4/A14 a measurement that failed', async (s) => { await writeUnits(s.root, 'compare', 'load', [{ viewport: 'wide', value: null, error: 'load timed out' }], await startIdentity(s.root, 'load')); }],
   ['P6/P7 the clone edited after everything was measured and reviewed', async (s) => { await edit(s, 'clone/script.js', scriptEdit('z05uq')); }],
   ['P4 the live site changed since the capture (drift)', async (s) => { const meta = JSON.parse(await fs.readFile(path.join(s.root, 'reference', 'meta.json'), 'utf8')); const { refIdOf } = await import('../scripts/identity.mjs'); await fs.writeFile(path.join(s.root, 'compare', 'drift.json'), JSON.stringify({ refId: refIdOf(meta), stale: true, unreachable: [], viewports: [{ viewport: 'desktop', stale: true }] })); }],
@@ -112,7 +140,6 @@ test('ZERO-3: the review comes right after the first score, before any fix', asy
 test('incomplete: when the loop concludes with differences left, status exits 3 with best and current values, and the run is resumable', async () => {
   const p = await tmpProject();
   const site = await makeSite(p, 'inc');
-  await measureAll(site, 'app');
   const ident = async () => startIdentity(site.root, 'scroll');
   // the same failure on every new content: attempts without progress until the objective concludes
   for (let i = 0; i < 12; i++) {
@@ -138,8 +165,6 @@ test('incomplete: when the loop concludes with differences left, status exits 3 
     }
     if (/next: record a change of strategy/.test(r.out)) continue; // the strategy step, never recorded here
     assert.equal(r.code, 1, r.out);
-    // after the clone verifies on the app side, status would ask for next --verify: keep the app measured
-    if (/next \S+ --verify/.test(r.out)) { await measureAll(site, "app"); await reviewAll(site, "app"); }
   }
   assert.fail('never reached exit 3');
 });
@@ -248,4 +273,41 @@ test('an own bundle with files that are not whole is recorded again once, then B
   assert.equal(r.code, 2, r.out);
   assert.match(r.out, /Blocked \(owner: tool\): 1 of the site's own files could not be recorded/);
   assert.equal((await readJson(site, 'compare/outcome.json')).outcome, 'blocked');
+});
+
+// RC8: a read killed part-way left its first size written and status called the reads done. A read is current only
+// when reads.mjs recorded it finished for this capture.
+test('incomplete reads: a read never recorded as finished, or recorded unfinished, is read again (never reported current)', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'rd');
+  assert.equal(status(p, 'rd').code, 0);
+  const rec = await readJson(site, 'reference/reads.json');
+  await edit(site, 'reference/reads.json', JSON.stringify({ ...rec, reads: { ...rec.reads, reveals: { complete: false, exit: 'started, not finished' } } }));
+  let r = status(p, 'rd');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /next: npx trueclone reads rd/);
+  assert.match(r.out, /reveals: [^;]*its last read did not finish: exit started, not finished/);
+  await fs.rm(path.join(site.root, 'reference', 'reads.json'));
+  r = status(p, 'rd');
+  assert.match(r.out, /next: npx trueclone reads rd/);
+  assert.match(r.out, /not recorded as finished for this capture/);
+  // a record of another capture describes another page
+  await edit(site, 'reference/reads.json', JSON.stringify({ ...rec, capturedAt: '2026-01-01T00:00:00.000Z' }));
+  assert.match(status(p, 'rd').out, /next: npx trueclone reads rd/);
+});
+
+// The preview before the calibration: design and seed come first (calibrate never reads what the seed writes)
+test('order: the seed (a provisional preview) is named before the calibration', async () => {
+  const p = await tmpProject();
+  const site = await makeSite(p, 'ord');
+  await fs.rm(path.join(site.root, 'reference', 'noise.json'));
+  await fs.rm(path.join(site.root, 'clone', 'index.html'));
+  let r = status(p, 'ord');
+  assert.equal(r.code, 1, r.out);
+  assert.match(r.out, /next: npx trueclone seed ord/);
+  assert.doesNotMatch(r.out, /done: [^\n]*calibrated/);
+  await edit(site, 'clone/index.html', '<!doctype html><title>x</title><body><h1>clone</h1><script src="script.js" defer></script></body>\n');
+  r = status(p, 'ord');
+  assert.match(r.out, /next: npx trueclone calibrate ord/);
+  assert.match(r.out, /provisional preview of the seeded clone[^\n]*not calibrated or measured yet/);
 });
