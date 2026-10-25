@@ -1,11 +1,13 @@
-// Where a clone stands and the one thing to do next, worked out from the files in sites/<name>/ alone, so any agent
-// (any model) follows the same path: capture and its reads, design, seed, a brief per section, behaviours written
-// with the site's file:line, script.js, then the measured loop: every required result (verdict.mjs) measured on the
-// clone as it is now, the failing ones worked as objectives (loop.mjs) until each passes or is concluded, the review
-// by eye, and the Next.js app verified as the delivered artifact.
+// Where an HTML clone stands and the one thing to do next (workflow A: cloning), worked out from the files in
+// sites/<name>/ alone, so any agent (any model) follows the same path: capture and its reads, design, seed (a
+// provisional preview), the calibration, a brief per section, behaviours written with the site's file:line, script.js,
+// then the measured loop: every required result (verdict.mjs) measured on the clone as it is now, the failing ones
+// worked as objectives (loop.mjs) until each passes or is concluded, and the review by eye. The deliverable is the
+// HTML/CSS/JS clone with its scripts, interactions, animation and canvases. A Next.js conversion is a separate, later
+// request with its own status and outcome (convert.mjs): nothing here reads, schedules or waits for it.
 //
 // Exit codes (docs/policy.md "Outcomes"):
-//   0  Verified     every required result passes on the clone and on the Next.js app as they are now
+//   0  Verified     every required result passes on the HTML clone as it is now, for the scope captured
 //   1  work left    the next step is printed; do it and run status again
 //   2  Blocked      the tool or the environment cannot measure what is required (the cause and what to do are printed)
 //   3  Incomplete   the loop concluded with differences left: each is listed with its best and current values
@@ -26,6 +28,7 @@ import { account } from './accounting.mjs';
 import { errorOwner, failureLine } from './failures.mjs';
 import { bundleCoverage, capturedRoutes } from './bundle-complete.mjs';
 import { routeDir } from './routes.mjs';
+import { scopeOf, scopeLine, scopeArgs } from './scope.mjs';
 
 const { pos } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -41,7 +44,7 @@ let loopRef = null;
 let runs = [];
 let digestP = null;
 // What status decides on, once per call (progress.mjs): the step counters and the report's freshness hang on it
-const digest = () => (digestP ||= (async () => inputsDigest(root, { subject: await subjectHash(root, 'clone'), appSubject: await subjectHash(root, 'app'), tool: toolVersion() }))());
+const digest = () => (digestP ||= (async () => inputsDigest(root, { subject: await subjectHash(root, 'clone'), tool: toolVersion(), extra: ['reference/reads.json'] }))());
 // Name the next step (exit 1). Every named step is counted (progress.mjs): one that failed twice, ran twice without
 // effect, or was named again and again while nothing changed ends the run Blocked with what was tried, instead of
 // being named for ever (RC6 astro, allbirds). `opts.owner` is who the step is for (clone work or a tool step).
@@ -79,7 +82,7 @@ const next = async (cmd, why, then = [], opts = {}) => {
 };
 const outcomeFile = path.join(root, 'compare', 'outcome.json');
 const writeOutcome = async (o) => { await fs.mkdir(path.dirname(outcomeFile), { recursive: true }); await fs.writeFile(outcomeFile, JSON.stringify({ ...o, tool: toolVersion(), at: new Date().toISOString() }, null, 2)); };
-// REPORT.md (and REPORT.next.md) rendered whenever what they describe changed since the last render, on every status
+// REPORT.md rendered whenever what it describes changed since the last render, on every status
 // exit (RC6 astro: REPORT predated every verdict), and its failure is never silent (RC6 allbirds: report.mjs crashed and
 // no REPORT.md existed). Returns null when rendered (or current), else the error.
 const renderReport = () => {
@@ -95,19 +98,19 @@ const refreshReport = async ({ force = false } = {}) => {
   return err;
 };
 let elapsedRef = null;
-let evsRef = null; // the clone's and the app's evaluations, once made: a Blocked outcome then accounts for every item
+let evsRef = null; // the clone's evaluation, once made: a Blocked outcome then accounts for every item
 let blockedUnitsRef = new Map(); // the units a Blocked outcome names (accounting.mjs: their disposition is "blocked")
 // Blocked (exit 2): the cause, who owns it (tool, environment, clone, run), what was tried and what to do; everything
 // done so far is kept, and `status` resumes once the cause is fixed
 const blockedEarly = async (why, what, data = {}) => {
-  // every required item of both sides, accounted for: what is blocked, and what the cause kept from being reached
+  // every required item of the clone, accounted for: what is blocked, and what the cause kept from being reached
   // (blocked by that cause too: a terminal outcome leaves nothing pending, accounting.mjs)
   let accounting = null;
   try {
-    const evs = [evsRef?.[0] || await evaluate(root, { side: 'clone' }), evsRef?.[1] || await evaluate(root, { side: 'app' })];
+    const evs = [evsRef?.[0] || await evaluate(root, { side: 'clone' })];
     accounting = account({ evs, loop: loopRef, blockedUnits: blockedUnitsRef, blockedBy: { owner: data.owner || 'tool', why } });
   } catch { /* no capture yet: nothing to account for */ }
-  await writeOutcome({ outcome: 'blocked', owner: data.owner || 'tool', why, next: what, resume: `fix the cause, then ${T(`status ${name}`)} (everything done so far is kept)`, subjectHash: await subjectHash(root, 'clone'), appSubjectHash: await subjectHash(root, 'app'), elapsed: elapsedRef, ...(accounting && accounting.total ? { accounting } : {}), ...data });
+  await writeOutcome({ outcome: 'blocked', owner: data.owner || 'tool', why, next: what, resume: `fix the cause, then ${T(`status ${name}`)} (everything done so far is kept)`, subjectHash: await subjectHash(root, 'clone'), elapsed: elapsedRef, ...(meta ? { scope: scopeOf(meta) } : {}), ...(accounting && accounting.total ? { accounting } : {}), ...data });
   if (loopRef) await saveLoop(root, loopRef);
   const err = await refreshReport({ force: true });
   console.log(`trueclone status: ${name}${meta?.mode ? ` (${meta.mode})` : ''}${done.length ? `\ndone: ${done.join(', ')}` : ''}\n\nBlocked (owner: ${data.owner || 'tool'}): ${why}\nWhat to do: ${what}\nEverything done so far is kept (${err ? `REPORT.md could not be rendered: ${err}; compare/outcome.json has the details` : 'REPORT.md and compare/outcome.json have the details'}); after fixing the cause, run ${T(`status ${name}`)} again to resume.`);
@@ -133,12 +136,15 @@ process.on('unhandledRejection', crashed);
 // ---- 1. capture and what it reads ----
 const meta = await json('reference/meta.json');
 if (!meta) await next(T(`capture <url> ${name}`), 'nothing captured yet (add --mode exact --permission "<owner>" only with the owner\'s permission)');
+// Output of the retired Next.js generator (next/, compare-next/, REPORT.next.md) is not part of a cloning run: it is
+// never read, measured or required here. Said once, so nobody takes it for the deliverable.
+for (const old of ['next', 'compare-next', 'REPORT.next.md']) if (await stat(old)) { console.log(`note: sites/${name}/${old} is output of the retired Next.js generator; it is not part of this HTML clone and is ignored.`); break; }
 // the loop record from the first status call on (its activity is the run's time), and the steps that ran (the journal)
 loopRef = await loadLoop(root, refIdOf(meta));
 elapsedRef = recordActivity(loopRef);
 runs = runsOf(await readJournal(root));
 // a step still running on this site: wait for it. Never counted as a repeat, never a reason to name it again
-const busy = runningNow(runs);
+const busy = runningNow(runs, { ignore: ['convert'] });
 if (busy.length) {
   await saveLoop(root, loopRef);
   console.log(`trueclone status: ${name} (${meta.mode || 'template'})\n\nwaiting: ${busy.map((r) => `\`${r.step} ${(r.args || []).join(' ')}\` (pid ${r.pid}, running since ${String(r.startedAt).slice(11, 19)}${r.log ? `, output in sites/${name}/${r.log}` : ''})`).join('; ')} is still running on this site. Let it finish (a quiet step is still working), then run \`${T(`status ${name}`)}\` again. Work is left.`);
@@ -149,7 +155,8 @@ if (busy.length) {
 // cookies, locale, routes and hand-made exclusions and inclusions are kept)
 // (quotes inside a recorded value never reach the command line: RC6 varsity's launcher recorded the permission as `"site`)
 const unq = (s) => String(s ?? '').replace(/["`]/g, '').trim();
-const recapture = () => T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${unq(meta.permission)}"` : ''}${(meta.hide || []).length ? ` --hide "${meta.hide.join(',')}"` : ''}${(meta.cookies || []).length ? ` --cookie "${meta.cookies.map((c) => `${c.name}=${c.value}`).join('; ')}"` : ''}${meta.locale && meta.locale !== 'en-US' ? ` --locale ${meta.locale}` : ''}${(meta.routes || []).length > 1 ? ` --routes ${meta.routes.length}` : ''}${(meta.ignore || []).filter((i) => !i.auto).length ? ` --ignore "${meta.ignore.filter((i) => !i.auto).map((i) => i.sel).join(',')}"` : ''}${(meta.thirdParty || []).filter((t) => /--include/.test(t.decision || '')).length ? ` --include "${meta.thirdParty.filter((t) => /--include/.test(t.decision || '')).map((t) => t.sel).join(',')}"` : ''}${meta.bundle && !meta.canvasApp ? ' --bundle' : ''}`);
+// (the scope the user asked for is kept: one page stays one page, a list stays that list, scope.mjs scopeArgs)
+const recapture = () => T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${unq(meta.permission)}"` : ''}${(meta.hide || []).length ? ` --hide "${meta.hide.join(',')}"` : ''}${(meta.cookies || []).length ? ` --cookie "${meta.cookies.map((c) => `${c.name}=${c.value}`).join('; ')}"` : ''}${meta.locale && meta.locale !== 'en-US' ? ` --locale ${meta.locale}` : ''}${scopeArgs(meta)}${(meta.ignore || []).filter((i) => !i.auto).length ? ` --ignore "${meta.ignore.filter((i) => !i.auto).map((i) => i.sel).join(',')}"` : ''}${(meta.thirdParty || []).filter((t) => /--include/.test(t.decision || '')).length ? ` --include "${meta.thirdParty.filter((t) => /--include/.test(t.decision || '')).map((t) => t.sel).join(',')}"` : ''}${meta.bundle && !meta.canvasApp ? ' --bundle' : ''}`);
 if (meta.complete === false) await next(recapture(), 'the last capture did not finish (crashed or stopped part-way): a partial reference is never measured against');
 // a reference captured before symmetric measurement (rc.5: the same seed, clock and motion setting on both sides, loops
 // held at an equal non-zero time) was shot under other conditions than every clone measurement now: captured again
@@ -167,13 +174,15 @@ if (app && !(await stat('journey.json'))) await next(T(`journey ${name} --draft`
 // it is hidden by a re-capture first; one a visitor always sees stays when Findings names it (and why)
 const notesNow = await text('notes.md');
 const overlays = (meta.overlays || []).filter((o) => !notesNow.includes(o.sel));
-if (overlays.length) await next(T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${unq(meta.permission)}"` : ''}${meta.routes?.length === 1 ? ' --routes 1' : ''} --hide "${[...(meta.hide || []), ...overlays.map((o) => o.sel)].join(',')}"`), `the capture saw ${overlays.map((o) => `\`${o.sel}\` (${o.share}% of the window)`).join(', ')} over the page at load: hidden, every check compares the page itself. If visitors always see it, say so under ## Findings in notes.md naming it, and status moves on`);
+if (overlays.length) await next(T(`capture ${meta.url} ${name}${meta.mode === 'exact' ? ` --mode exact --permission "${unq(meta.permission)}"` : ''}${scopeArgs(meta)} --hide "${[...(meta.hide || []), ...overlays.map((o) => o.sel)].join(',')}"`), `the capture saw ${overlays.map((o) => `\`${o.sel}\` (${o.share}% of the window)`).join(', ')} over the page at load: hidden, every check compares the page itself. If visitors always see it, say so under ## Findings in notes.md naming it, and status moves on`);
 // third-party widgets found at capture that differ between loads (an assistant, a chat): excluded on both sides by
 // default (docs/policy.md); one the user wants in the clone is included with capture --include "<selector>"
-// Pages the site links to that the capture left out at its --routes cap are not verified. The goal is the whole site
-// the user asked for: once, before any work, capture again with them, or say under ## Findings why they are out of
-// scope (REPORT lists them either way). RC6 elise: 6 of 8 project pages were left out, silently.
-{
+// Pages the site links to that the capture left out at its --routes cap are not verified. When the user asked for the
+// site (the bounded whole-site default), once, before any work: capture again with them, or say under ## Findings why
+// they are out of scope (REPORT lists them either way). RC6 elise: 6 of 8 project pages were left out, silently. A
+// request for one page or for a list of pages is that scope: nothing is asked, and the pages it leaves out are listed
+// as outside the requested scope, their links pointing at the live site (scope.mjs).
+if (scopeOf(meta).kind === 'site') {
   const capped = (meta.routesNotCaptured || []).filter((r) => /beyond the cap/i.test(r.why || ''));
   const named = capped.some((r) => notesNow.includes(typeof r === 'string' ? r : r.path)) || /^## Findings[\s\S]*\broutes?\b[^\n]*(out of scope|not captured|left out)/im.test(notesNow);
   if (capped.length && !named && loopRef && !(loopRef.events || []).some((e) => e.e === 'routes-not-captured')) {
@@ -197,10 +206,17 @@ const reads = app ? [
 const missing = [];
 // a read made before the current capture describes another page (a re-capture after the site changed): read again
 const capturedAt = Date.parse(meta.capturedAt || 0) || 0;
+// A read is current only when reads.mjs recorded it as finished for this capture (reference/reads.json): its first
+// file existing says nothing about the sizes and routes after it (a read killed part-way leaves desktop written and
+// the rest absent, and was reported as done)
+const readsRec = await json('reference/reads.json');
+const readDone = (step) => (readsRec?.capturedAt === meta.capturedAt ? readsRec.reads?.[step] : null);
 for (const [f, cmd, why] of reads) {
   const st = await stat(f);
+  const rec = readDone(cmd.split(' ')[0]);
   if (!st) missing.push([cmd, why]);
   else if (st.mtimeMs < capturedAt - 1000) missing.push([cmd, `${why} (read before the current capture of ${meta.capturedAt.slice(0, 16).replace('T', ' ')})`]);
+  else if (!rec?.complete) missing.push([cmd, `${why} (${rec ? `its last read did not finish: exit ${rec.exit}` : 'not recorded as finished for this capture'})`]);
 }
 if (app && !missing.length) { const j = await stat('journey.json'), r = await stat('reference/journey/journey.json'); if (j && r && j.mtimeMs > r.mtimeMs + 1000) missing.push([`journey ${name}`, 'journey.json changed after the reference journey was read']); }
 // reveals and widgets recorded before rc.7 name their elements by position only: the seed cannot find them safely (a
@@ -256,35 +272,6 @@ if (ownBundle) {
   }
   done.push(`bundle (${integrity.entries} files whole${app ? '' : ', every captured page and file'})`);
 }
-// the reference against itself, before any clone work (PLAN.md 5.4 validity gate): every bar is set from it, and a
-// frame the reference varies on is known before the loop spends time on it. The reference's own reads that the
-// calibration replays (its states, an app's reference journey) read again after it was made: it describes reference
-// frames that are gone (RC5 zero: the journey re-recorded to complete the bundle)
-const noiseRec = await json('reference/noise.json');
-// the reads it replays, by content (rc.7; a copy of the folder that changes file times is not a new read, RC6-26);
-// a calibration from before rc.7 has no record of them and is judged by file times as before
-const readsFile = app ? 'reference/journey/journey.json' : 'reference/states/desktop.json';
-const readsSha = await fs.readFile(path.join(root, readsFile)).then((b) => crypto.createHash('sha1').update(b).digest('hex').slice(0, 16), () => null);
-const noiseOld = noiseRec && (noiseRec.reads?.sha1 ? noiseRec.reads.sha1 !== readsSha : Date.parse(noiseRec.at || 0) < ((await stat(readsFile))?.mtimeMs || 0) - 1000);
-if (!noiseRec || noiseRec.refId !== refIdOf(meta) || noiseOld) {
-  // a calibration that failed: resumed once (it keeps every check it finished), then Blocked with its error and log
-  const failedCal = await json('reference/calib/failed.json');
-  const fails = failedCal?.refId === refIdOf(meta) ? failedCal.count || 1 : 0;
-  if (fails >= 2) await blockedEarly(`calibrate failed ${fails} times on this capture: ${failedCal.error}`, errorOwner({ error: failedCal.error }) === 'environment' ? 'check the network and the browser (npx trueclone doctor), then run status again' : `a defect in trueclone or its environment: report it with ${failedCal.log || 'reference/calib/log.txt'}; status resumes the calibration once it is fixed`, { owner: errorOwner({ error: failedCal.error }), log: failedCal.log || 'reference/calib/log.txt' });
-  // How long: the work it does, from what RC6's calibrations took. Per draw, each route x size is shot once per pixel
-  // check (about 45 s), and the scroll check visits every half screen of the page with a still at a fixed page age
-  // (about 8 s a step). RC6 measured 0.4-13.5 s a step and 8-60 s a shot (astro 3 min, varsity ~160 min), so the range
-  // is wide; calibrate prints its own estimate after its first check.
-  const routes = (meta.routes?.length ? meta.routes : [{ viewports: meta.viewports }]);
-  const VP_H = { mobile: 844, tablet: 1024, desktop: 900, laptop: 720, wide: 1080 };
-  const steps = app ? 0 : routes.reduce((n, r) => n + (r.viewports || meta.viewports || []).reduce((m, v) => m + Math.ceil((v.pageHeight || VP_H[v.viewport] || 900) / ((VP_H[v.viewport] || 900) / 2)) + 1, 0), 0);
-  const shots = app ? 0 : routes.length * 5 * (meta.mode === 'exact' ? 2 : 1);
-  const perDrawS = app ? 600 : shots * 45 + steps * 8;
-  const est = [Math.max(2, Math.round((perDrawS * 2 * 0.1) / 60)), Math.round((perDrawS * 2 * 2) / 60)];
-  const progress = await json('reference/calib/progress.json');
-  await next(T(`calibrate ${name}`), `${noiseOld ? 'the reference was read again after the calibration' : noiseRec ? 'the calibration belongs to an earlier capture' : fails ? `the last calibration stopped: ${failedCal.error} (whole output: ${failedCal.log || 'reference/calib/log.txt'}); it resumes from the ${progress?.done?.length || 0} check(s) it finished` : 'the reference has not been measured against itself yet'}: two more loads of the live page through the same checks set the bar of every frame (reference/noise.json), once per capture. ${app ? `Expect ${est[0]}-${est[1]} minutes (the journey at each size, x 2 draws)` : `For ${routes.length} route(s) x 5 sizes (${shots} pixel shots and ${steps} scroll steps per draw, x 2 draws), expect about ${Math.round((perDrawS * 2) / 60)} minutes, possibly ${est[0]}-${est[1]}`}; it prints each check's time and what is left as it goes (sites/${name}/logs/ and reference/calib/log.txt). Give it no time limit shorter than ${est[1]} minutes, or run it in the background and run status (it says "waiting" while calibrate runs); never stop it because it is quiet`, ['while it runs, read reference/scripts/INDEX.md']);
-}
-done.push('calibrated');
 
 // ---- 2. design and seed (each re-run when its inputs are newer) ----
 const tokens = await stat('design-tokens.json');
@@ -323,6 +310,41 @@ if (seedLint.length) await blockedEarly(`the clone as trueclone generated it fai
   if (noPage.length) await blockedEarly(`the clone has no page for ${noPage.length} captured route(s): ${noPage.join(', ')}. Its server would answer them 404, and every check on them would be an HTTP error`, ownBundle ? `the seed builds the pages from the bundle: ${T(`record-bundle ${name}`)}, then ${T(`seed ${name}`)}, then ${T(`status ${name}`)}; if the bundle has them and the seed still does not write them, report it with clone/.seed.json` : 'a defect in trueclone (the seed): report it with clone/.seed.json; nothing in clone/script.js or clone/patches/ can add a page', { owner: 'tool', routes: noPage });
 }
 done.push('seed');
+
+// the reference against itself, before anything is measured (PLAN.md 5.4 validity gate): every bar is set from it, and
+// a frame the reference varies on is known before the loop spends time on it. It runs after the seed, one after the
+// other, so the clone is there to look at an hour or more sooner (RC8 elise: calibrate took 71.5 of the 90 minutes before
+// its seed). The order changes no measurement: calibrate loads the live page through the checks into reference/calib/
+// and writes reference/noise.json, and reads nothing the seed writes (the clone); the seed reads the mirror and the
+// reads, never the calibration. Nothing runs beside it: the clone's preview is provisional (not calibrated, not
+// measured) until the checks run on it. The reference's own reads that the
+// calibration replays (its states, an app's reference journey) read again after it was made: it describes reference
+// frames that are gone (RC5 zero: the journey re-recorded to complete the bundle)
+const noiseRec = await json('reference/noise.json');
+// the reads it replays, by content (rc.7; a copy of the folder that changes file times is not a new read, RC6-26);
+// a calibration from before rc.7 has no record of them and is judged by file times as before
+const readsFile = app ? 'reference/journey/journey.json' : 'reference/states/desktop.json';
+const readsSha = await fs.readFile(path.join(root, readsFile)).then((b) => crypto.createHash('sha1').update(b).digest('hex').slice(0, 16), () => null);
+const noiseOld = noiseRec && (noiseRec.reads?.sha1 ? noiseRec.reads.sha1 !== readsSha : Date.parse(noiseRec.at || 0) < ((await stat(readsFile))?.mtimeMs || 0) - 1000);
+if (!noiseRec || noiseRec.refId !== refIdOf(meta) || noiseOld) {
+  // a calibration that failed: resumed once (it keeps every check it finished), then Blocked with its error and log
+  const failedCal = await json('reference/calib/failed.json');
+  const fails = failedCal?.refId === refIdOf(meta) ? failedCal.count || 1 : 0;
+  if (fails >= 2) await blockedEarly(`calibrate failed ${fails} times on this capture: ${failedCal.error}`, errorOwner({ error: failedCal.error }) === 'environment' ? 'check the network and the browser (npx trueclone doctor), then run status again' : `a defect in trueclone or its environment: report it with ${failedCal.log || 'reference/calib/log.txt'}; status resumes the calibration once it is fixed`, { owner: errorOwner({ error: failedCal.error }), log: failedCal.log || 'reference/calib/log.txt' });
+  // How long: the work it does, from what RC6's calibrations took. Per draw, each route x size is shot once per pixel
+  // check (about 45 s), and the scroll check visits every half screen of the page with a still at a fixed page age
+  // (about 8 s a step). RC6 measured 0.4-13.5 s a step and 8-60 s a shot (astro 3 min, varsity ~160 min), so the range
+  // is wide; calibrate prints its own estimate after its first check.
+  const routes = (meta.routes?.length ? meta.routes : [{ viewports: meta.viewports }]);
+  const VP_H = { mobile: 844, tablet: 1024, desktop: 900, laptop: 720, wide: 1080 };
+  const steps = app ? 0 : routes.reduce((n, r) => n + (r.viewports || meta.viewports || []).reduce((m, v) => m + Math.ceil((v.pageHeight || VP_H[v.viewport] || 900) / ((VP_H[v.viewport] || 900) / 2)) + 1, 0), 0);
+  const shots = app ? 0 : routes.length * 5 * (meta.mode === 'exact' ? 2 : 1);
+  const perDrawS = app ? 600 : shots * 45 + steps * 8;
+  const est = [Math.max(2, Math.round((perDrawS * 2 * 0.1) / 60)), Math.round((perDrawS * 2 * 2) / 60)];
+  const progress = await json('reference/calib/progress.json');
+  await next(T(`calibrate ${name}`), `${noiseOld ? 'the reference was read again after the calibration' : noiseRec ? 'the calibration belongs to an earlier capture' : fails ? `the last calibration stopped: ${failedCal.error} (whole output: ${failedCal.log || 'reference/calib/log.txt'}); it resumes from the ${progress?.done?.length || 0} check(s) it finished` : 'the reference has not been measured against itself yet'}: two more loads of the live page through the same checks set the bar of every frame (reference/noise.json), once per capture. ${app ? `Expect ${est[0]}-${est[1]} minutes (the journey at each size, x 2 draws)` : `For ${routes.length} route(s) x 5 sizes (${shots} pixel shots and ${steps} scroll steps per draw, x 2 draws), expect about ${Math.round((perDrawS * 2) / 60)} minutes, possibly ${est[0]}-${est[1]}`}; it prints each check's time and what is left as it goes (sites/${name}/logs/ and reference/calib/log.txt). Give it no time limit shorter than ${est[1]} minutes, or run it in the background and run status (it says "waiting" while calibrate runs); never stop it because it is quiet`, ['while it runs, read reference/scripts/INDEX.md, and look at the provisional preview of the seeded clone (sites/' + name + '/clone/, served by `' + T(`serve ${name}`) + '`): not calibrated or measured yet, so nothing about it is verified; run no other trueclone step until calibrate ends']);
+}
+done.push('calibrated');
 
 // ---- 3. a brief per section, behaviours written from the site's code ----
 // (an own bundle runs the site's own code: nothing is ported, so neither briefs nor behaviours are asked for)
@@ -444,7 +466,7 @@ for (const d of rv.missingDirs) {
   await next(T(`review ${name}${d.route ? ` --route ${d.route}` : ''} --size ${d.size}`), `no side-by-side frames at ${d.size}${d.route ? ` for ${d.route}` : ''} yet: the clone is judged by eye at every size`, [`look at every sheet and give every frame a verdict under "## ${REVIEW_HEADING.clone}" in notes.md, with its token from index.md ("- <frame> <size> [<token>]: same" or "... : differs: <what>")`]);
 }
 const unverdicted = rv.frames.filter((f) => f.state === 'open');
-if (unverdicted.length) await next(`write review verdicts under "## ${REVIEW_HEADING.clone}" in notes.md for ${unverdicted.length} frame(s) of the HTML clone (${unverdicted.slice(0, 3).map((f) => `${f.id} ${f.size}`).join(', ')}${unverdicted.length > 3 ? '…' : ''})`, `every frame needs a verdict from looking at it: "same" (with the reason below 85%), "differs: <what>", or "tool: <why>" with evidence made for that frame (${unverdicted[0].why}). The Next.js app's frames get their own verdicts later, under "## ${REVIEW_HEADING.app}"`, ['look at compare/review/<size>/index.md and its sheets'], { label: 'write review verdicts (HTML clone)' });
+if (unverdicted.length) await next(`write review verdicts under "## ${REVIEW_HEADING.clone}" in notes.md for ${unverdicted.length} frame(s) of the HTML clone (${unverdicted.slice(0, 3).map((f) => `${f.id} ${f.size}`).join(', ')}${unverdicted.length > 3 ? '…' : ''})`, `every frame needs a verdict from looking at it: "same" (with the reason below 85%), "differs: <what>", or "tool: <why>" with evidence made for that frame (${unverdicted[0].why})`, ['look at compare/review/<size>/index.md and its sheets'], { label: 'write review verdicts (HTML clone)' });
 for (const t of rv.toolHeavy) {
   const k = `toolHeavy:${t.dir}`;
   if (!loop.events.some((e) => e.e === k)) { loop.events.push({ at: new Date().toISOString(), e: k }); await next(`look again at the "tool" verdicts in ${t.dir}`, `${t.tool} of ${t.of} frames there are closed as "tool": a difference the clone shows is "differs", whatever its cause; "tool" holds only with evidence made for that frame`, ['change each verdict that is really a difference to "differs: <what>"']); }
@@ -516,67 +538,37 @@ for (const c of writtenBad) {
 }
 if (!ownBundle && !app && ((await json('reference/reveals.desktop.json'))?.scrubs || []).length && !(await stat('motion-map.json'))) await next(T(`curves ${name} --draft`), 'scroll curves were recorded on the reference and none is scored yet: the map pairs each with the clone\'s element');
 
-// ---- 10. the Next.js app: the delivered artifact, verified as it is ----
-const evApp = await evaluate(root, { side: 'app' });
-evsRef = [ev, evApp];
-await blockOnErrors(errorLedger(evApp, 'app'), 'app');
-observe(loop, evApp, notes, root);
-// the app's plan too, and its errors once (the second time on the same app is Blocked above)
-const appUnmeasured = evApp.units.filter((u) => ['missing', 'stale', 'invalid', 'error'].includes(u.status) && !u.cloneError && !(u.status === 'error' && (u.errorCount || 0) >= 2));
-const appReviewMissing = !app && evApp.review.missingDirs.length;
-if (appUnmeasured.length || appReviewMissing || evApp.review.status === 'stale') {
-  const errorsNow = appUnmeasured.filter((u) => u.status === 'error');
-  await next(T(`next ${name} --verify`), `the HTML clone ${Object.values(loop.objectives).some((o) => o.state === 'concluded' && o.side === 'clone') ? 'has done what the loop could' : 'passes'}: generate the Next.js app and verify it as delivered (every check, REPORT.next.md), since the app is what the user gets${errorsNow.length ? `. ${errorsNow.length} of its results failed to measure once (${String(errorsNow[0].reason || '').slice(0, 140)}): measured once more; the same failure again on the same app ends the run Blocked` : ''}`);
-}
-{
-  const toolLint = (evApp.lint?.findings || []).filter((f) => f.owner === 'tool');
-  if (toolLint.length) await blocked(`the Next.js app trueclone generated fails its lint where the clone does not: ${toolLint.slice(0, 3).map((f) => `${f.file}: ${f.what}`).join('; ')}`, 'a defect in the app generator: report it with the files named; never edit next/', { owner: 'tool', lint: toolLint });
-  const cloneLint = (evApp.lint?.findings || []).filter((f) => f.owner !== 'tool');
-  if (cloneLint.length) await next(`fix the app in clone/ (then regenerate): ${cloneLint[0].fix || cloneLint[0].file}`, cloneLint.map((f) => `${f.file}: ${f.what}`).join('; '), [T(`next ${name} --verify`)], { label: `fix the app: ${cloneLint[0].fix || cloneLint[0].file}` });
-}
-const appUnverdicted = evApp.review.frames.filter((f) => f.state === 'open');
-if (appUnverdicted.length) {
-  // the app's frames have their own verdicts, under their own heading: a frame id and size are shared with the clone's
-  // review, the picture is not (RC6 zero). Nothing is inherited: the app is what the user gets
-  await next(`write review verdicts for the Next.js app's ${appUnverdicted.length} frame(s) under "## ${REVIEW_HEADING.app}" in notes.md (${appUnverdicted.slice(0, 3).map((f) => `${f.id} ${f.size}`).join(', ')}${appUnverdicted.length > 3 ? '…' : ''})`, `the app's frames are in compare-next/review/ (index.md has each frame's token): one line per frame, "- <frame> <size> [<token>]: same | differs: <what> | tool: <why>", under its own heading "## ${REVIEW_HEADING.app}", separate from the HTML clone's "## ${REVIEW_HEADING.clone}" (the same frame names, other pictures)`, ['look at compare-next/review/<size>/index.md and its sheets'], { label: 'write review verdicts (Next.js app)' });
-}
-const appPick = await pickObjective('app');
-if (appPick) {
-  const o = loop.objectives[appPick.key];
-  if (o.strategyDue) { o.strategyAsks = (o.strategyAsks || 0) + 1; loop.pending = null; await next(`record a change of strategy for "${o.label}" under ## Attempts in notes.md`, `${o.attempts} attempt(s) without progress on the app: one line naming it, what the evidence shows, what the next attempt does differently, and "evidence: <file>" made now`, [], { label: o.label, objective: true }); }
-  loop.pending = { key: o.key, kind: o.kind, side: 'app', check: o.check, subjectHash: evApp.subjectHash, issuedAt: new Date().toISOString() };
-  const [cmd, why, then] = workStep(o, appPick.regressed);
-  await next(cmd, `${why}. The app differs where the clone passes: fix it in clone/ (never in next/), or when the generator is at fault, show it with evidence under ## Findings`, [T(`next ${name} --verify`), ...(then || []).slice(1)], { label: o.label, objective: true });
-}
-done.push('next.js');
-
-// ---- 11. the outcome: every required item accounted for (accounting.mjs) ----
+// ---- 10. the outcome: every required item of the HTML clone accounted for (accounting.mjs) ----
+// A Next.js conversion is not part of it: it is a separate, later request (trueclone convert) with its own outcome
+// (compare-nextjs/outcome.json); whatever it holds never changes this one.
 await saveLoop(root, loop);
-const acc = account({ evs: [ev, evApp], loop, blockedUnits: blockedUnitsRef });
+const acc = account({ evs: [ev], loop, blockedUnits: blockedUnitsRef });
 // Nothing required may be pending at a terminal outcome. Reaching here with any is status's own defect (a result it
 // never named a step for): Blocked, owner tool, with every such item, never "Incomplete" (RC6, reproduced: an error seen
 // twice and an interaction plan never run ended "Incomplete" with nothing listed)
 const pendingItems = acc.items.filter((i) => i.disposition === 'pending');
 if (pendingItems.length) await blocked(`status reached its outcome with ${pendingItems.length} required item(s) it never scheduled: ${pendingItems.slice(0, 5).map((i) => `${i.label} (${i.state})`).join('; ')}${pendingItems.length > 5 ? '…' : ''}`, 'a defect in trueclone: report it with compare/outcome.json (accounting) and compare/loop.json', { owner: 'tool' });
 const verified = acc.items.length === 0;
-if (verified !== Boolean(ev.verified && evApp.verified)) await blocked(`the evaluation (${ev.verified && evApp.verified ? 'verified' : 'not verified'}) and the accounting of every required item (${acc.items.length} not passed) disagree`, 'a defect in trueclone: report it with compare/outcome.json', { owner: 'tool' });
+if (verified !== Boolean(ev.verified)) await blocked(`the evaluation (${ev.verified ? 'verified' : 'not verified'}) and the accounting of every required item (${acc.items.length} not passed) disagree`, 'a defect in trueclone: report it with compare/outcome.json', { owner: 'tool' });
+const scope = scopeOf(meta);
+const delivered = `HTML/CSS/JS clone (${mode} mode), scope: ${scopeLine(meta)}`;
 if (verified) {
-  await writeOutcome({ outcome: 'verified', why: 'every required result passes on the clone and on the Next.js app as they are now, and every review frame is closed by eye', subjectHash: ev.subjectHash, appSubjectHash: evApp.subjectHash, elapsed: elapsedRef, accounting: acc });
+  await writeOutcome({ outcome: 'verified', deliverable: 'html', why: `every required result passes on the HTML clone as it is now, and every review frame is closed by eye; delivered: ${delivered}`, subjectHash: ev.subjectHash, elapsed: elapsedRef, scope, accounting: acc });
   const err = await refreshReport({ force: true });
   if (err) await blocked(`every required result passes, but REPORT.md could not be written: ${err}`, 'a defect in trueclone: report it; the results and compare/outcome.json are kept', { owner: 'tool' });
-  console.log(`trueclone status: ${name} (${mode})\ndone: ${done.join(', ')}\n\nVerified: every required result passes on the clone and on the Next.js app as they are now (${acc.total} required items). The deliverable is sites/${name}/REPORT.md and REPORT.next.md; hand it over with the clone.`);
+  console.log(`trueclone status: ${name} (${mode})\ndone: ${done.join(', ')}\n\nVerified: every required result passes on the HTML clone as it is now (${acc.total} required items).\nDelivered: ${delivered}.\nThe deliverable is sites/${name}/clone/ with sites/${name}/REPORT.md; hand it over. The cloning request is complete.`);
   process.exit(0);
 }
 // Incomplete: every item not passed, each with what happened to it (a difference the loop concluded, or a result the tool
 // cannot verify here); the same list as compare/outcome.json and REPORT.md
-const objOf = (i) => Object.values(loop.objectives).find((o) => o.state === 'concluded' && i.label.endsWith(o.label.replace(/^Next\.js app: /, '')) && (o.side === i.side));
+const objOf = (i) => Object.values(loop.objectives).find((o) => o.state === 'concluded' && i.label.endsWith(o.label) && (o.side === i.side));
 const lines = acc.items.map((i) => { const o = i.disposition === 'unresolved' ? objOf(i) : null; return `${i.label}: ${i.disposition === 'unresolved' ? `a difference left${o ? `: best ${o.bestValue ?? '–'} (shortfall ${o.bestShortfall}), now ${o.lastValue ?? '–'} (shortfall ${o.lastShortfall}), ${o.attempts} attempt(s), ${o.strategies || 0} change(s) of strategy; ${o.concludedWhy}` : ''}` : `not verifiable by the tool here (${i.reason || 'tool'})`}`; });
 const nU = acc.counts.unresolved, nT = acc.counts['not-verifiable'];
 const nextAction = nU ? `the differences listed are the clone's to fix; after a change, run ${T(`status ${name}`)} (a concluded result that passes on new content is counted again)` : 'the items listed are the tool\'s limits on this site; nothing more for the clone';
-await writeOutcome({ outcome: 'incomplete', why: `${nU} difference(s) remain after the loop concluded them, and ${nT} item(s) the tool cannot verify here; every other required item passes`, unresolved: lines, next: nextAction, resume: `${T(`status ${name}`)} resumes from here: every result, attempt and conclusion is kept in compare/loop.json`, subjectHash: ev.subjectHash, appSubjectHash: evApp.subjectHash, elapsed: elapsedRef, accounting: acc });
+await writeOutcome({ outcome: 'incomplete', deliverable: 'html', why: `${nU} difference(s) remain after the loop concluded them, and ${nT} item(s) the tool cannot verify here; every other required item passes; delivered: ${delivered}`, unresolved: lines, next: nextAction, resume: `${T(`status ${name}`)} resumes from here: every result, attempt and conclusion is kept in compare/loop.json`, subjectHash: ev.subjectHash, elapsed: elapsedRef, scope, accounting: acc });
 const err = await refreshReport({ force: true });
 if (err) await blocked(`the run concluded Incomplete, but REPORT.md could not be written: ${err}`, 'a defect in trueclone: report it; the results and compare/outcome.json (the full list) are kept', { owner: 'tool' });
-console.log(`trueclone status: ${name} (${mode})\ndone: ${done.join(', ')}\n\nIncomplete: ${nU} difference(s) remain (listed), ${nT} item(s) not verifiable by the tool (listed); the other ${acc.counts.passed} of ${acc.total} required items pass:\n${lines.map((l) => `  - ${l}`).join('\n')}\n\nEach is in REPORT.md (Outcome) with what happened to it. Hand over the clone with REPORT.md as it stands, and say it is incomplete.`);
+console.log(`trueclone status: ${name} (${mode})\ndone: ${done.join(', ')}\n\nIncomplete: ${nU} difference(s) remain (listed), ${nT} item(s) not verifiable by the tool (listed); the other ${acc.counts.passed} of ${acc.total} required items pass:\n${lines.map((l) => `  - ${l}`).join('\n')}\nDelivered: ${delivered}.\n\nEach is in REPORT.md (Outcome) with what happened to it. Hand over the clone with REPORT.md as it stands, and say it is incomplete.`);
 process.exit(3);
 
 // The step for an objective: what to look at and the command that re-measures it

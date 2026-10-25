@@ -1,7 +1,7 @@
 // What a measurement was taken of, so a result can never be read for something else (docs/plan-rc5/PLAN.md, R2).
 //
 // Every result unit trueclone records carries an identity block:
-//   subjectHash  the content of what was measured: clone/ for the HTML clone, next/ for the Next.js app. A content hash
+//   subjectHash  the content of what was measured: clone/ for the HTML clone, nextjs/ for a Next.js conversion. A content hash
 //                (sha1 of every file), never mtimes or a git commit, so uncommitted edits count and a copy or touch
 //                that changes nothing does not. Computed at the START of the measurement: an edit made while a check
 //                runs leaves the result stale.
@@ -22,8 +22,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const sha1 = (data) => crypto.createHash('sha1').update(data).digest('hex');
 
 // Folders that are never part of what a visitor gets: dependencies, build caches, the verify token
-const SKIP_DIRS = new Set(['node_modules', '.next', 'patches-cache', '.git']);
-const SKIP_FILES = new Set(['trueclone-app.txt', '.seed-pass.html', '.index.tmp.html', 'next-env.d.ts', 'tsconfig.tsbuildinfo']);
+const SKIP_DIRS = new Set(['node_modules', '.next', 'out', '.turbo', 'patches-cache', '.git']);
+const SKIP_FILES = new Set(['.seed-pass.html', '.index.tmp.html', 'next-env.d.ts', 'tsconfig.tsbuildinfo', 'trueclone-build.txt']);
 
 // The content hash of a folder. File contents are hashed once and remembered by (size, mtime) in a cache beside the
 // folder, so a large clone costs one full read, then only what changed; the cache is a speed-up, never the source of
@@ -44,7 +44,7 @@ export async function writeAtomic(file, text) {
     }
   }
 }
-export async function contentHash(dir, cacheFile, { readOnly = false } = {}) {
+export async function contentHash(dir, cacheFile, { readOnly = false, skip = null } = {}) {
   const cache = cacheFile ? await readCache(cacheFile) : {};
   const next = {};
   const h = crypto.createHash('sha1');
@@ -56,6 +56,7 @@ export async function contentHash(dir, cacheFile, { readOnly = false } = {}) {
       if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) await walk(p); continue; }
       if (!e.isFile() || SKIP_FILES.has(e.name)) continue;
       const rel = path.relative(dir, p).split(path.sep).join('/');
+      if (skip && skip(rel)) continue;
       // a file removed while the folder is walked (a seed's temporary page) is not part of what was measured
       const st = await fs.stat(p).catch(() => null);
       if (!st) continue;
@@ -72,12 +73,13 @@ export async function contentHash(dir, cacheFile, { readOnly = false } = {}) {
   return files ? h.digest('hex').slice(0, 16) : null;
 }
 
-// side: 'clone' (the HTML clone) or 'app' (the Next.js app)
-export const subjectDir = (root, side) => path.join(root, side === 'app' ? 'next' : 'clone');
+// side: 'clone' (the HTML clone, workflow A) or 'app' (the Next.js conversion's project, nextjs/, workflow B). The
+// conversion's documentation (*.md) is never served, so editing it leaves its measurements current.
+export const subjectDir = (root, side) => path.join(root, side === 'app' ? 'nextjs' : 'clone');
 export async function subjectHash(root, side = 'clone', { readOnly = false } = {}) {
   const dir = subjectDir(root, side);
   if (!fsSync.existsSync(dir)) return null;
-  return contentHash(dir, path.join(root, side === 'app' ? '.tc-hash-next.json' : '.tc-hash-clone.json'), { readOnly });
+  return contentHash(dir, path.join(root, side === 'app' ? '.tc-hash-nextjs.json' : '.tc-hash-clone.json'), { readOnly, skip: side === 'app' ? (rel) => /\.md$/i.test(rel) : null });
 }
 
 // The reference identity: what a result was compared against. Only the fields that change what is measured.

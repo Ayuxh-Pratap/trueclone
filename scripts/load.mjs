@@ -9,7 +9,7 @@
 //   -> sites/<name>/compare/load.json, frames in compare/load/ and reference/load/
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, readCache, PNG, withTimeout, COMPARE, siteDir, withMachineLock } from './lib.mjs';
+import { SCORED as VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, cached, readCache, PNG, withTimeout, COMPARE, SIDE, siteDir, withMachineLock } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits } from './results.mjs';
 
@@ -73,7 +73,7 @@ async function sequence(browser, url, vp, dir) {
 
 const cloneUrl = typeof flags.url === 'string' ? flags.url : null;
 const server = cloneUrl ? null : await serve(path.join(root, 'clone'));
-const ident = await startIdentity(root, 'load', COMPARE === 'compare-next' ? 'app' : 'clone');
+const ident = await startIdentity(root, 'load', SIDE);
 const units = [];
 const browser = await openBrowser(flags.cdp);
 const viewports = [];

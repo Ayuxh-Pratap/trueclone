@@ -21,7 +21,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SCORED, parseArgs, openBrowser, newPage, serve, cached, COMPARE, siteDir, openUrl, unroll, withMachineLock } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, cached, COMPARE, SIDE, siteDir, openUrl, unroll, withMachineLock } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits, mergeAggregate, readCheck, isCurrent, unitKey } from './results.mjs';
 
@@ -214,7 +214,7 @@ if (isMain) {
   const meta = JSON.parse(await fs.readFile(path.join(root, 'reference', 'meta.json'), 'utf8'));
   const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
   const cloneUrl = server ? server.url : flags.url;
-  const ident = await startIdentity(root, 'behaviour', COMPARE === 'compare-next' ? 'app' : 'clone');
+  const ident = await startIdentity(root, 'behaviour', SIDE);
   const routes = (meta.routes?.length ? meta.routes : [{ path: '/', slug: '' }]).filter((r) => typeof flags.route !== 'string' || r.path === flags.route);
   const vps = SCORED.filter((v) => BEHAVIOUR_VPS.includes(v.name) && (typeof flags.viewport !== 'string' || v.name === flags.viewport));
   const browser = await openBrowser(flags.cdp);

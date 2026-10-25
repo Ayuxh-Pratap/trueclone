@@ -20,7 +20,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, openUrl, withMachineLock, recordBundle, maskToggle } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, matchPct, canvasSimilarity, PNG, COMPARE, SIDE, siteDir, openUrl, withMachineLock, recordBundle, maskToggle } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits } from './results.mjs';
 import { regionScore, region } from './measure.mjs';
@@ -425,7 +425,7 @@ const server = clone && typeof flags.url !== 'string' ? await serve(path.join(ro
 const url = clone ? (typeof flags.url === 'string' ? flags.url : server.url) : meta.finalUrl || meta.url;
 const outRoot = clone ? path.join(root, COMPARE, 'journey') : path.join(ref, 'journey');
 // what is measured (identity.mjs), taken before the first page opens
-const ident = clone ? await startIdentity(root, 'journey', COMPARE === 'compare-next' ? 'app' : 'clone') : null;
+const ident = clone ? await startIdentity(root, 'journey', SIDE) : null;
 const browser = await openBrowser(flags.cdp);
 const result = { name, at: new Date().toISOString(), side: clone ? 'clone' : 'reference', viewports: [] };
 try {
@@ -587,7 +587,7 @@ for (const [vpName, lines] of Object.entries(reviewLines)) {
   }
   await fs.writeFile(path.join(dir, 'frames.json'), JSON.stringify({ size: vpName, at: new Date().toISOString(), subjectHash: ident.subjectHash, frames }, null, 2));
   // the app's frames have their own verdicts, under their own heading (verdict.mjs reviewVerdicts; RC6 zero)
-  const appSide = COMPARE === 'compare-next';
+  const appSide = SIDE === 'app';
   await fs.writeFile(path.join(dir, 'index.md'), `# Journey review at ${vpName}: reference left, ${appSide ? 'the Next.js app' : 'clone'} right, at each checkpoint\n\nIn notes.md under "## ${REVIEW_HEADING[appSide ? 'app' : 'clone']}"${appSide ? ' (the app\'s own verdicts: the same frame names as the HTML clone\'s review, other pictures and tokens)' : ''}, one line per frame with its token (5 characters, exact): \`- <frame> ${vpName} [<token>]: same\` (below 85% pixel match, say why), \`differs: <what>\`, or \`tool: <why>; evidence: <file>\`.\n\n| frame | token | pixel match |\n|---|---|---|\n${frames.map((f) => `| [${f.id}](${f.file}.png) | ${f.token} | ${f.pct}% |`).join('\n')}\n`);
 }
 console.log(`-> ${path.relative(process.cwd(), path.join(outRoot, 'report.json'))}; review frames in ${COMPARE}/review/journey-<size>/`);

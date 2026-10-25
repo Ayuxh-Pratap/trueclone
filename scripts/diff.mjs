@@ -3,7 +3,7 @@
 // Without --url it serves sites/<name>/clone/ itself on a free local port.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, isPad, crop, match, PNG, COMPARE, siteDir, holdStill } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, mask, serve, pad, isPad, crop, match, PNG, COMPARE, SIDE, siteDir, holdStill } from './lib.mjs';
 import { startIdentity, refIdOf } from './identity.mjs';
 import { writeUnits, mergeAggregate } from './results.mjs';
 
@@ -32,7 +32,7 @@ const target = typeof flags.url === 'string' ? flags.url : server.url;
 const calibrating = process.env.TC_CALIBRATE === '1';
 // what is measured (identity.mjs), taken before the first page opens: an edit made while this runs leaves it stale
 const check = reduce ? 'reduced' : structure ? 'layout' : 'layout-real';
-const ident = await startIdentity(root, check, COMPARE === 'compare-next' ? 'app' : 'clone');
+const ident = await startIdentity(root, check, SIDE);
 const browser = await openBrowser(flags.cdp);
 const report = { name, mode: structure ? 'structure' : 'visual', source: meta.url, clone: target, at: ident.startedAt, viewports: [], routes: [] };
 // Every route of the site (meta.routes, from capture): the captured page writes where it always has (compare/), each

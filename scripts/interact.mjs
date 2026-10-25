@@ -18,7 +18,7 @@
 // usage: node scripts/interact.mjs <name> [--only "<text>"]   |   node scripts/interact.mjs <name> --draft
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, siteDir, unroll, openUrl, mediaReady, holdStill, releaseStill, STILL_AGE } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, maskToggle, matchPct, PNG, cached, readCache, COMPARE, SIDE, siteDir, unroll, openUrl, mediaReady, holdStill, releaseStill, STILL_AGE } from './lib.mjs';
 import { isEmpty } from './measure.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits } from './results.mjs';
@@ -96,7 +96,7 @@ const skipped = own.filter((s) => s.skip);
 let scenarios = [...own.filter((s) => !s.skip), ...auto.filter((s) => !ownNames.has(s.name))];
 // what is measured (identity.mjs); the plan (every scenario the configuration names) is recorded with it, so a scenario
 // that was never run is "missing", never absent, and a retired one does not linger as a pass
-const ident = await startIdentity(root, 'interact', COMPARE === 'compare-next' ? 'app' : 'clone');
+const ident = await startIdentity(root, 'interact', SIDE);
 const partial = typeof flags.only === 'string';
 if (!scenarios.length) {
   await writeUnits(root, COMPARE, 'interact', [{ state: '_plan', scenarios: [], skipped: skipped.map((s) => ({ name: s.name, why: s.skip })) }], ident, { replaceRoutes: () => true });
@@ -108,6 +108,25 @@ const planned = scenarios.map((s) => s.name);
 if (partial) scenarios = scenarios.filter((s) => s.name.includes(flags.only));
 const outDir = path.join(root, COMPARE, 'interact');
 await fs.mkdir(outDir, { recursive: true });
+
+// The element a step names on this side: its selector ("selector@n"); only when that finds nothing here, the element
+// that is the same thing by what the scenario recorded of it (desc: tag, text or label, a link's destination), the
+// first visible one. A Next.js conversion renames the reference's classes, so a selector drafted on the reference
+// finds nothing there while the control is the same; the reference and the HTML clone always resolve by the selector.
+const resolveSel = (page, sel, desc) => (desc ? page.evaluate(([s0, d]) => {
+  const [s, idx] = s0.split('@');
+  let hit = null;
+  try { hit = document.querySelectorAll(s)[Number(idx || 0)] || null; } catch { /* not a selector here */ }
+  if (hit) return s0;
+  const norm = (x) => String(x || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const path = (u) => { try { return decodeURIComponent(new URL(u, location.href).pathname).replace(/\/+$/, '') || '/'; } catch { return null; } };
+  const all = [...document.querySelectorAll(d.tag)];
+  const same = (el) => norm(el.getAttribute('aria-label') || el.textContent).slice(0, 80) === norm(d.text) && (!d.to || path(el.getAttribute('href')) === path(d.to));
+  const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+  const i = all.findIndex((el) => same(el) && shown(el));
+  const j = i >= 0 ? i : all.findIndex(same);
+  return j >= 0 ? `${d.tag}@${j}` : s0;
+}, [sel, desc]).catch(() => sel) : Promise.resolve(sel));
 
 const stateOf = (page, selector) => page.evaluate((sel) => {
   const [s, idx] = sel.split('@');
@@ -164,7 +183,7 @@ async function runSide(url, side, list) {
         await page.waitForTimeout(250);
       }
       const px = ([x, y]) => [Math.round(x * vp.width), Math.round(y * vp.height)];
-      const expectSel = sc.expectChange?.[side];
+      const expectSel = sc.expectChange?.[side] ? await resolveSel(page, sc.expectChange[side], sc.expectChange.desc) : null;
       const before = expectSel ? await stateOf(page, expectSel) : null;
       const shots = {};
       const paths = {};
@@ -223,7 +242,7 @@ async function runSide(url, side, list) {
           if (Array.isArray(target)) await page.mouse.click(...px(target));
           else {
             // selector@n: the n-th match, as everywhere else in the scenario file
-            const [s, idx] = target.split('@');
+            const [s, idx] = (await resolveSel(page, target, st.click.desc)).split('@');
             await page.locator(s).nth(Number(idx || 0)).click({ timeout: 5000 }).catch((e) => results.push({ name: sc.name, error: `click ${target}: ${e.message.split('\n')[0]}` }));
           }
         } else if (st.wheel) {
@@ -260,7 +279,7 @@ async function runSide(url, side, list) {
   return results;
 }
 
-// --url scores another build of the clone (e.g. the Next.js app) instead of serving clone/
+// --url scores another build of the site (a Next.js conversion) instead of serving clone/
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
 const cloneUrl = server ? server.url : flags.url;
 // Reference results are cached per scenario (reference side + viewport + capture time) as long as the shot

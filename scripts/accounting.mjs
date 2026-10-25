@@ -3,7 +3,8 @@
 // checks that the two sets of ids are equal.
 //
 // An item is a required unit (check, route, size, state; the interaction plan included), a review frame, a review
-// folder not shot yet, a written check (notes, coverage) or a clone lint finding, on the clone or on the app. Each has
+// folder not shot yet, a written check (notes, coverage) or a lint finding, of one evaluated side: the HTML clone
+// (status) or a Next.js conversion (convert), each accounted for in its own outcome. Each has
 // exactly one disposition:
 //   passed          pass, accepted with evidence, or nothing to measure; a review frame closed by eye
 //   unresolved      a difference the loop worked and concluded (its best and current values are in loop.json)
@@ -30,6 +31,8 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {}, bl
   for (const ev of evs) {
     if (!ev || ev.missingCapture) continue;
     const side = ev.side;
+    // whose work a difference is: the HTML clone's, or the conversion's (its own source in nextjs/)
+    const work = side === 'app' ? 'app' : 'clone';
     for (const u of ev.units) {
       const id = itemId(side, 'unit', `${u.check}|${u.route || ''}|${u.viewport || ''}|${u.state || ''}`);
       const label = `${side === 'app' ? 'Next.js app: ' : ''}${unitName(u)}${u.plan ? ' (interaction plan)' : ''}`;
@@ -38,8 +41,8 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {}, bl
       if (['pass', 'accepted', 'na'].includes(u.status)) disposition = 'passed';
       else if (u.status === 'tool') { disposition = 'not-verifiable'; owner = u.owner || 'tool'; }
       else if (u.status === 'error' && blockedUnits.has(id)) { disposition = 'blocked'; owner = blockedUnits.get?.(id) || 'tool'; }
-      else if (['fail', 'error'].includes(u.status) && o?.state === 'concluded') { disposition = 'unresolved'; owner = o.owner || 'clone'; reason = `${o.concludedWhy}; best ${o.bestValue ?? '–'}, now ${o.lastValue ?? '–'}`; }
-      else if (u.status === 'fail') { owner = 'clone'; reason = `${u.value ?? '–'} against ${u.bar ?? '–'}${(u.membersBelow || []).length ? `; ${u.membersBelow.length} frame(s) below their floor` : ''}`; }
+      else if (['fail', 'error'].includes(u.status) && o?.state === 'concluded') { disposition = 'unresolved'; owner = o.owner || work; reason = `${o.concludedWhy}; best ${o.bestValue ?? '–'}, now ${o.lastValue ?? '–'}`; }
+      else if (u.status === 'fail') { owner = work; reason = `${u.value ?? '–'} against ${u.bar ?? '–'}${(u.membersBelow || []).length ? `; ${u.membersBelow.length} frame(s) below their floor` : ''}`; }
       all.push({ id, side, kind: 'unit', label, state: u.status, disposition, owner, reason });
     }
     const rv = ev.review || { frames: [], missingDirs: [] };
@@ -48,7 +51,7 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {}, bl
       const o = loop?.objectives?.[`${side}:review:${f.dir}:${f.id}`];
       let disposition = 'pending', owner = null;
       if (f.state === 'closed') disposition = 'passed';
-      else if (f.state === 'differs' && o?.state === 'concluded') { disposition = 'unresolved'; owner = o.owner || 'clone'; }
+      else if (f.state === 'differs' && o?.state === 'concluded') { disposition = 'unresolved'; owner = o.owner || work; }
       else if (declared[id]) { disposition = declared[id].disposition; owner = declared[id].owner; }
       all.push({ id, side, kind: 'frame', label: `${side === 'app' ? 'Next.js app: ' : ''}review frame ${f.id} (${f.size})`, state: f.state, disposition, owner, reason: f.why || f.verdict || null });
     }
@@ -56,11 +59,11 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {}, bl
     const w = ev.written || {};
     if (w.notes) all.push({ id: itemId(side, 'written', 'notes'), side, kind: 'written', label: 'Notes (behaviours)', state: w.notes.pass ? 'pass' : 'fail', disposition: w.notes.pass ? 'passed' : 'pending', owner: w.notes.pass ? null : 'clone', reason: w.notes.pass ? null : 'Behaviours cite none of the site\'s code' });
     if (w.coverage) all.push({ id: itemId(side, 'written', 'coverage'), side, kind: 'written', label: 'Coverage (site code)', state: w.coverage.pass ? 'pass' : 'fail', disposition: w.coverage.pass ? 'passed' : 'pending', owner: w.coverage.pass ? null : 'clone', reason: w.coverage.pass ? null : `not cited: ${[...w.coverage.uncitedScripts].slice(0, 4).join(', ')}` });
-    for (const [k, f] of (ev.lint?.findings || []).entries()) all.push({ id: itemId(side, 'lint', `${f.file}|${k}`), side, kind: 'lint', label: `Clone lint: ${f.file}`, state: 'fail', disposition: f.owner === 'tool' ? 'blocked' : 'pending', owner: f.owner || 'clone', reason: f.what });
+    for (const [k, f] of (ev.lint?.findings || []).entries()) all.push({ id: itemId(side, 'lint', `${f.file}|${k}`), side, kind: 'lint', label: `${side === 'app' ? 'Next.js app lint' : 'Clone lint'}: ${f.file}`, state: 'fail', disposition: f.owner === 'tool' ? 'blocked' : 'pending', owner: f.owner || (side === 'app' ? 'app' : 'clone'), reason: f.what });
   }
-  // the written checks are shared: the app's notes and coverage are the clone's (one notes.md)
+  // each id once (an evaluation passed twice is counted once)
   const seen = new Set();
-  const items = all.filter((i) => { const k = i.kind === 'written' ? `written:${i.id.split(':').pop()}` : i.id; if (seen.has(k)) return false; seen.add(k); return true; });
+  const items = all.filter((i) => { if (seen.has(i.id)) return false; seen.add(i.id); return true; });
   // A Blocked run keeps what it measured: a result below its bar (a frame that differs, a written check that fails, a
   // lint finding) is "failing", the clone's, as measured; an error not yet retried is a measurement error, owned by what
   // it says; only what was never measured on this content (missing, stale, invalid, no verdict yet) was not reached
@@ -68,7 +71,7 @@ export function account({ evs, loop, blockedUnits = new Set(), declared = {}, bl
   // "313 cannot be measured; 0 not reached")
   if (blockedBy) for (const i of items) {
     if (i.disposition !== 'pending') continue;
-    if (i.state === 'fail' || i.state === 'differs') Object.assign(i, { disposition: 'failing', owner: i.owner || 'clone' });
+    if (i.state === 'fail' || i.state === 'differs') Object.assign(i, { disposition: 'failing', owner: i.owner || (i.side === 'app' ? 'app' : 'clone') });
     else if (i.state === 'error') Object.assign(i, { disposition: 'blocked', owner: errorOwner({ error: i.reason || '' }), reason: `measurement error, not retried before the run stopped: ${i.reason || 'no message'}` });
     else Object.assign(i, { disposition: 'blocked', owner: blockedBy.owner || 'tool', reason: `not reached: the run is Blocked (${String(blockedBy.why || '').slice(0, 200)})${i.reason ? `; was: ${i.reason}` : ''}`, notReached: true });
   }

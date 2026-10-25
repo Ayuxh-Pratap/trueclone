@@ -14,7 +14,7 @@
 //        node scripts/curves.mjs <name> --draft      (writes motion-map.draft.json from reference/motion.<vp>.json)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE, siteDir, openUrl } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, withTimeout, cached, readCache, COMPARE, SIDE, siteDir, openUrl } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits } from './results.mjs';
 
@@ -124,7 +124,7 @@ if (mapText === null) {
 }
 let map = JSON.parse(mapText);
 // what is measured (identity.mjs); a run narrowed with --only is a look at some curves, never the check's result
-const ident = await startIdentity(root, 'curves', COMPARE === 'compare-next' ? 'app' : 'clone');
+const ident = await startIdentity(root, 'curves', SIDE);
 const partial = typeof flags.only === 'string';
 if (partial) map = map.filter((e) => e.name.includes(flags.only));
 map = map.filter((e) => e.clone && e.clone !== 'TODO' && (!e.viewports || e.viewports.includes(vp.name)));
@@ -262,7 +262,7 @@ async function run(url, side, entries, onEntry) {
   return results;
 }
 
-// --url scores another build of the clone (e.g. the Next.js app) instead of serving clone/
+// --url scores another build of the site (a Next.js conversion) instead of serving clone/
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
 const cloneUrl = server ? server.url : flags.url;
 // Reference curves are cached per entry (keyed by the entry's reference side, viewport and capture time):

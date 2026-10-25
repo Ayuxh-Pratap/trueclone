@@ -1,7 +1,7 @@
 // One command for all scores, with a time limit per step and a summary at the end.
 //   (full)    every check the site requires (verdict.mjs requiredUnits), at every size
 //   --only detail,load   those checks alone;  --viewport tablet   narrowed to one width where the check can be
-//   --url <app url>      score another build (the Next.js app: next --verify sets TC_COMPARE=compare-next)
+//   --url <app url>      score another build (a Next.js conversion: convert --verify sets TC_COMPARE=compare-nextjs)
 //   --fresh              re-measure even what is already current;  --refresh-ref re-measures the reference too
 // A step that runs past its limit is killed and reported as TIMEOUT; the rest still run. Steps run in parallel groups
 // (layout + states, the curve viewports, interact + hovers + detail; load alone, last: it is timed). A step's limit
@@ -21,7 +21,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs, COMPARE, siteDir, releaseTimingLockOf } from './lib.mjs';
+import { parseArgs, COMPARE, SIDE, siteDir, releaseTimingLockOf } from './lib.mjs';
 import { envIdentity, startIdentity } from './identity.mjs';
 import { evaluate } from './verdict.mjs';
 import { writeErrors } from './results.mjs';
@@ -41,7 +41,7 @@ if (env.instrumentModified) {
 }
 const root = siteDir(name);
 const url = typeof flags.url === 'string' ? flags.url : null;
-const side = COMPARE === 'compare-next' ? 'app' : 'clone';
+const side = SIDE;
 const refresh = flags['refresh-ref'] ? ['--refresh-ref'] : [];
 const minLimitMs = Number(flags['step-minutes'] || 20) * 60 * 1000;
 // seconds per unit on a first run (nothing cached), from the RC6 runs' step times; a step's limit is 2.5x its estimate

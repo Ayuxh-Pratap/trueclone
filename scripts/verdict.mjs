@@ -1,5 +1,5 @@
-// The one evaluation every conclusion is drawn from: status (the next step and the exit code), REPORT.md and
-// REPORT.next.md, and the Next.js app's verification all call evaluate(). docs/plan-rc5/PLAN.md R1, R4.
+// The one evaluation every conclusion is drawn from: status (the next step and the exit code) and REPORT.md for the
+// HTML clone; convert (its status and --verify) and REPORT.nextjs.md for a Next.js conversion. docs/plan-rc5/PLAN.md R1, R4.
 //
 // It enumerates every result the site REQUIRES (each check x route x viewport, each interaction scenario, each journey
 // viewport, each review frame) and gives each one state:
@@ -34,7 +34,7 @@ export const FLOORS = { scroll: 80, journey: 80, canvas: 75, behaviour: 100 };
 export const TEMPLATE_ALLOWANCE = 15;
 // an accepted difference explains the last few points, never a broken page
 export const ACCEPT_FLOOR = 95;
-export const LABELS = { route: 'Route captured', layout: 'Layout (structure)', 'layout-real': 'Layout (real pixels)', reduced: 'Reduced motion (layout)', behaviour: 'Behaviour (what changes by itself)', scroll: 'Scroll states', canvas: 'Canvases', curves: 'Motion curves', detail: 'Detail (styles)', hovers: 'Hovers', load: 'Load sequence', interact: 'Interactions', journey: 'Journey', review: 'Review (by eye)', lint: 'Clone lint', notes: 'Notes (behaviours)', coverage: 'Coverage (site code)' };
+export const LABELS = { route: 'Route captured', dependency: 'Embedded document',layout: 'Layout (structure)', 'layout-real': 'Layout (real pixels)', reduced: 'Reduced motion (layout)', behaviour: 'Behaviour (what changes by itself)', scroll: 'Scroll states', canvas: 'Canvases', curves: 'Motion curves', detail: 'Detail (styles)', hovers: 'Hovers', load: 'Load sequence', interact: 'Interactions', journey: 'Journey', review: 'Review (by eye)', lint: 'Clone lint', notes: 'Notes (behaviours)', coverage: 'Coverage (site code)' };
 // the order failing checks are worked in (status) and listed in (REPORT)
 export const ORDER = ['journey', 'layout', 'layout-real', 'scroll', 'canvas', 'behaviour', 'interact', 'load', 'detail', 'hovers', 'curves', 'reduced'];
 const SEED_VPS = ['desktop', 'tablet', 'mobile'];
@@ -112,7 +112,7 @@ export async function requiredUnits(root, meta, side = 'clone') {
 
 // the ids of the review frames that must carry a verdict, by folder
 export function reviewDirs(meta, side = 'clone') {
-  const base = side === 'app' ? 'compare-next/review' : 'compare/review';
+  const base = side === 'app' ? 'compare-nextjs/review' : 'compare/review';
   if (meta.canvasApp) return ['desktop', 'mobile'].map((s) => ({ dir: `${base}/journey-${s}`, size: s, route: '' }));
   const sizes = side === 'app' ? ['wide', 'mobile'] : ['wide', 'laptop', 'desktop', 'tablet', 'mobile'];
   const out = sizes.map((s) => ({ dir: `${base}/${s}`, size: s, route: '' }));
@@ -146,7 +146,7 @@ export function shortfallOf(u) {
 
 // readOnly: nothing is written while evaluating (the auditor; the hash cache is a speed-up only)
 export async function evaluate(root, { side = 'clone', readOnly = false } = {}) {
-  const compare = side === 'app' ? 'compare-next' : 'compare';
+  const compare = side === 'app' ? 'compare-nextjs' : 'compare';
   const meta = await readJson(path.join(root, 'reference', 'meta.json'), null);
   if (!meta) return { side, missingCapture: true, units: [], checks: [], verified: false };
   const refId = refIdOf(meta);
@@ -198,11 +198,18 @@ export async function evaluate(root, { side = 'clone', readOnly = false } = {}) 
   for (const f of (meta.routesNotCaptured || []).filter((r) => r && typeof r === 'object' && (r.failed || /^capture failed|rendered page was not saved/.test(r.why || '')))) {
     units.push({ check: 'route', route: f.path, viewport: '', state: '', value: null, record: null, status: 'tool', reason: `not captured: ${f.why}`, owner: errorOwner({ error: f.why }) });
   }
+  // A first-party document an in-scope page embeds (an iframe on the site's own registrable domain, capture.mjs
+  // meta.dependencies) is part of that page: its content is measured inside the page's own shots. One the capture could
+  // not record cannot be served by the clone, so the page cannot be verified as it is: required, not verifiable here.
+  for (const d of (meta.dependencies || []).filter((x) => x && !x.recorded)) {
+    units.push({ check: 'dependency', route: d.page && d.page !== '/' ? d.page : '', viewport: '', state: d.src, value: null, record: null, status: 'tool', reason: `embedded document ${d.src} not recorded: ${d.why || 'no copy'}`, owner: errorOwner({ error: d.why || '' }) });
+  }
 
   // the review: every frame shot of what is there now, each with a verdict given to that picture
   const review = await evaluateReview(root, meta, side, subject, notes);
-  // the written plan and the coverage of the site's code (read from files, never stale)
-  const written = await evaluateNotes(root, meta, notes);
+  // the written plan and the coverage of the site's code (read from files, never stale): the HTML clone's work. A
+  // conversion is judged on its own source (conversion.mjs), never on the clone's notes
+  const written = side === 'app' ? {} : await evaluateNotes(root, meta, notes);
 
   const byCheck = new Map();
   for (const u of units.filter((x) => !x.plan)) { if (!byCheck.has(u.check)) byCheck.set(u.check, []); byCheck.get(u.check).push(u); }
@@ -230,7 +237,7 @@ export async function evaluate(root, { side = 'clone', readOnly = false } = {}) 
 //   - more animations stopped (animation: none, animation-play-state: paused) outside a prefers-reduced-motion rule
 //     than the reference's own CSS stops: a clone that freezes what the site animates
 const LINT_EXT = /\.(html?|m?js|jsx|tsx?|css)$/i;
-const LINT_SKIP = new Set(['node_modules', '.next', '.git', 'patches-cache', 'assets', 'bundle', 'vendor']);
+const LINT_SKIP = new Set(['node_modules', '.next', '.git', 'patches-cache', 'assets', 'bundle', 'vendor', '_dep']);
 // what a visitor gets: the seed's own working files (.seed-base*.html, .seed-pass.html) are never served
 async function filesOf(dir, out = [], depth = 0) {
   for (const e of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
@@ -283,9 +290,9 @@ const OVERRIDE = /\b(Math\.random|Date\.now|performance\.now|(?:window\.)?reques
 // Every finding names its owner. The agent may edit clone/script.js and clone/patches/ only; a finding in a page
 // trueclone generated is the seed's when the seed's own output (.seed-base*.html) holds it (a tool defect: status ends
 // Blocked, never asks for an edit it forbids, RC6 allbirds), and the patch's when a patch inserted it (that patch is
-// named). In the app (next/), what the clone also has is the clone's; the rest is the generator's.
-export async function lintSubject(root, meta, side = 'clone', { _cloneFindings } = {}) {
-  const dir = path.join(root, side === 'app' ? 'next' : 'clone');
+// named). In a Next.js conversion (nextjs/) every file is the conversion's own source: each finding is its to fix there.
+export async function lintSubject(root, meta, side = 'clone') {
+  const dir = path.join(root, side === 'app' ? 'nextjs' : 'clone');
   const findings = [];
   const files = await filesOf(dir);
   const read = (f) => fs.readFile(f, 'utf8').catch(() => '');
@@ -295,7 +302,7 @@ export async function lintSubject(root, meta, side = 'clone', { _cloneFindings }
   const editable = (rel) => /^clone\/(script\.js$|patches\/)/.test(rel);
   // whose is a finding found in `rel` by `test(text, file)`?
   const ownerOf = (rel, test) => {
-    if (side === 'app') return null; // decided below, against the clone
+    if (side === 'app') return { owner: 'app', fix: rel };
     if (editable(rel)) return { owner: 'clone', fix: rel };
     // no seed record (a clone not made by seed): what it holds is its author's
     if (!seedBase.length) return { owner: 'clone', fix: rel };
@@ -325,17 +332,12 @@ export async function lintSubject(root, meta, side = 'clone', { _cloneFindings }
   for (const f of await fs.readdir(path.join(root, 'reference', 'assets', 'stylesheet')).catch(() => [])) for (const k of stopRules(await read(path.join(root, 'reference', 'assets', 'stylesheet', f)), f)) refStops.add(k);
   let refJsStops = 0;
   for (const f of (await fs.readdir(path.join(root, 'reference', 'scripts')).catch(() => [])).filter((x) => /\.js$/.test(x) && !/\.pretty\.js$/.test(x))) refJsStops += countStops(await read(path.join(root, 'reference', 'scripts', f)));
-  if (jsStops > refJsStops) findings.push({ file: side === 'app' ? 'next/' : 'clone/script.js', what: `its scripts stop ${jsStops - refJsStops} more animation(s) (animation: none, animation-play-state: paused) than the site's own scripts: what the site animates must run`, ...(side === 'clone' ? { owner: 'clone', fix: 'clone/script.js' } : {}) });
+  if (jsStops > refJsStops) findings.push({ file: side === 'app' ? 'nextjs/' : 'clone/script.js', what: `its scripts stop ${jsStops - refJsStops} more animation(s) (animation: none, animation-play-state: paused) than the site's own scripts: what the site animates must run`, ...(side === 'clone' ? { owner: 'clone', fix: 'clone/script.js' } : { owner: 'app', fix: 'nextjs/' }) });
   const extra = [...stops].filter((k) => !refStops.has(k));
   if (extra.length) {
     const seedStops = new Set(seedBase.flatMap((t) => [...stopRules(t, 'x.html')]));
     const fromSeed = seedBase.length > 0 && extra.every((k) => seedStops.has(k));
-    findings.push({ file: side === 'app' ? 'next/' : 'clone/', what: `stops ${extra.length} animation(s) the reference's own CSS does not (${extra.slice(0, 3).map((k) => k.replace('|', ' { ')).join('; ')} }), outside a prefers-reduced-motion rule: what the site animates must run`, ...(side === 'clone' ? { owner: fromSeed ? 'tool' : 'clone', fix: fromSeed ? null : (patches.find((p) => [...stopRules(p.text, p.rel)].some((k) => extra.includes(k)))?.rel || 'clone/patches/') } : {}) });
-  }
-  if (side === 'app') {
-    // the app is generated from the clone: what the clone has too is the clone's (fixed in clone/, then regenerated)
-    const cloneLint = _cloneFindings || (await lintSubject(root, meta, 'clone')).findings;
-    for (const f of findings) { const same = cloneLint.find((c) => c.what === f.what); Object.assign(f, same ? { owner: same.owner, fix: same.fix } : { owner: 'tool', fix: null }); }
+    findings.push({ file: side === 'app' ? 'nextjs/' : 'clone/', what: `stops ${extra.length} animation(s) the reference's own CSS does not (${extra.slice(0, 3).map((k) => k.replace('|', ' { ')).join('; ')} }), outside a prefers-reduced-motion rule: what the site animates must run`, ...(side === 'clone' ? { owner: fromSeed ? 'tool' : 'clone', fix: fromSeed ? null : (patches.find((p) => [...stopRules(p.text, p.rel)].some((k) => extra.includes(k)))?.rel || 'clone/patches/') } : { owner: 'app', fix: 'nextjs/' }) });
   }
   return { pass: !findings.length, findings, stops: stops.size + jsStops, refStops: refStops.size + refJsStops };
 }
@@ -478,4 +480,4 @@ async function evaluateNotes(root, meta, notes) {
 }
 
 // How a unit is named to a person
-export const unitName = (u) => `${LABELS[u.check] || u.check}${u.route ? ` ${u.route}` : ''}${u.viewport ? ` ${u.viewport}` : ''}${u.scenario ? ` "${u.scenario}"` : ''}`;
+export const unitName = (u) => `${LABELS[u.check] || u.check}${u.route ? ` ${u.route}` : ''}${u.viewport ? ` ${u.viewport}` : ''}${u.scenario ? ` "${u.scenario}"` : ''}${u.check === 'dependency' && u.state ? ` ${u.state}` : ''}`;

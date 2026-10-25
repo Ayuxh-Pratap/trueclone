@@ -8,6 +8,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, siteDir } from './lib.mjs';
+import { writeAtomic } from './identity.mjs';
 
 const { pos, flags } = parseArgs(process.argv.slice(2));
 const [name] = pos;
@@ -32,9 +33,24 @@ const READS = meta.canvasApp ? [
 if (meta.canvasApp && !(await fs.stat(path.join(root, 'journey.json')).catch(() => null))) { console.error(`a canvas app is read along its journey: trueclone journey ${name} --draft first`); process.exit(1); }
 // a read older than what it reads (journey.json changed after the reference journey ran) is read again
 const newerInput = async (r) => { if (!r.after) return false; const a = await fs.stat(path.join(root, r.after)).catch(() => null), b = await fs.stat(path.join(root, r.out)).catch(() => null); return Boolean(a && b && a.mtimeMs > b.mtimeMs + 1000); };
+// What finished, for this capture (reference/reads.json): a read is done only when its step exited 0. Its first output
+// file is written before the rest of its sizes and routes, so a read killed part-way left that file and was taken for
+// done (status reads this record, never the file alone).
+const recFile = path.join(root, 'reference', 'reads.json');
+const loadRec = async () => { const r = JSON.parse(await fs.readFile(recFile, 'utf8').catch(() => 'null')); return r && r.capturedAt === meta.capturedAt ? r : { capturedAt: meta.capturedAt, reads: {} }; };
+const rec = await loadRec();
 const todo = [];
-for (const r of READS) if (flags.all || !(await fresh(r.out)) || (await newerInput(r))) todo.push(r);
+for (const r of READS) if (flags.all || !(await fresh(r.out)) || (await newerInput(r)) || !rec.reads[r.step]?.complete) todo.push(r);
 if (!todo.length) { console.log('reads: all current (--all to read again)'); process.exit(0); }
+// one writer at a time (the reads side by side end at different moments)
+let recWrite = Promise.resolve();
+const record = (step, code) => (recWrite = recWrite.then(async () => {
+  const cur = await loadRec();
+  cur.reads[step] = code === 0 ? { complete: true, at: new Date().toISOString() } : { complete: false, exit: code, at: new Date().toISOString() };
+  await writeAtomic(recFile, JSON.stringify(cur, null, 1));
+}));
+// marked unfinished before it starts: a read that is killed leaves "not finished", never an earlier "done"
+for (const r of todo) await record(r.step, 'started, not finished');
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const run = (r) => new Promise((resolve) => {
   const t0 = Date.now();
@@ -45,7 +61,7 @@ const run = (r) => new Promise((resolve) => {
   child.on('close', (code) => {
     const tail = out.trim().split('\n').slice(-3).join('\n    ');
     console.log(`  ${r.step.padEnd(8)} ${code === 0 ? 'ok' : `EXIT ${code}`} in ${Math.round((Date.now() - t0) / 1000)}s\n    ${tail}`);
-    resolve(code);
+    record(r.step, code ?? 'killed').then(() => resolve(code), () => resolve(code));
   });
 });
 console.log(`reads: ${todo.map((r) => r.step).join(', ')}`);

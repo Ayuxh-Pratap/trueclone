@@ -38,6 +38,10 @@ export function detectInPage([vpName, compare, max, captured = null]) {
   const OFFSET = Math.round(H * 0.2); // the element is scrolled to the top, then this much back down: in view, not under a header
   const at = (el) => ({ ref: selOf(el), clone: selOf(el), offset: -OFFSET });
   const add = (s) => { if (out.length < max && !used.has(s.key)) { used.add(s.key); delete s.key; out.push({ viewport: vpName, compare, auto: true, ...s }); } };
+  // What an element is, besides where it sits: its tag, its text or label, and for a link where it goes. A build whose
+  // markup differs (a Next.js conversion renames every class) finds the same control by it when the selector finds
+  // nothing there (interact.mjs); the reference and the HTML clone always find it by the selector
+  const descOf = (el) => { const d = { tag: el.tagName.toLowerCase(), text: (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) }; if (el.matches('a[href]')) { try { d.to = new URL(el.href).pathname.replace(/\/+$/, '') || '/'; } catch { /* no address */ } } return d; };
   const label = (el) => (el.getAttribute('aria-label') || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 32) || selOf(el);
   const inHeader = (el) => Boolean(el.closest('header, nav, [role="banner"], [role="navigation"]'));
   // RC6-18: a control behind a closed disclosure at this size (a nav collapsed behind a menu button: display:none, or
@@ -103,8 +107,8 @@ export function detectInPage([vpName, compare, max, captured = null]) {
     const steps = native
       ? [{ wheel: { at: [+((r.left + r.width / 2) / W).toFixed(3), +y.toFixed(3)], dx: Math.round(r.width * 0.6) } }, { wait: 1200 }, { shot: 'after-scroll' }]
       : [{ drag: { from: [+x1.toFixed(3), +y.toFixed(3)], to: [+x2.toFixed(3), +y.toFixed(3)] } }, { wait: 1200 }, { shot: 'after-drag' }];
-    if (next) steps.push({ click: { ref: selOf(next), clone: selOf(next) } }, { wait: 1200 }, { shot: 'after-next' });
-    add({ key: `scroll:${selOf(el)}`, name: `${native ? 'scroll' : 'swipe'} ${label(el)} (${vpName})`, at: at(el), steps, expectChange: { ref: selOf(moving), clone: selOf(moving) } });
+    if (next) steps.push({ click: { ref: selOf(next), clone: selOf(next), desc: descOf(next) } }, { wait: 1200 }, { shot: 'after-next' });
+    add({ key: `scroll:${selOf(el)}`, name: `${native ? 'scroll' : 'swipe'} ${label(el)} (${vpName})`, at: at(el), steps, expectChange: { ref: selOf(moving), clone: selOf(moving), desc: descOf(moving) } });
   }
 
   // tab lists: the second and third tab; a tab list inside a closed disclosure (a mobile table of contents) is opened
@@ -116,9 +120,9 @@ export function detectInPage([vpName, compare, max, captured = null]) {
     const disclosure = closedDetails(list);
     const summary = disclosure?.querySelector(':scope > summary');
     if (disclosure && (!summary || !visible(summary))) continue;
-    if (summary) steps.push({ click: { ref: selOf(summary), clone: selOf(summary) } }, { wait: 600 });
-    for (const [i, t] of tabs.slice(1, 3).entries()) steps.push({ click: { ref: selOf(t), clone: selOf(t) } }, { wait: 900 }, { shot: `tab-${i + 2}` });
-    add({ key: `tabs:${selOf(list)}`, name: `tabs ${label(tabs[1])} (${vpName})`, at: at(list), steps, expectChange: { ref: selOf(tabs[1]), clone: selOf(tabs[1]) } });
+    if (summary) steps.push({ click: { ref: selOf(summary), clone: selOf(summary), desc: descOf(summary) } }, { wait: 600 });
+    for (const [i, t] of tabs.slice(1, 3).entries()) steps.push({ click: { ref: selOf(t), clone: selOf(t), desc: descOf(t) } }, { wait: 900 }, { shot: `tab-${i + 2}` });
+    add({ key: `tabs:${selOf(list)}`, name: `tabs ${label(tabs[1])} (${vpName})`, at: at(list), steps, expectChange: { ref: selOf(tabs[1]), clone: selOf(tabs[1]), desc: descOf(tabs[1]) } });
   }
 
   // accordions: a closed disclosure outside the header (details/summary, or a button that expands what it controls)
@@ -126,7 +130,7 @@ export function detectInPage([vpName, compare, max, captured = null]) {
   for (const el of document.querySelectorAll('details > summary, button[aria-expanded="false"][aria-controls], [role="button"][aria-expanded="false"][aria-controls]')) {
     if (accordions >= 2 || !visible(el) || inHeader(el)) continue;
     const target = el.tagName === 'SUMMARY' ? el.parentElement : el;
-    add({ key: `acc:${selOf(el)}`, name: `expand ${label(el)} (${vpName})`, at: at(el), steps: [{ click: { ref: selOf(el), clone: selOf(el) } }, { wait: 900 }, { shot: 'open' }], expectChange: { ref: selOf(target), clone: selOf(target) } });
+    add({ key: `acc:${selOf(el)}`, name: `expand ${label(el)} (${vpName})`, at: at(el), steps: [{ click: { ref: selOf(el), clone: selOf(el), desc: descOf(el) } }, { wait: 900 }, { shot: 'open' }], expectChange: { ref: selOf(target), clone: selOf(target), desc: descOf(target) } });
     accordions++;
   }
 
@@ -168,7 +172,7 @@ export function detectInPage([vpName, compare, max, captured = null]) {
     dialogOpeners.add(el);
     if (target && visible(target)) continue;
     const before = out.length;
-    add({ key: target ? `dialog:#${target.id}` : `dialog:${selOf(el).split('@')[0]}`, name: `dialog ${label(el)} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(el) - OFFSET)) }, steps: [{ click: { ref: selOf(el), clone: selOf(el) } }, { wait: 1000 }, { shot: 'open' }, { key: 'Escape' }, { wait: 900 }, { shot: 'closed' }], expectChange: target ? { ref: selOf(target), clone: selOf(target) } : { ref: selOf(el), clone: selOf(el) }, dialog: { named: Boolean(target), closer: target ? closerIn(target) : null } });
+    add({ key: target ? `dialog:#${target.id}` : `dialog:${selOf(el).split('@')[0]}`, name: `dialog ${label(el)} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(el) - OFFSET)) }, steps: [{ click: { ref: selOf(el), clone: selOf(el), desc: descOf(el) } }, { wait: 1000 }, { shot: 'open' }, { key: 'Escape' }, { wait: 900 }, { shot: 'closed' }], expectChange: target ? { ref: selOf(target), clone: selOf(target) } : { ref: selOf(el), clone: selOf(el) }, dialog: { named: Boolean(target), closer: target ? closerIn(target) : null } });
     if (out.length > before) dialogs++;
   }
 
@@ -181,7 +185,7 @@ export function detectInPage([vpName, compare, max, captured = null]) {
     if (el.getAttribute('aria-expanded') === 'false' && el.hasAttribute('aria-controls')) continue; // an accordion above
     const open = el.getAttribute('aria-expanded') === 'true';
     const before = out.length;
-    add({ key: `toggle:${selOf(el)}`, name: `${open ? 'collapse' : 'expand'} ${label(el)} (${vpName})`, at: at(el), steps: [{ click: { ref: selOf(el), clone: selOf(el) } }, { wait: 900 }, { shot: open ? 'collapsed' : 'open' }, { click: { ref: selOf(el), clone: selOf(el) } }, { wait: 900 }, { shot: open ? 'open' : 'closed' }], expectChange: { ref: selOf(el), clone: selOf(el) }, toggle: true });
+    add({ key: `toggle:${selOf(el)}`, name: `${open ? 'collapse' : 'expand'} ${label(el)} (${vpName})`, at: at(el), steps: [{ click: { ref: selOf(el), clone: selOf(el), desc: descOf(el) } }, { wait: 900 }, { shot: open ? 'collapsed' : 'open' }, { click: { ref: selOf(el), clone: selOf(el), desc: descOf(el) } }, { wait: 900 }, { shot: open ? 'open' : 'closed' }], expectChange: { ref: selOf(el), clone: selOf(el), desc: descOf(el) }, toggle: true });
     if (out.length > before) toggles++;
   }
 
@@ -209,7 +213,7 @@ export function detectInPage([vpName, compare, max, captured = null]) {
     if (seenRoutes.has(k)) { const s = seenRoutes.get(k); if (!shown && s && (s.alts ||= []).length < 3) s.alts.push(selOf(a)); continue; }
     if (navs >= (captured ? 8 : 300)) { seenRoutes.set(k, null); continue; }
     navs++;
-    const s = { key: `nav:${to}`, name: `go to ${to} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(a) - OFFSET)) }, steps: [{ click: { ref: selOf(a), clone: selOf(a) } }, { wait: 1500 }, { shot: 'arrived' }, { back: true }, { wait: 1200 }, { shot: 'back' }], navigation: true, ...(opener ? { opener } : {}) };
+    const s = { key: `nav:${to}`, name: `go to ${to} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(a) - OFFSET)) }, steps: [{ click: { ref: selOf(a), clone: selOf(a), desc: descOf(a) } }, { wait: 1500 }, { shot: 'arrived' }, { back: true }, { wait: 1200 }, { shot: 'back' }], navigation: true, ...(opener ? { opener } : {}) };
     const had = out.length;
     add(s);
     seenRoutes.set(k, out.length > had ? out.at(-1) : null);
@@ -222,7 +226,7 @@ export function detectInPage([vpName, compare, max, captured = null]) {
   for (const el of document.querySelectorAll('[aria-haspopup]:not([aria-haspopup="false"]), [aria-expanded][aria-controls], button[aria-expanded="false"]:not([aria-controls]), [role="button"][aria-expanded="false"]:not([aria-controls])')) {
     if (menus >= 3 || !visible(el) || !inHeader(el) || dialogOpeners.has(el) || el.getAttribute('aria-haspopup') === 'dialog') continue;
     const toggle = !el.hasAttribute('aria-controls') && !el.hasAttribute('aria-haspopup');
-    add({ key: `menu:${selOf(el)}`, name: `menu ${label(el)} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(el) - OFFSET)) }, steps: [{ click: { ref: selOf(el), clone: selOf(el) } }, { wait: 1000 }, { shot: 'open' }, toggle ? { click: { ref: selOf(el), clone: selOf(el) } } : { key: 'Escape' }, { wait: 900 }, { shot: 'closed' }], expectChange: { ref: selOf(el), clone: selOf(el) } });
+    add({ key: `menu:${selOf(el)}`, name: `menu ${label(el)} (${vpName})`, at: { ref: 'body', clone: 'body', offset: Math.max(0, Math.round(docTop(el) - OFFSET)) }, steps: [{ click: { ref: selOf(el), clone: selOf(el), desc: descOf(el) } }, { wait: 1000 }, { shot: 'open' }, toggle ? { click: { ref: selOf(el), clone: selOf(el), desc: descOf(el) } } : { key: 'Escape' }, { wait: 900 }, { shot: 'closed' }], expectChange: { ref: selOf(el), clone: selOf(el), desc: descOf(el) } });
     menus++;
   }
   return out;

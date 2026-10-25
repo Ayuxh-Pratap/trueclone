@@ -10,7 +10,7 @@
 // usage: node scripts/hovers.mjs <name> [--viewport desktop] [--url <clone url>] [--max 60] [--refresh-ref]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE, siteDir, openUrl } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, settle, serve, cached, maskToggle, matchPct, PNG, COMPARE, SIDE, siteDir, openUrl } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits } from './results.mjs';
 
@@ -30,7 +30,7 @@ const OUTCOME_MIN = template ? 95 : 97;
 const REACTS_BELOW = 99.5; // the region before vs after the hover: below this, the hover changed something visible
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
 const cloneUrl = server ? server.url : flags.url;
-const hoverIdent = await startIdentity(root, 'hovers', COMPARE === 'compare-next' ? 'app' : 'clone');
+const hoverIdent = await startIdentity(root, 'hovers', SIDE);
 
 // Elements with a hover-type listener, marked data-lab-hover through CDP (one call for the whole document).
 async function markListened(page) {

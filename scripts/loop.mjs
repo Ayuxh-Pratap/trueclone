@@ -41,16 +41,18 @@ export const DEFAULTS = { strategyAfter: 2, concludeAfter: 4, runWindow: 4, eps:
 
 export const objectiveKey = (side, u) => `${side}:${u.check}:${u.route || ''}:${u.viewport || ''}:${u.scenario || u.frame || ''}`;
 
-export async function loadLoop(root, refId) {
-  const file = path.join(root, 'compare', 'loop.json');
+// dir: the workflow's own folder (compare/ for the HTML clone, compare-nextjs/ for a conversion): each keeps its own
+// loop, so the two never share objectives, step counters or report digests
+export async function loadLoop(root, refId, { dir = 'compare' } = {}) {
+  const file = path.join(root, dir, 'loop.json');
   const cur = JSON.parse(await fs.readFile(file, 'utf8').catch(() => 'null'));
   if (cur && cur.refId === refId) return cur;
   // a new reference: results against the old one are not comparable; the old loop is kept for the record
-  if (cur) await fs.rename(file, path.join(root, 'compare', `loop.${cur.refId || 'old'}.json`)).catch(() => {});
-  return { refId, params: { ...DEFAULTS }, startedAt: new Date().toISOString(), objectives: {}, pending: null, run: { bestShortfall: null, sinceBest: 0, attempts: 0 }, passing: {}, regressions: [], errors: {}, events: [], activity: [] };
+  if (cur) await fs.rename(file, path.join(root, dir, `loop.${cur.refId || 'old'}.json`)).catch(() => {});
+  return { refId, ...(dir !== 'compare' ? { dir } : {}), params: { ...DEFAULTS }, startedAt: new Date().toISOString(), objectives: {}, pending: null, run: { bestShortfall: null, sinceBest: 0, attempts: 0 }, passing: {}, regressions: [], errors: {}, events: [], activity: [] };
 }
 export async function saveLoop(root, loop) {
-  const file = path.join(root, 'compare', 'loop.json');
+  const file = path.join(root, loop.dir || 'compare', 'loop.json');
   await fs.mkdir(path.dirname(file), { recursive: true });
   await writeAtomic(file, JSON.stringify(loop, null, 1));
 }

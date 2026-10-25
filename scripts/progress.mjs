@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
 import { pidAlive } from './lib.mjs';
 
 // steps that change or measure the site (a running one means "wait"); viewers and readers are left out
-const WORK_STEPS = new Set(['capture', 'reads', 'calibrate', 'seed', 'design', 'journey', 'score', 'review', 'next', 'behaviour', 'states', 'diff', 'load', 'interact', 'hovers', 'detail', 'curves', 'drift', 'motion', 'reveals', 'widgets', 'spec', 'vendor', 'brief']);
+const WORK_STEPS = new Set(['capture', 'reads', 'calibrate', 'seed', 'design', 'journey', 'score', 'review', 'convert', 'behaviour', 'states', 'diff', 'load', 'interact', 'hovers', 'detail', 'curves', 'drift', 'motion', 'reveals', 'widgets', 'spec', 'vendor', 'brief']);
 export const LIMITS = { failed: 2, ineffective: 2, idleEscalate: 3, idleBlock: 8 };
 
 export async function readJournal(root) {
@@ -40,8 +40,10 @@ export function runsOf(journal) {
   return [...runs.values()].map((r) => { const alive = !r.endedAt && pidAlive(r.pid) && Date.now() - Date.parse(r.startedAt || 0) < MAX_RUN_MS; return { ...r, running: alive, died: !r.endedAt && !alive }; });
 }
 
-// a trueclone step on this site that is running now (status, viewers and this process excluded)
-export const runningNow = (runs) => runs.filter((r) => r.running && WORK_STEPS.has(r.step) && r.pid !== process.pid);
+// a trueclone step on this site that is running now (status, viewers and this process excluded). Each workflow waits
+// for its own steps: `only` the steps that count (convert waits for its own runs and for what changes the reference),
+// `ignore` the steps that never do (cloning never waits for a conversion: its status cannot depend on one)
+export const runningNow = (runs, { only = null, ignore = [] } = {}) => runs.filter((r) => r.running && WORK_STEPS.has(r.step) && r.pid !== process.pid && (!only || only.includes(r.step)) && !ignore.includes(r.step));
 
 // "npx trueclone score x --only a,b --viewport desktop" -> { step, pos, flags }
 export function parseStep(cmd) {
@@ -69,13 +71,15 @@ const covers = (run, want) => {
   return ['route', 'size'].every((k) => !want.flags[k] || p.flags[k] === want.flags[k]);
 };
 
-// What status decides on, as one digest: the clone and the app (content), the reference and its records, every result
-// and review frame, the instrument's configuration, and the notes sections that count (not an agent's own run log).
-// File sizes and times stand for contents (a touch counts as a change: a missed repeat, never a false one).
-// The installed trueclone version is an input too: a Blocked run says "run status again once a fixed version is
-// installed", and under a new version a step that failed twice is run again, never re-blocked on the old count.
-const NOTE_SECTIONS = /^(review|behaviours|stack|attempts|findings|accepted differences)\b/i;
-export async function inputsDigest(root, { subject = null, appSubject = null, tool = null } = {}) {
+// What a workflow's status decides on, as one digest: what it measures (content), the reference and its records, every
+// result and review frame of that workflow (`dirs`: compare/ for the HTML clone, compare-nextjs/ for a conversion), the
+// instrument's configuration, and the notes sections that count (not an agent's own run log). File sizes and times
+// stand for contents (a touch counts as a change: a missed repeat, never a false one). `extra` adds a workflow's own
+// inputs (the conversion's request and build records). The installed trueclone version is an input too: a Blocked run
+// says "run status again once a fixed version is installed", and under a new version a step that failed twice is run
+// again, never re-blocked on the old count.
+const NOTE_SECTIONS = /^(review|behaviours|stack|attempts|findings|accepted differences|conversion review)\b/i;
+export async function inputsDigest(root, { subject = null, appSubject = null, tool = null, dirs = ['compare', 'reference'], extra = [] } = {}) {
   const h = crypto.createHash('sha1');
   h.update(`${subject}|${appSubject}|${tool}\n`);
   const notes = await fs.readFile(path.join(root, 'notes.md'), 'utf8').catch(() => '');
@@ -96,8 +100,8 @@ export async function inputsDigest(root, { subject = null, appSubject = null, to
       try { const st = fsSync.statSync(p); h.update(`${path.relative(root, p)}|${st.size}|${st.mtimeMs}\n`); } catch { /* gone */ }
     }
   };
-  for (const d of ['compare', 'compare-next', 'reference']) walk(path.join(root, d));
-  for (const f of ['journey.json', 'interactions.json', 'motion-map.json', 'clone/.seed.json', 'reference/calib/failed.json', 'reference/bundle/manifest.json']) {
+  for (const d of dirs) walk(path.join(root, d));
+  for (const f of ['journey.json', 'interactions.json', 'motion-map.json', 'clone/.seed.json', 'reference/calib/failed.json', 'reference/bundle/manifest.json', ...extra]) {
     try { const st = fsSync.statSync(path.join(root, f)); h.update(`${f}|${st.size}|${st.mtimeMs}\n`); } catch { /* absent */ }
   }
   return h.digest('hex').slice(0, 16);

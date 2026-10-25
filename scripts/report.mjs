@@ -1,31 +1,34 @@
-// REPORT.md (the HTML clone) or REPORT.next.md (the Next.js app, TC_COMPARE=compare-next): the evaluation every
-// conclusion comes from (verdict.mjs), rendered for a person. It reads only: running it any number of times changes
-// nothing, counts as no attempt, and never refreshes a result (docs/plan-rc5/PLAN.md R1).
+// REPORT.md (the HTML clone, workflow A) or REPORT.nextjs.md (a Next.js conversion, workflow B: TC_COMPARE=
+// compare-nextjs, written by convert): the evaluation every conclusion comes from (verdict.mjs), rendered for a person.
+// It reads only: running it any number of times changes nothing, counts as no attempt, and never refreshes a result
+// (docs/plan-rc5/PLAN.md R1). Each report reads its own workflow's files and nothing of the other's.
 //
-// The outcome at the top is status's (compare/outcome.json): Verified, Incomplete, Blocked, or In progress. Every
-// required result is listed with its state: pass / accepted / fail / missing / stale / invalid / error / tool / na.
+// The outcome at the top is that workflow's status (compare/outcome.json for the clone, compare-nextjs/outcome.json
+// for the conversion): Verified, Incomplete, Blocked, or In progress. Every required result is listed with its state:
+// pass / accepted / fail / missing / stale / invalid / error / tool / na. The scope is stated: what was asked for, what
+// was captured and verified, and every page left out.
 //
 // usage: trueclone report <name>
 import fs from 'node:fs/promises';
-import fsSync from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { parseArgs, COMPARE, REPORT_FILE, siteDir, SCORED } from './lib.mjs';
+import { parseArgs, COMPARE, SIDE, REPORT_FILE, siteDir, SCORED } from './lib.mjs';
 import { evaluate, LABELS, ORDER, TARGETS, FLOORS, unitName, notesSection } from './verdict.mjs';
+import { scopeOf, scopeLine } from './scope.mjs';
 
 const { pos } = parseArgs(process.argv.slice(2));
 const [name] = pos;
 if (!name) { console.error('usage: trueclone report <name>'); process.exit(1); }
 const root = siteDir(name);
 const read = (rel) => fs.readFile(path.join(root, rel), 'utf8').then(JSON.parse, () => null);
-const side = COMPARE === 'compare-next' ? 'app' : 'clone';
+const side = SIDE;
 const ev = await evaluate(root, { side });
 if (ev.missingCapture) { console.error(`no capture for ${name}: run trueclone capture <url> ${name} first`); process.exit(1); }
 const meta = ev.meta;
 const VPS = SCORED.map((v) => v.name);
-const outcome = await read('compare/outcome.json');
-const loop = await read('compare/loop.json');
+const outcome = await read(`${COMPARE}/outcome.json`);
+const loop = await read(`${COMPARE}/loop.json`);
+// a conversion's own checks (its request, project checks, source lint, review criteria): conversion.mjs
+const conversion = side === 'app' ? await (await import('./conversion.mjs')).evaluateConversion(root, { readOnly: true }) : null;
 const times = await read(`${COMPARE}/score-times.json`);
 const drift = await read(`${COMPARE}/drift.json`);
 const notes = await fs.readFile(path.join(root, 'notes.md'), 'utf8').catch(() => '');
@@ -53,7 +56,7 @@ for (const c of ev.checks.filter((x) => Array.isArray(x.units))) {
 const rv = ev.review;
 const sizes = [...new Set(rv.frames.map((f) => f.size))];
 const openFrames = rv.frames.filter((f) => f.state !== 'closed');
-const reviewNote = rv.missingDirs.length ? `not shot yet: ${rv.missingDirs.slice(0, 3).map((d) => d.dir.replace(/^compare(-next)?\/review\//, '')).join(', ')}`
+const reviewNote = rv.missingDirs.length ? `not shot yet: ${rv.missingDirs.slice(0, 3).map((d) => d.dir.replace(/^compare(-nextjs)?\/review\//, '')).join(', ')}`
   : rv.status === 'stale' ? 'frames shot of an earlier clone: review again'
     : rv.toolHeavy.length ? `"tool" closes most frames at ${rv.toolHeavy.map((t) => `${t.dir.split('/').pop()} (${t.tool}/${t.of})`).join(', ')}: look again`
       : openFrames.length ? `${openFrames.length} frame(s) not closed (${[...new Set(openFrames.map((f) => f.state))].join(', ')}): listed under Review below`
@@ -81,13 +84,13 @@ const unresolved = (loop?.objectives ? Object.values(loop.objectives) : []).filt
 const toolUnits = ev.units.filter((u) => u.status === 'tool');
 // The outcome's words are fixed (docs/policy.md "Outcomes", decision D5). An outcome describes the content it was
 // decided on: for other content (the clone or the app changed since) this report says "in progress".
-const current = Boolean(outcome?.outcome) && (side === 'app' ? outcome.appSubjectHash === ev.subjectHash : outcome.subjectHash === ev.subjectHash);
+const current = Boolean(outcome?.outcome) && outcome.subjectHash === ev.subjectHash;
 const acc = current ? outcome.accounting : null;
 const n = (k) => acc?.counts?.[k] ?? 0;
 const headline = current
-  ? { verified: `**Verified**: every required result passes on the clone and on the Next.js app as they are now`, incomplete: `**Incomplete**: ${acc ? n('unresolved') : unresolved.length} difference(s) remain (listed), ${acc ? n('not-verifiable') : toolUnits.length} item(s) not verifiable by the tool (listed)`, blocked: `**Blocked** (owner: ${outcome.owner || 'tool'}): ${acc ? (() => { const reached = (acc.items || []).filter((i) => i.notReached).length; return `${n('blocked') - reached} required result(s) cannot be measured (errors); ${n('failing')} measured below their bar (the clone's, still open); ${reached} not reached because of the blocker`; })() : 'the tool or the environment cannot measure what is required'} (the blocker, what was tried and what you can do are below)`, 'in-progress': '**In progress**' }[outcome.outcome] || outcome.outcome
-  : ev.verified ? '**Every required result passes** (run `trueclone status` for the outcome)' : '**In progress**: not verified';
-const owner = (u) => (u.status === 'tool' ? u.owner || 'tool' : ['error', 'invalid'].includes(u.status) ? 'tool/environment' : 'clone');
+  ? { verified: side === 'app' ? '**Verified**: the Next.js conversion builds, passes its source checks and review criteria, and every required result passes on the app as it is now, against the original reference' : `**Verified**: every required result passes on the HTML clone as it is now (scope: ${scopeLine(meta)})`, incomplete: `**Incomplete**: ${acc ? n('unresolved') : unresolved.length} difference(s) remain (listed), ${acc ? n('not-verifiable') : toolUnits.length} item(s) not verifiable by the tool (listed)`, blocked: `**Blocked** (owner: ${outcome.owner || 'tool'}): ${acc ? (() => { const reached = (acc.items || []).filter((i) => i.notReached).length; return `${n('blocked') - reached} required result(s) cannot be measured (errors); ${n('failing')} measured below their bar (the clone's, still open); ${reached} not reached because of the blocker`; })() : 'the tool or the environment cannot measure what is required'} (the blocker, what was tried and what you can do are below)`, 'in-progress': '**In progress**' }[outcome.outcome] || outcome.outcome
+  : ev.verified ? `**Every required result passes** (run \`trueclone ${side === 'app' ? 'convert' : 'status'}\` for the outcome)` : '**In progress**: not verified';
+const owner = (u) => (u.status === 'tool' ? u.owner || 'tool' : ['error', 'invalid'].includes(u.status) ? 'tool/environment' : side === 'app' ? 'app' : 'clone');
 const DISPOSITION = { unresolved: 'difference left (the loop concluded)', 'not-verifiable': 'not verifiable by the tool here', failing: 'measured below its bar (open when the run stopped)', blocked: 'cannot be measured (blocked)', notReached: 'not reached (the run is Blocked)', pending: 'not measured or not looked at yet' };
 
 const outcomeSection = [
@@ -127,20 +130,34 @@ const claims = [
   // errors the live page threw while it was captured (the reference is what it is; they are named, never hidden: RC6
   // allbirds threw ~70 that no file kept)
   (meta.pageErrors || []).some((e) => e?.count) ? `- **The live page threw errors while it was captured**: ${meta.pageErrors.filter((e) => e?.count).map((e) => `${e.route || '/'}: ${e.count} (${(e.first || []).slice(0, 2).map((m) => `"${String(m).slice(0, 80)}"`).join(', ')})`).join('; ')}. They are the site's own; the reference was measured as it loaded.` : '',
-  // frames of the clone that still load the live site (pages that were not captured: seed could not point them at a local page)
-  (seedRec?.liveFrames || []).length ? `- **Frames that still load the live site**: ${seedRec.liveFrames.slice(0, 6).map((f) => `\`${typeof f === 'string' ? f : f.src || f.url || JSON.stringify(f)}\``).join(', ')}: their pages were not captured, so the clone shows the live page there; not verified.` : '',
-  // routes asked for that failed to capture (required, not verifiable: the run cannot be Verified) apart from pages
-  // left out of the request (a cap, a --routes list)
-  ...(() => {
-    const all = (meta.routesNotCaptured || []).map((r) => (typeof r === 'string' ? { path: r } : r));
-    const failed = all.filter((r) => r.failed || /^capture failed|rendered page was not saved/.test(r.why || ''));
-    const left = all.filter((r) => !failed.includes(r));
-    const list = (rs) => `${rs.slice(0, 20).map((r) => `\`${r.path}\`${r.why ? ` (${r.why})` : ''}`).join(', ')}${rs.length > 20 ? '…' : ''}`;
-    return [
-      failed.length ? `- **Requested, not captured, not verified**: ${failed.length} route(s) the capture was asked for and could not capture: ${list(failed)}. This result covers the ${(meta.routes || []).length || 1} route(s) captured, not the request.` : '',
-      left.length ? `- **Not captured, not verified**: ${left.length} page(s) the site links to: ${list(left)}. Capture them with \`--routes\` to verify them.` : '',
-    ];
-  })(),
+  // frames of the clone that still load from the network (a third-party embed kept as an embed; a first-party document
+  // that could not be recorded): named, never silent
+  (seedRec?.liveFrames || []).length ? `- **Frames that load from the network**: ${seedRec.liveFrames.slice(0, 6).map((f) => `\`${typeof f === 'string' ? f : f.src || f.url || JSON.stringify(f)}\``).join(', ')}: the clone has no copy of them, so what they show comes from their own servers; not verified.` : '',
+].filter(Boolean).join('\n');
+
+// ---- the scope: what was asked for, captured, verified, and left out (scope.mjs) ----
+const scope = scopeOf(meta);
+const KIND = { page: 'one page', list: 'the pages listed', site: `the site, bounded at ${scope.cap ?? 12} routes` };
+// a route's results are keyed by its path, the captured start page's by '' (its slug is '')
+const startKey = new Set((meta.routes || []).filter((r) => !r.slug).map((r) => r.path));
+const routeOk = (p) => {
+  const key = !(meta.routes || []).length || startKey.has(p) ? '' : p;
+  const us = ev.units.filter((u) => (u.route || '') === key && u.check !== 'route');
+  const fr = rv.frames.filter((f) => (f.route || '') === key);
+  return us.length && us.every((u) => ['pass', 'accepted', 'na'].includes(u.status)) && fr.every((f) => f.state === 'closed');
+};
+// (the clone's links; a conversion's are its own source, checked by conversion.mjs)
+const outLinks = side === 'app' ? [] : seedRec?.outOfScopeLinks || [];
+const deps = meta.dependencies || [];
+const scopeSection = [
+  `## Scope\n`,
+  `- **Requested**: ${KIND[scope.kind] || scope.kind}${scope.requested ? ` (${scope.requested.map((p) => `\`${p}\``).join(', ')})` : ''}.`,
+  `- **Captured and verified**: ${scope.captured.map((p) => `\`${p}\` (${routeOk(p) ? 'verified' : 'not verified yet'})`).join(', ')}.`,
+  scope.failed.length ? `- **Requested, not captured, not verified**: ${scope.failed.map((r) => `\`${r.path}\`${r.why ? ` (${r.why})` : ''}`).join(', ')}. This result covers the ${scope.captured.length} route(s) captured, not the whole request.` : '',
+  scope.outside.length ? `- **Found and not captured, not verified** (${scope.outside.length}): ${scope.outside.slice(0, 30).map((r) => `\`${r.path}\``).join(', ')}${scope.outside.length > 30 ? '…' : ''}. ${scope.kind === 'site' ? (scope.capReached ? `**The cap of ${scope.cap} routes was reached**: this is not the whole site.` : '') : 'Outside the requested scope.'} Links to them open the live site.` : '- **Found and not captured**: none.',
+  scope.kind === 'site' ? `- **Discovery**: ${scope.discovery}. ${scope.discovered} page(s) found${scope.sitemap === false ? '; no sitemap.xml' : scope.sitemap ? '; sitemap.xml read' : ''}.` : '',
+  outLinks.length ? `- **Links outside the scope** (${outLinks.length}, each to its live address, query and fragment kept): ${outLinks.slice(0, 20).map((l) => `\`${l}\``).join(', ')}${outLinks.length > 20 ? '…' : ''}.` : '',
+  deps.length ? `- **Embedded documents** (first-party, part of the page that embeds them, measured inside its shots): ${deps.map((d) => `\`${d.src}\` on \`${d.page || '/'}\` (${d.recorded ? `recorded, ${d.files ?? '?'} file(s)` : `**not recorded**: ${d.why || 'no copy'}; not verifiable`})`).join(', ')}.` : '',
 ].filter(Boolean).join('\n');
 
 // ---- descriptive sections kept from earlier versions (weak spots, what is not copied, motion) ----
@@ -173,22 +190,26 @@ const accepted = notesSection(notes, 'Accepted differences');
 const lockWait = times ? Object.values(times.steps || {}).reduce((n, s) => n + (s.lockWaitSeconds || 0), 0) : 0;
 const elapsed = outcome?.elapsed ? `${outcome.elapsed.wallMin} min wall, ${outcome.elapsed.activeMin} min active (gaps over 15 min with no activity left out)` : null;
 
-const md = `# trueclone report: ${name}${side === 'app' ? ' (the Next.js app, as delivered)' : ''}
+const md = `# trueclone report: ${name}${side === 'app' ? ' (Next.js conversion)' : ''}
 
 | | |
 |---|---|
+| Deliverable | ${side === 'app' ? `a Next.js application (App Router, TypeScript, Tailwind) in sites/${name}/nextjs/, converted from the HTML clone` : `an HTML/CSS/JS clone in sites/${name}/clone/ (its scripts, interactions, animation and canvases included)`} |
 | Reference | ${meta.url} |
 | Mode | ${template ? 'template (structure, motion and behaviour; placeholder text and media)' : `exact (the site's own text and media). Permission: ${meta.permission}`} |
+| Scope | ${scopeLine(meta)} |
 | Captured | ${meta.capturedAt} (reference ${ev.refId}) |
 | Measured | the ${side === 'app' ? 'app' : 'clone'} with content ${ev.subjectHash || '–'} |
 | Outcome | ${headline} |
-| Rendered | ${new Date().toISOString()}, from the files as they were then (\`trueclone status\` renders it again whenever the clone, the app, notes.md or a result changes) |
+| Rendered | ${new Date().toISOString()}, from the files as they were then (\`trueclone ${side === 'app' ? `convert ${name}` : `status ${name}`}\` renders it again whenever what it describes changes) |
 ${times ? `| Last scoring | ${times.totalMin} min (${times.kind}${times.only ? `: ${times.only.join(',')}` : ''})${lockWait ? `, of which ${lockWait}s waiting for the machine's timing lock` : ''} |` : ''}
 ${elapsed ? `| Run time | ${elapsed} |` : ''}
 ${drift?.stale && drift.refId === ev.refId ? '| Live site | **changed since the capture**: re-capture before trusting any result |' : ''}
 
 ${outcomeSection}
 
+${scopeSection}
+${conversion ? `\n${(await import('./conversion.mjs')).conversionMarkdown(conversion)}\n` : ''}
 ## Scores
 
 | Check | ${VPS.map((v) => SIZE_LABEL[v]).join(' | ')} | State | Notes |
@@ -218,7 +239,3 @@ await fs.writeFile(path.join(root, REPORT_FILE), md.replace(/\n{3,}/g, '\n\n'));
 await fs.mkdir(path.join(root, COMPARE), { recursive: true });
 await fs.writeFile(path.join(root, COMPARE, 'verdict.json'), JSON.stringify({ evaluatedAt: ev.at, subjectHash: ev.subjectHash, refId: ev.refId, verified: ev.verified, counts: ev.counts, checks: ev.checks.map((c) => ({ key: c.key, label: c.label, status: c.status })) }, null, 2));
 console.log(`${ev.verified ? 'every required result passes' : `not verified: ${counts}`} -> ${path.relative(process.cwd(), path.join(root, REPORT_FILE))}`);
-// the app's report reads the same notes: regenerated with this one, so it never shows stale verdicts
-if (COMPARE === 'compare' && fsSync.existsSync(path.join(root, 'compare-next', 'results'))) {
-  spawnSync(process.execPath, [fileURLToPath(import.meta.url), name], { stdio: 'inherit', env: { ...process.env, TC_COMPARE: 'compare-next', TC_REPORT: 'REPORT.next.md' } });
-}

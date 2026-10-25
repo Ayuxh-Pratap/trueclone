@@ -12,7 +12,7 @@
 // usage: node scripts/review.mjs <name> [--size wide|laptop|desktop|tablet|mobile] [--url <clone url>]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, matchPct, PNG, COMPARE, siteDir, unroll } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, matchPct, PNG, COMPARE, SIDE, siteDir, unroll } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { dHash, hamming } from './measure.mjs';
 import { routeUrl, samePath } from './routes.mjs';
@@ -39,14 +39,14 @@ const refDir = route ? path.join(root, route.dir) : ref;
 const server = typeof flags.url === 'string' ? null : await serve(path.join(root, 'clone'));
 const cloneBase = server ? server.url : flags.url;
 const cloneUrl = route?.slug ? routeUrl(route.path, cloneBase) : server ? `${server.url}index.html` : flags.url;
-const side = COMPARE === 'compare-next' ? 'app' : 'clone';
+const side = SIDE;
 // template mode: the placeholder text the seed wrote is the tool's own, not "clone-only" (inview.mjs)
 const seedText = await seedTextOf(root, meta);
 const refUrl = route?.slug ? new URL(route.path, meta.finalUrl || meta.url).href : meta.url;
 const outDir = route?.slug ? path.join(root, COMPARE, 'review', 'routes', route.slug, vp.name) : path.join(root, COMPARE, 'review', vp.name);
 // A review of the clone as it is now is not shot again (its verdicts stand): only when the clone's content or the
 // capture changed since the frames were shot (identity.mjs), or with --force. The app (--url) is always shot.
-const ident = await startIdentity(root, 'review', COMPARE === 'compare-next' ? 'app' : 'clone');
+const ident = await startIdentity(root, 'review', SIDE);
 if (!flags.url && !flags.force) {
   const last = JSON.parse(await fs.readFile(path.join(outDir, 'frames.json'), 'utf8').catch(() => 'null'));
   if (last?.at && last.subjectHash === ident.subjectHash && last.refId === ident.refId) {

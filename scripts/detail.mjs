@@ -9,7 +9,7 @@
 // usage: node scripts/detail.mjs <name> [--viewport desktop|tablet|mobile|all] [--url <clone url>] [--max 400]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE, siteDir, openUrl } from './lib.mjs';
+import { VIEWPORTS, parseArgs, openBrowser, newPage, settle, serve, cached, waitStill, COMPARE, SIDE, siteDir, openUrl } from './lib.mjs';
 import { startIdentity } from './identity.mjs';
 import { writeUnits, mergeAggregate } from './results.mjs';
 
@@ -202,7 +202,7 @@ const near = (a, b, tol) => Math.abs(a - b) <= tol;
 const rgba = (c) => (c.match(/[\d.]+/g) || []).map(Number).concat([1]).slice(0, 4);
 const colorDist = (a, b) => { const x = rgba(a), y = rgba(b); return Math.abs(x[0] - y[0]) + Math.abs(x[1] - y[1]) + Math.abs(x[2] - y[2]) + Math.abs(x[3] - y[3]) * 255; };
 
-const ident = await startIdentity(root, 'detail', COMPARE === 'compare-next' ? 'app' : 'clone');
+const ident = await startIdentity(root, 'detail', SIDE);
 const units = [];
 const browser = await openBrowser(flags.cdp);
 const report = { name, at: ident.startedAt, viewports: [] };

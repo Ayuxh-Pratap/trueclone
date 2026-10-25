@@ -7,7 +7,7 @@
 //        node scripts/states.mjs <name> --clone [url] [--structure]
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, seekLoops, matchPct, canvasSimilarity, PNG, COMPARE, siteDir, unroll, openUrl, holdStill, releaseStill, STILL_AGE } from './lib.mjs';
+import { SCORED, parseArgs, openBrowser, newPage, serve, warmUp, waitStill, wheelTo, statesInPage, maskToggle, seekLoops, matchPct, canvasSimilarity, PNG, COMPARE, SIDE, siteDir, unroll, openUrl, holdStill, releaseStill, STILL_AGE } from './lib.mjs';
 import { startIdentity, refIdOf } from './identity.mjs';
 import { writeUnits, mergeAggregate } from './results.mjs';
 import { regionScore, region, envelope, presence, presenceInRange } from './measure.mjs';
@@ -44,7 +44,7 @@ const template = meta.mode !== 'exact';
 const noise = cloneMode && !calibrating ? await loadNoise(root, refIdOf(meta)) : null;
 const drawDirs = noise ? (noise.drawDirs || []).map((d) => path.join(root, d)) : [];
 // what is measured (identity.mjs), taken before the first page opens
-const ident = cloneMode ? await startIdentity(root, 'scroll', COMPARE === 'compare-next' ? 'app' : 'clone') : null;
+const ident = cloneMode ? await startIdentity(root, 'scroll', SIDE) : null;
 const scrollUnits = [], canvasUnits = [];
 const browser = await openBrowser(flags.cdp);
 const report = { name, target: base, mode: cloneMode ? (structure ? 'clone-structure' : 'clone-visual') : 'reference', at: new Date().toISOString(), viewports: [], routes: [] };
