@@ -26,7 +26,7 @@ const GUARD = (map, site, tracking) => `(() => {
     if (u.origin === location.origin) return { keep: true };
     if (TRACKING.test(u.href)) return { stub: '', status: 204 };
     if (method && method !== 'GET') return { stub: '{}', status: 200 };
-    const local = MAP[u.origin + u.pathname] || (u.host === SITE ? u.pathname : null);
+    const local = MAP[u.origin + u.pathname + u.search] || MAP[u.origin + u.pathname] || (u.host === SITE ? u.pathname : null);
     return local ? { url: local + (u.host === SITE ? u.search : '') } : { stub: '', status: 404 };
   };
   const ofetch = window.fetch.bind(window);
@@ -62,7 +62,7 @@ self.addEventListener('fetch', (e) => {
   }
   if (req.method !== 'GET') return e.respondWith(new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }));
   if (TRACKING.test(u.href)) return e.respondWith(new Response(null, { status: 204 }));
-  const local = MAP[u.origin + u.pathname] || (u.host === SITE ? u.pathname : null);
+  const local = MAP[u.origin + u.pathname + u.search] || MAP[u.origin + u.pathname] || (u.host === SITE ? u.pathname : null);
   if (local) return e.respondWith(fetch(local + (u.host === SITE ? u.search : '')));
   return e.respondWith(new Response('', { status: 404, statusText: 'not recorded' }));
 });
@@ -93,6 +93,12 @@ export async function seedBundle(root, meta) {
     hosts.add(u.origin);
     placed.push({ to, local, entry, u });
   }
+  // an address of another host recorded with its query (lib.mjs bundleKey) has a file of its own: written in full in the
+  // bundle's text (as is, with &amp; in markup, JSON-escaped, protocol-relative), it points at that file before any
+  // origin is rewritten below (RC8 elise: four Google Fonts stylesheets were one file, typed application/octet-stream)
+  const exact = placed.filter((p) => p.u.search && p.u.host !== site.host)
+    .flatMap((p) => { const k = p.u.href; const rel = k.replace(/^https?:/, ''); return [[k, p.local], [k.replace(/&/g, '&amp;'), p.local], [k.replace(/\//g, '\\/'), p.local.replace(/\//g, '\\/')], [rel, p.local], [rel.replace(/&/g, '&amp;'), p.local]]; })
+    .sort((a, b) => b[0].length - a[0].length);
   // every recorded origin written in the bundle's text points at the clone's copies: "https://cdn.x.com/a.glb" and its
   // JSON-escaped form "https:\/\/cdn.x.com\/a.glb" become "/_ext/cdn.x.com/a.glb"; the site's own origin becomes "/"
   const prefixes = [...hosts].map((origin) => {
@@ -105,6 +111,7 @@ export async function seedBundle(root, meta) {
     if (!TEXT.test(p.to) && !/text|javascript|json|xml|svg/.test(p.entry.type || '')) continue;
     let t = await fs.readFile(p.to, 'utf8');
     const before = t;
+    for (const [from, to] of exact) t = t.split(from).join(to);
     for (const [from, to] of prefixes) t = t.split(from).join(to);
     if (t !== before) { await fs.writeFile(p.to, t); rewritten++; }
   }

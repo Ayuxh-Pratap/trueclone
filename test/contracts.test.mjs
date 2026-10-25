@@ -322,6 +322,33 @@ test('RC8-B3: Blocked keeps what was measured: a failure stays the clone\'s ("fa
   assert.equal(a.status, 1, a.stdout);
   assert.match(a.stdout, /1 measured result\(s\) reported as not reached/);
 });
+// RC8 elise (resumed on rc.9): in own-bundle mode status named clone work ("change clone/script.js or clone/patches/")
+// for each of 572 differences no permitted edit could change, and about 2,200 status calls went to declaring them one by
+// one. An own bundle's differences are concluded at once, listed, owned by the replay.
+test('RC9-L1: an own bundle\'s measured difference is concluded at once (owner tool), never named as clone work; the run ends Incomplete with it listed', async () => {
+  const p = await tmpProject();
+  const site = await verifiedSite(p, 'ob', 'doc', { exact: true });
+  const mf = path.join(site.root, 'reference', 'meta.json');
+  const meta = JSON.parse(await fs.readFile(mf, 'utf8'));
+  meta.bundle = true;
+  await fs.writeFile(mf, JSON.stringify(meta, null, 2));
+  await bundleFile(site, '127.0.0.1_9/index.html', '<!doctype html><title>x</title>');
+  await bundleFile(site, 'manifest.json', JSON.stringify({ entries: { 'http://127.0.0.1:9/': { type: 'text/html', kind: 'document', document: true, file: '127.0.0.1_9/index.html', bytes: 31, via: 'browser' } } }));
+  // the clone is newer than the bundle (seeded from it)
+  const later = new Date(Date.now() + 5000);
+  await fs.utimes(path.join(site.root, 'clone', 'index.html'), later, later);
+  await tick();
+  await writeUnits(site.root, 'compare', 'reduced', ['mobile', 'desktop'].map((v) => ({ route: '', viewport: v, value: v === 'desktop' ? 40 : 99.5 })), await startIdentity(site.root, 'reduced'));
+  const r = status(p, 'ob');
+  assert.equal(r.code, 3, r.out);
+  assert.doesNotMatch(r.out, /clone\/script\.js or clone\/patches|make .* behave like the reference|fix review frame/);
+  const out = await readJson(site, 'compare/outcome.json');
+  assert.equal(out.outcome, 'incomplete');
+  const item = out.accounting.items.find((i) => i.id === 'clone:unit:reduced||desktop|');
+  assert.deepEqual([item?.disposition, item?.owner], ['unresolved', 'tool'], JSON.stringify(item));
+  const loop = await readJson(site, 'compare/loop.json');
+  assert.match(Object.values(loop.objectives).find((o) => o.check === 'reduced' && o.viewport === 'desktop')?.concludedWhy || '', /^own bundle: the clone is the site's own code/);
+});
 // A requested route that failed to capture is dropped from what is measured (capture.mjs), but it stays required: the
 // run is Incomplete with it named, never Verified as if the request had been the routes that loaded. A page the request
 // left out (not in a --routes list) is not a required item.

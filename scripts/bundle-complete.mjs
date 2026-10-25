@@ -11,11 +11,12 @@
 //     page standing in for a file)
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { VIEWPORTS, openBrowser, newPage, settle, loadLive, recordBundle, recordFetched, fetchWhole, TRACKING_HOSTS } from './lib.mjs';
+import { VIEWPORTS, openBrowser, newPage, settle, loadLive, recordBundle, recordFetched, fetchWhole, TRACKING_HOSTS, bundleKey } from './lib.mjs';
 import { routeKey, routeUrl } from './routes.mjs';
 
 const readJson = (f) => fs.readFile(f, 'utf8').then(JSON.parse, () => null);
-const keyOf = (u) => { try { const x = new URL(u); return `${x.origin}${x.pathname}`; } catch { return null; } };
+// the bundle's address of a file (lib.mjs bundleKey: another host's query is part of it)
+const keyOf = (u, siteHost) => { try { return bundleKey(new URL(u), siteHost); } catch { return null; } };
 // an entry the clone serves as a page: a frame's document, or HTML recorded another way (a view prefetched by a shell)
 export const isDocumentEntry = (e) => Boolean(e && !e.failed && e.file && (e.document || e.frameDocument || e.kind === 'document' || /text\/html/i.test(e.type || '')));
 // the captured routes, the start page first
@@ -31,7 +32,10 @@ export async function bundleCoverage(refDir, meta) {
   const routes = capturedRoutes(meta).filter((r) => !docs.has(r.path === '/' ? start : routeKey(r.path)));
   const have = new Set(entries.filter(([, e]) => !e.failed && e.file).map(([k]) => k));
   const saved = (await readJson(path.join(refDir, 'assets', 'manifest.json'))) || [];
-  const assets = [...new Set(saved.map((a) => a?.url).filter((u) => /^https?:/i.test(u || '') && !TRACKING_HOSTS.test(u)).map(keyOf).filter(Boolean))].filter((k) => !have.has(k));
+  // each file the capture saved, once per bundle address, as the full address it was saved from (a query included)
+  const byKey = new Map();
+  for (const u of saved.map((a) => a?.url).filter((x) => /^https?:/i.test(x || '') && !TRACKING_HOSTS.test(x))) { const k = keyOf(u, site.host); if (k && !byKey.has(k)) byKey.set(k, u); }
+  const assets = [...byKey].filter(([k]) => !have.has(k)).map(([, u]) => u);
   return { recorded: true, entries: entries.length, routes, assets };
 }
 
@@ -45,7 +49,7 @@ export async function completeBundle(root, meta, { cdp = false, log = console.lo
     for (const r of capturedRoutes(meta)) {
       const url = r.path === '/' ? home.href : routeUrl(r.path, home, true);
       const { context, page } = await newPage(browser, desktop);
-      const finished = recordBundle(page, refDir);
+      const finished = recordBundle(page, refDir, { siteHost: home.host });
       try {
         await loadLive(page, url);
         await settle(page, meta.hide || []);
@@ -59,15 +63,15 @@ export async function completeBundle(root, meta, { cdp = false, log = console.lo
     // what the capture saved at other sizes or behind interactions, and the pages above did not load: fetched whole
     const missing = (await bundleCoverage(refDir, meta)).assets;
     const saved = (await readJson(path.join(refDir, 'assets', 'manifest.json'))) || [];
-    const typeOf = new Map(saved.filter((a) => a?.url).map((a) => [keyOf(a.url), String(a.contentType || '').split(';')[0].trim().toLowerCase()]));
-    const kindOf = new Map(saved.filter((a) => a?.url).map((a) => [keyOf(a.url), a.type || 'other']));
+    const typeOf = new Map(saved.filter((a) => a?.url).map((a) => [a.url, String(a.contentType || '').split(';')[0].trim().toLowerCase()]));
+    const kindOf = new Map(saved.filter((a) => a?.url).map((a) => [a.url, a.type || 'other']));
     const context = await browser.newContext();
     let fetched = 0;
     try {
-      for (const k of missing) {
-        const got = await fetchWhole(context, k, { want: typeOf.get(k) || '' });
-        await recordFetched(refDir, k, got, { kind: kindOf.get(k) });
-        if (got.body) fetched++; else log(`  WARNING ${k} not fetched whole: ${got.failed}`);
+      for (const u of missing) {
+        const got = await fetchWhole(context, u, { want: typeOf.get(u) || '' });
+        await recordFetched(refDir, u, got, { kind: kindOf.get(u), siteHost: home.host });
+        if (got.body) fetched++; else log(`  WARNING ${u} not fetched whole: ${got.failed}`);
       }
     } finally { await context.close(); }
     const coverage = await bundleCoverage(refDir, meta);

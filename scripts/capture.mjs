@@ -196,7 +196,7 @@ try {
     const finishEvidence = desktop ? await startScriptEvidence(page, url).catch(() => null) : null;
     // exact mode, desktop: everything the page loads, at its own address (kept only for a canvas app, or --bundle:
     // the clone then runs the site's own code; see lib.mjs recordBundle)
-    if (desktop && mode === 'exact') { await fs.rm(path.join(ref, 'bundle'), { recursive: true, force: true }); bundleDone = recordBundle(page, ref); }
+    if (desktop && mode === 'exact') { await fs.rm(path.join(ref, 'bundle'), { recursive: true, force: true }); bundleDone = recordBundle(page, ref, { siteHost: new URL(url).host }); }
     // the load event, waited for as long as the page keeps loading (lib.mjs loadLive: RC7 elise, a 21 MB page on a
     // slow link, overran a fixed 60 s limit at every size)
     await loadLive(page, url);

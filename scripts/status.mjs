@@ -463,6 +463,20 @@ for (const u of ev.units.filter((x) => x.status === 'tool')) {
 // the work goes on with the next (RC6 astro: an unfixable review frame was named first, and a real defect behind it,
 // the tracker, was never reached)
 const pickObjective = async (side) => {
+  // An own bundle runs the site's own code: no permitted edit changes what it shows (the seed regenerates clone/ from the
+  // bundle and applies no patch), so a difference is never clone work. Each is concluded at once and listed, owned by
+  // the replay (a file the bundle lacks or holds wrongly, an answer it stubs, the clock, the environment), and the
+  // review's verdicts and Findings say what it shows (RC8 elise: status named "change clone/script.js or patches" for
+  // 572 differences, one at a time, and about 2,200 status calls went to declaring each one impossible)
+  if (ownBundle) {
+    for (let pick = nextObjective(loop, side); pick; pick = nextObjective(loop, side)) {
+      const o = loop.objectives[pick.key];
+      Object.assign(o, { state: 'concluded', owner: 'tool', concludedWhy: 'own bundle: the clone is the site\'s own code replayed from its recorded files, so this difference is not clone work: the replay (a file it lacks or holds wrongly, an answer it stubs), the clock or the environment; see the review and Findings' });
+      loop.events.push({ at: new Date().toISOString(), e: `${o.label}: concluded (own bundle)` });
+      if (loop.pending?.key === o.key) loop.pending = null;
+    }
+    return null;
+  }
   for (let pick = nextObjective(loop, side); pick; pick = nextObjective(loop, side)) {
     const o = loop.objectives[pick.key];
     const st = loop.steps?.[String(workStep(o, pick.regressed)[0]).slice(0, 240)];

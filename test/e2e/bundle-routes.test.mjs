@@ -33,17 +33,27 @@ const run = (cwd, args) => new Promise((resolve) => {
 const png = (r, g, b) => { const p = new PNG({ width: 64, height: 64 }); for (let i = 0; i < p.data.length; i += 4) p.data.set([r, g, b, 255], i); return PNG.sync.write(p); };
 const head = (t) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${t}</title><style>body{margin:0;font:16px sans-serif}nav{display:flex;gap:16px;padding:12px}main{padding:20px}.tall{height:1600px}</style></head>`;
 const NAV = '<nav><a href="view.html">View</a> <a href="Case Study.html">Case study</a> <a href="plain.html">Plain</a></nav>';
-const FILES = {
-  'index.html': `${head('Shell')}<body>${NAV}<iframe src="view.html?shell=1" style="width:100%;height:600px;border:0" title="view"></iframe></body></html>`,
+// two stylesheets of another host at one path, told apart by their query (as Google Fonts serves css2?family=...)
+const fontLink = (fonts, fam) => `<link rel="stylesheet" href="${fonts}css2?family=${fam}&amp;display=swap">`;
+const files = (fonts) => ({
+  'index.html': `${head('Shell')}<body>${fontLink(fonts, 'Alpha')}${NAV}<iframe src="view.html?shell=1" style="width:100%;height:600px;border:0" title="view"></iframe></body></html>`,
   'view.html': `${head('View')}<body><main><h1>The view</h1><img src="img/top.png" width="64" height="64" alt=""><div class="tall"></div><img loading="lazy" src="img/lazy.png" width="64" height="64" alt="lazy"></main></body></html>`,
   'Case Study.html': `${head('Case study')}<body>${NAV}<main><h1 id="t">Case study</h1><img src="img/case.png" width="64" height="64" alt=""><div class="tall"></div></main><script src="case.js"></script></body></html>`,
-  'plain.html': `${head('Plain')}<body>${NAV}<main><h1>Plain</h1><img src="img/plain.png" width="64" height="64" alt=""><div class="tall"></div></main></body></html>`,
+  'plain.html': `${head('Plain')}<body>${fontLink(fonts, 'Beta')}${NAV}<main><h1>Plain</h1><img src="img/plain.png" width="64" height="64" alt=""><div class="tall"></div></main></body></html>`,
   'case.js': "document.getElementById('t').textContent = 'Case study (its own script ran)';",
-};
+});
 const IMAGES = { 'img/top.png': png(200, 30, 30), 'img/lazy.png': png(30, 200, 30), 'img/case.png': png(30, 30, 200), 'img/plain.png': png(200, 200, 30) };
 const ROUTES = ['/', '/view.html', '/Case%20Study.html', '/plain.html'];
 
 test('own bundle: every captured route and file is in the clone, served and measured; an rc.8 bundle is completed without capturing again', { timeout: 30 * 60 * 1000 }, async () => {
+  const fontHost = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x');
+    if (u.pathname !== '/css2') { res.writeHead(404).end(); return; }
+    res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'access-control-allow-origin': '*' }).end(`/* ${u.searchParams.get('family')} */ h1 { letter-spacing: 0.0${u.searchParams.get('family') === 'Alpha' ? 1 : 2}em; --family: ${u.searchParams.get('family')}; }\n`);
+  });
+  await new Promise((r) => fontHost.listen(0, '127.0.0.1', r));
+  const fonts = `http://127.0.0.1:${fontHost.address().port}/`;
+  const FILES = files(fonts);
   const host = http.createServer((req, res) => {
     let p;
     try { p = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\//, '') || 'index.html'; } catch { res.writeHead(400).end(); return; }
@@ -76,6 +86,17 @@ test('own bundle: every captured route and file is in the clone, served and meas
       for (const p of ROUTES) assert.equal((await fetch(routeUrl(p, server.url))).status, 200, p);
       for (const f of Object.keys(IMAGES)) assert.equal((await fetch(`${server.url}${f}`)).status, 200, f);
       assert.match(await (await fetch(routeUrl('/Case%20Study.html', server.url))).text(), /<script id="tc-net">/, 'the page runs behind the bundle\'s network guard');
+      // RC8 elise: the two stylesheets at one path are two files, each linked by its page, each served as a stylesheet
+      for (const [page, fam] of [['/', 'Alpha'], ['/plain.html', 'Beta']]) {
+        const html = await (await fetch(routeUrl(page, server.url))).text();
+        const href = /<link rel="stylesheet" href="([^"]+css2[^"]*)"/.exec(html)?.[1];
+        assert.ok(href, `${page}: no stylesheet link`);
+        assert.doesNotMatch(href, /css2\?family=|^https?:/, `${page} still links the stylesheet by its live address: ${href}`);
+        const css = await fetch(new URL(href, server.url));
+        assert.equal(css.status, 200, href);
+        assert.match(css.headers.get('content-type') || '', /text\/css/, `${href} is served as ${css.headers.get('content-type')}`);
+        assert.match(await css.text(), new RegExp(`--family: ${fam}`), `${page} gets the ${fam} stylesheet`);
+      }
     } finally { server.close(); }
 
     // validation reaches every route at every size: no HTTP error on 127.0.0.1
@@ -109,5 +130,5 @@ test('own bundle: every captured route and file is in the clone, served and meas
     r = await run(project, ['seed.mjs', 'bundlefx']);
     assert.equal(r.code, 0, r.out);
     for (const f of ['Case Study.html', 'plain.html', 'img/plain.png']) assert.ok(await fs.stat(path.join(clone, f)).catch(() => null), f);
-  } finally { host.closeAllConnections(); host.close(); }
+  } finally { host.closeAllConnections(); host.close(); fontHost.closeAllConnections(); fontHost.close(); }
 });

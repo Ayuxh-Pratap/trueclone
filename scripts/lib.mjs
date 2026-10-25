@@ -250,19 +250,36 @@ export async function fetchWhole(context, url, { want = '', headers = {}, attemp
 // write manifest.json in turn (two pages writing it at once would lose each other's entries).
 let bundleWrites = Promise.resolve();
 const inBundleOrder = (fn) => (bundleWrites = bundleWrites.then(fn, fn));
+// A recorded file's address in the bundle: its path, and for another host its query too. fonts.googleapis.com/css2
+// ?family=A and ?family=B are two stylesheets (RC8 elise: four of them overwrote one another under "css2", and Hanken
+// Grotesk, Space Mono and Instrument Serif never loaded in the clone). The site's own files keep path-only addresses:
+// its pages name them by relative paths, which the clone's server answers by path.
+export const bundleKey = (u, siteHost) => `${u.origin}${u.pathname}${u.search && u.host !== siteHost ? u.search : ''}`;
+const EXT_OF_TYPE = { 'text/css': '.css', 'text/javascript': '.js', 'application/javascript': '.js', 'application/x-javascript': '.js', 'application/json': '.json', 'image/svg+xml': '.svg', 'font/woff2': '.woff2', 'font/woff': '.woff', 'font/ttf': '.ttf', 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif' };
+// the file it is kept in: by its path; another host's query in its name (a hash), with an extension from its type when
+// the path has none (the clone's server types files by their extension: a stylesheet kept as "css2" is served as
+// application/octet-stream, and a browser does not apply it)
+function bundleFileOf(dir, u, type, siteHost) {
+  let rel = decodeEach(u.pathname);
+  if (rel.endsWith('/')) rel += 'index.html';
+  const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map(safeSegment);
+  if (!parts.length) parts.push('index.html');
+  if (u.search && u.host !== siteHost) {
+    const last = parts.pop();
+    const ext = path.extname(last) || EXT_OF_TYPE[baseType(type)] || '';
+    parts.push(`${path.basename(last, path.extname(last))}.q${crypto.createHash('sha1').update(u.search).digest('hex').slice(0, 8)}${ext}`);
+  }
+  return path.join(dir, u.host.replace(/[:]/g, '_'), ...parts);
+}
 // A file fetched whole by its address (fetchWhole) into the bundle, when no good copy is recorded yet: how capture and
 // record-bundle complete a bundle with the files the capture saw at other sizes or on other pages (bundle-complete.mjs)
-export function recordFetched(refDir, url, got, { kind = 'other' } = {}) {
+export function recordFetched(refDir, url, got, { kind = 'other', siteHost = null } = {}) {
   return inBundleOrder(async () => {
     const dir = path.join(refDir, 'bundle');
     const manifestFile = path.join(dir, 'manifest.json');
     const u = new URL(url);
-    let rel = decodeEach(u.pathname);
-    if (rel.endsWith('/')) rel += 'index.html';
-    const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map(safeSegment);
-    if (!parts.length) parts.push('index.html');
-    const file = path.join(dir, u.host.replace(/[:]/g, '_'), ...parts);
-    const key = `${u.origin}${u.pathname}`;
+    const file = bundleFileOf(dir, u, got.type, siteHost);
+    const key = bundleKey(u, siteHost);
     const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8').catch(() => '{"entries":{}}'));
     const had = manifest.entries[key];
     if (had && !had.failed && had.file) return;
@@ -276,7 +293,8 @@ export function recordFetched(refDir, url, got, { kind = 'other' } = {}) {
     await fs.writeFile(manifestFile, JSON.stringify(manifest, null, 1));
   });
 }
-export function recordBundle(page, refDir) {
+// siteHost: the site's own host (path-only addresses, bundleKey); by default the host of the page being recorded
+export function recordBundle(page, refDir, { siteHost = null } = {}) {
   const dir = path.join(refDir, 'bundle');
   const manifestFile = path.join(dir, 'manifest.json');
   let pending = Promise.resolve();
@@ -298,12 +316,9 @@ export function recordBundle(page, refDir) {
         }
         if (body && body.length > 300 * 1024 * 1024) return;
         // the same file name rule as every route and the clone server (routes.mjs): a bare % never throws here
-        let rel = decodeEach(u.pathname);
-        if (rel.endsWith('/')) rel += 'index.html';
-        const parts = rel.split('/').filter((p) => p && p !== '..' && p !== '.').map(safeSegment);
-        if (!parts.length) parts.push('index.html');
-        const file = path.join(dir, u.host.replace(/[:]/g, '_'), ...parts);
-        const key = `${u.origin}${u.pathname}`;
+        const host = siteHost || (() => { try { return new URL(page.url()).host; } catch { return u.host; } })();
+        const file = bundleFileOf(dir, u, res.headers()['content-type'], host);
+        const key = bundleKey(u, host);
         const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8').catch(() => '{"entries":{}}'));
         const had = manifest.entries[key];
         // document: the page's own document; frameDocument: any frame's (a view an app shell loads in an iframe), both
